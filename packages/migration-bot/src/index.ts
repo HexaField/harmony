@@ -34,12 +34,58 @@ export interface DiscordAPI {
 export class MigrationBot {
   private migration: MigrationService
   private linkTokens: Map<string, LinkToken> = new Map()
-
   private api: DiscordAPI
+  private running = false
+  private botToken: string | null = null
 
   constructor(crypto: CryptoProvider, api: DiscordAPI) {
     this.api = api
     this.migration = new MigrationService(crypto)
+  }
+
+  async start(token: string): Promise<void> {
+    if (this.running) throw new Error('Bot is already running')
+    this.botToken = token
+    this.running = true
+  }
+
+  async stop(): Promise<void> {
+    if (!this.running) throw new Error('Bot is not running')
+    this.running = false
+    this.botToken = null
+  }
+
+  isRunning(): boolean {
+    return this.running
+  }
+
+  async pushToCloud(bundle: EncryptedExportBundle, cloudUrl: string): Promise<void> {
+    const response = await fetch(`${cloudUrl}/api/storage/exports`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ciphertext: Array.from(bundle.ciphertext),
+        nonce: Array.from(bundle.nonce),
+        metadata: bundle.metadata
+      })
+    })
+    if (!response.ok) {
+      throw new Error(`Cloud push failed: ${response.status} ${response.statusText}`)
+    }
+  }
+
+  async pushToLocal(bundle: EncryptedExportBundle, outputPath: string): Promise<void> {
+    const { writeFile } = await import('fs/promises')
+    const data = JSON.stringify(
+      {
+        ciphertext: Buffer.from(bundle.ciphertext).toString('base64'),
+        nonce: Buffer.from(bundle.nonce).toString('base64'),
+        metadata: bundle.metadata
+      },
+      null,
+      2
+    )
+    await writeFile(outputPath, data, 'utf-8')
   }
 
   async exportServer(params: {

@@ -2,6 +2,7 @@ import type { KeyPair, CryptoProvider } from '@harmony/crypto'
 import type { Quad } from '@harmony/quads'
 import { MemoryQuadStore } from '@harmony/quads'
 import type { VerifiableCredential } from '@harmony/vc'
+import { VCService } from '@harmony/vc'
 import type { Capability } from '@harmony/zcap'
 import { ZCAPService } from '@harmony/zcap'
 import { HarmonyType, HarmonyPredicate, RDFPredicate, XSDDatatype } from '@harmony/vocab'
@@ -85,14 +86,38 @@ export interface EncryptedExportBundle {
 export class MigrationService {
   private crypto: CryptoProvider
   private zcapService: ZCAPService
+  private vcService: VCService
 
   constructor(crypto: CryptoProvider) {
     this.crypto = crypto
     this.zcapService = new ZCAPService(crypto)
+    this.vcService = new VCService(crypto)
   }
 
   parsePersonalExport(data: DiscordExport): DiscordExport {
-    return data
+    // Validate required structure
+    if (!data.account) throw new Error('Missing account in personal export')
+    if (!data.account.id || typeof data.account.id !== 'string') throw new Error('Missing or invalid account.id')
+    if (!data.account.username || typeof data.account.username !== 'string')
+      throw new Error('Missing or invalid account.username')
+
+    // Normalize fields
+    const account = {
+      ...data.account,
+      discriminator: data.account.discriminator || '0',
+      username: data.account.username.trim()
+    }
+
+    const messages = (data.messages || []).map((m) => ({
+      ...m,
+      content: m.content ?? '',
+      timestamp: m.timestamp || new Date().toISOString()
+    }))
+
+    const servers = data.servers || []
+    const connections = data.connections || []
+
+    return { account, messages, servers, connections }
   }
 
   parseServerExport(data: DiscordServerExport): DiscordServerExport {
@@ -334,9 +359,52 @@ export class MigrationService {
       allowedAction: ['harmony:SendMessage', 'harmony:ManageChannel', 'harmony:ManageRoles']
     })
 
+    // Scan quads for members and re-issue membership VCs
+    const reissuedVCs: VerifiableCredential[] = []
+    const memberQuads = params.quads.filter((q) => q.predicate === RDFPredicate.type && q.object === HarmonyType.Member)
+
+    // Find community URI from quads
+    const communityQuad = params.quads.find(
+      (q) => q.predicate === RDFPredicate.type && q.object === HarmonyType.Community
+    )
+    const communityId = communityQuad?.subject || 'unknown'
+
+    for (const mq of memberQuads) {
+      const memberURI = mq.subject
+
+      // Get member name
+      const nameQuad = params.quads.find((q) => q.subject === memberURI && q.predicate === HarmonyPredicate.name)
+      const memberName = nameQuad && typeof nameQuad.object === 'object' ? nameQuad.object.value : 'unknown'
+
+      // Get joinedAt
+      const joinedQuad = params.quads.find((q) => q.subject === memberURI && q.predicate === HarmonyPredicate.joinedAt)
+      const joinedAt =
+        joinedQuad && typeof joinedQuad.object === 'object' ? joinedQuad.object.value : new Date().toISOString()
+
+      // Get roles
+      const roleQuads = params.quads.filter((q) => q.subject === memberURI && q.predicate === HarmonyPredicate.role)
+      const roles = roleQuads.map((q) => (typeof q.object === 'string' ? q.object : ''))
+
+      // Issue a CommunityMembershipCredential
+      const vc = await this.vcService.issue({
+        issuerDID: params.adminDID,
+        issuerKeyPair: params.adminKeyPair,
+        subjectDID: memberURI, // placeholder URI until DID linked
+        type: 'CommunityMembershipCredential',
+        claims: {
+          communityId,
+          roles,
+          joinedAt,
+          memberName,
+          serviceEndpoint: params.newServiceEndpoint
+        }
+      })
+      reissuedVCs.push(vc)
+    }
+
     return {
       quads: params.quads,
-      reissuedVCs: [],
+      reissuedVCs,
       reissuedRootCapability
     }
   }

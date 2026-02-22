@@ -212,9 +212,42 @@ describe('@harmony/migration', () => {
       expect(result.reissuedRootCapability).toBeDefined()
       expect(result.reissuedRootCapability.invoker).toBe(doc.id)
     })
+
+    it('MUST re-issue membership VCs for all members', async () => {
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const { quads } = migration.transformServerExport(createTestServerExport(), doc.id)
+      const result = await migration.resignCommunityCredentials({
+        quads,
+        adminDID: doc.id,
+        adminKeyPair: kp,
+        newServiceEndpoint: 'https://new.example.com'
+      })
+      // 3 members in test export
+      expect(result.reissuedVCs).toHaveLength(3)
+      expect(result.reissuedVCs[0].type).toContain('CommunityMembershipCredential')
+      expect(result.reissuedVCs[0].issuer).toBe(doc.id)
+      expect(result.reissuedVCs[0].credentialSubject.serviceEndpoint).toBe('https://new.example.com')
+    })
+
+    it('MUST include community and member info in reissued VCs', async () => {
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const { quads } = migration.transformServerExport(createTestServerExport(), doc.id)
+      const result = await migration.resignCommunityCredentials({
+        quads,
+        adminDID: doc.id,
+        adminKeyPair: kp,
+        newServiceEndpoint: 'https://new.example.com'
+      })
+      const vc = result.reissuedVCs[0]
+      expect(vc.credentialSubject.communityId).toContain('harmony:community:server1')
+      expect(vc.credentialSubject.memberName).toBeDefined()
+      expect(vc.credentialSubject.joinedAt).toBeDefined()
+    })
   })
 
-  describe('Personal Export', () => {
+  describe('Personal Export Parsing', () => {
     it('MUST transform personal export to quads', () => {
       const personalExport: DiscordExport = {
         account: { id: 'user1', username: 'Alice', discriminator: '0001' },
@@ -234,6 +267,28 @@ describe('@harmony/migration', () => {
       expect(quads.length).toBeGreaterThan(0)
       const msgs = quads.filter((q) => q.predicate === HarmonyPredicate.content)
       expect(msgs).toHaveLength(1)
+    })
+
+    it('MUST validate required fields in parsePersonalExport', () => {
+      expect(() => migration.parsePersonalExport({} as any)).toThrow('Missing account')
+      expect(() => migration.parsePersonalExport({ account: {} } as any)).toThrow('Missing or invalid account.id')
+      expect(() => migration.parsePersonalExport({ account: { id: '1' } } as any)).toThrow(
+        'Missing or invalid account.username'
+      )
+    })
+
+    it('MUST normalize fields in parsePersonalExport', () => {
+      const raw: DiscordExport = {
+        account: { id: 'u1', username: '  Bob  ', discriminator: '' },
+        messages: [],
+        servers: [],
+        connections: []
+      }
+      const parsed = migration.parsePersonalExport(raw)
+      expect(parsed.account.username).toBe('Bob')
+      expect(parsed.account.discriminator).toBe('0')
+      expect(parsed.messages).toEqual([])
+      expect(parsed.servers).toEqual([])
     })
   })
 })

@@ -1,0 +1,6 @@
+export type { LamportClock } from './clock.js'
+export { clockCompare, clockMax, clockMerge, clockCreate, clockTick } from './clock.js'
+export type { CRDTEntry } from './log.js'
+export { CRDTLog } from './log.js'
+export type { EditOp, DeleteOp, CRDTOp } from './ops.js'
+export { CRDTOpLog } from './ops.js'

@@ -1,0 +1,28 @@
+// ── Events ── (client event types)
+
+export type ClientEvent =
+  | 'connected'
+  | 'disconnected'
+  | 'reconnecting'
+  | 'message'
+  | 'message.edited'
+  | 'message.deleted'
+  | 'dm'
+  | 'dm.edited'
+  | 'dm.deleted'
+  | 'typing'
+  | 'presence'
+  | 'member.joined'
+  | 'member.left'
+  | 'member.kicked'
+  | 'member.banned'
+  | 'channel.created'
+  | 'channel.updated'
+  | 'channel.deleted'
+  | 'role.created'
+  | 'role.updated'
+  | 'role.deleted'
+  | 'community.updated'
+  | 'error'
+
+export type FederationEvent = 'peer.connected' | 'peer.disconnected' | 'peer.message' | 'peer.sync' | 'peer.error'

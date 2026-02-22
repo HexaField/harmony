@@ -16,7 +16,14 @@ export const HarmonyType = {
   Message: `${HARMONY}Message`,
   Role: `${HARMONY}Role`,
   Member: `${HARMONY}Member`,
-  Reaction: `${HARMONY}Reaction`
+  Reaction: `${HARMONY}Reaction`,
+  // Phase 2 additions
+  EncryptedMessage: `${HARMONY}EncryptedMessage`,
+  DirectMessage: `${HARMONY}DirectMessage`,
+  ThreadMessage: `${HARMONY}ThreadMessage`,
+  Presence: `${HARMONY}Presence`,
+  FederationPeer: `${HARMONY}FederationPeer`,
+  ModerationAction: `${HARMONY}ModerationAction`
 } as const
 
 // Harmony predicates
@@ -35,7 +42,24 @@ export const HarmonyPredicate = {
   name: `${HARMONY}name`,
   emoji: `${HARMONY}emoji`,
   reactor: `${HARMONY}reactor`,
-  onMessage: `${HARMONY}onMessage`
+  onMessage: `${HARMONY}onMessage`,
+  // Phase 2 additions
+  clock: `${HARMONY}clock`,
+  nonce: `${HARMONY}nonce`,
+  epoch: `${HARMONY}epoch`,
+  ciphertextRef: `${HARMONY}ciphertextRef`,
+  editedAt: `${HARMONY}editedAt`,
+  deletedAt: `${HARMONY}deletedAt`,
+  presenceStatus: `${HARMONY}presenceStatus`,
+  customStatus: `${HARMONY}customStatus`,
+  lastSeen: `${HARMONY}lastSeen`,
+  peerEndpoint: `${HARMONY}peerEndpoint`,
+  peerDID: `${HARMONY}peerDID`,
+  federatedWith: `${HARMONY}federatedWith`,
+  moderator: `${HARMONY}moderator`,
+  moderationTarget: `${HARMONY}moderationTarget`,
+  moderationReason: `${HARMONY}moderationReason`,
+  moderationExpiry: `${HARMONY}moderationExpiry`
 } as const
 
 // Harmony VC types
@@ -57,7 +81,15 @@ export const HarmonyAction = {
   BanUser: `${HARMONY}BanUser`,
   InviteMember: `${HARMONY}InviteMember`,
   RelayMessage: `${HARMONY}RelayMessage`,
-  VerifyMembership: `${HARMONY}VerifyMembership`
+  VerifyMembership: `${HARMONY}VerifyMembership`,
+  // Phase 2 additions
+  ReadChannel: `${HARMONY}ReadChannel`,
+  CreateThread: `${HARMONY}CreateThread`,
+  SendDM: `${HARMONY}SendDM`,
+  ManageMembers: `${HARMONY}ManageMembers`,
+  FederateRelay: `${HARMONY}FederateRelay`,
+  FederateVerify: `${HARMONY}FederateVerify`,
+  ModerateContent: `${HARMONY}ModerateContent`
 } as const
 
 // RDF predicates

@@ -1,0 +1,52 @@
+@prefix harmony: <https://harmony.example/vocab#> .
+@prefix vc:      <https://www.w3.org/2018/credentials#> .
+@prefix zcap:    <https://w3id.org/zcap#> .
+@prefix did:     <https://www.w3.org/ns/did#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+
+# Core types
+harmony:Community     rdfs:subClassOf  rdfs:Resource .
+harmony:Channel       rdfs:subClassOf  rdfs:Resource .
+harmony:Category      rdfs:subClassOf  rdfs:Resource .
+harmony:Thread        rdfs:subClassOf  harmony:Channel .
+harmony:Message       rdfs:subClassOf  rdfs:Resource .
+harmony:Role          rdfs:subClassOf  rdfs:Resource .
+harmony:Member        rdfs:subClassOf  rdfs:Resource .
+harmony:Reaction      rdfs:subClassOf  rdfs:Resource .
+
+# Predicates
+harmony:author        rdfs:domain  harmony:Message ;    rdfs:range  did:DID .
+harmony:content       rdfs:domain  harmony:Message ;    rdfs:range  xsd:string .
+harmony:timestamp     rdfs:domain  harmony:Message ;    rdfs:range  xsd:dateTime .
+harmony:replyTo       rdfs:domain  harmony:Message ;    rdfs:range  harmony:Message .
+harmony:inChannel     rdfs:domain  harmony:Message ;    rdfs:range  harmony:Channel .
+harmony:inCategory    rdfs:domain  harmony:Channel ;    rdfs:range  harmony:Category .
+harmony:parentThread  rdfs:domain  harmony:Thread ;     rdfs:range  harmony:Message .
+harmony:role          rdfs:domain  harmony:Member ;     rdfs:range  harmony:Role .
+harmony:community     rdfs:domain  harmony:Member ;     rdfs:range  harmony:Community .
+harmony:joinedAt      rdfs:domain  harmony:Member ;     rdfs:range  xsd:dateTime .
+harmony:permission    rdfs:domain  harmony:Role ;       rdfs:range  xsd:string .
+harmony:name          rdfs:domain  rdfs:Resource ;      rdfs:range  xsd:string .
+harmony:emoji         rdfs:domain  harmony:Reaction ;   rdfs:range  xsd:string .
+harmony:reactor       rdfs:domain  harmony:Reaction ;   rdfs:range  harmony:Member .
+harmony:onMessage     rdfs:domain  harmony:Reaction ;   rdfs:range  harmony:Message .
+
+# VC types
+harmony:DiscordIdentityCredential       rdfs:subClassOf  vc:VerifiableCredential .
+harmony:CommunityMembershipCredential   rdfs:subClassOf  vc:VerifiableCredential .
+harmony:EmailVerificationCredential     rdfs:subClassOf  vc:VerifiableCredential .
+harmony:OAuthIdentityCredential         rdfs:subClassOf  vc:VerifiableCredential .
+
+# ZCAP actions
+harmony:SendMessage       rdf:type  zcap:Action .
+harmony:DeleteMessage     rdf:type  zcap:Action .
+harmony:AddReaction       rdf:type  zcap:Action .
+harmony:ManageChannel     rdf:type  zcap:Action .
+harmony:ManageRoles       rdf:type  zcap:Action .
+harmony:MuteUser          rdf:type  zcap:Action .
+harmony:BanUser           rdf:type  zcap:Action .
+harmony:InviteMember      rdf:type  zcap:Action .
+harmony:RelayMessage      rdf:type  zcap:Action .
+harmony:VerifyMembership  rdf:type  zcap:Action .

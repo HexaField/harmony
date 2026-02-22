@@ -74,6 +74,14 @@ export const XSDDatatype = {
   boolean: `${XSD}boolean`
 } as const
 
+// Ontology file paths (relative to package root)
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+export const ontologyPath = join(__dirname, '..', 'harmony.ttl')
+export const jsonldContextPath = join(__dirname, '..', 'harmony.jsonld')
+
 // W3C context URLs
 export const Context = {
   VC: 'https://www.w3.org/2018/credentials/v1',

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync, existsSync } from 'fs'
 import {
   HARMONY,
   VC,
@@ -13,7 +14,9 @@ import {
   HarmonyAction,
   RDFPredicate,
   XSDDatatype,
-  Context
+  Context,
+  ontologyPath,
+  jsonldContextPath
 } from '../src/index.js'
 
 describe('@harmony/vocab', () => {
@@ -82,6 +85,26 @@ describe('@harmony/vocab', () => {
       expect(Context.VC).toBe('https://www.w3.org/2018/credentials/v1')
       expect(Context.DID).toBe('https://www.w3.org/ns/did/v1')
       expect(Context.ZCAP).toBe('https://w3id.org/zcap/v1')
+    })
+  })
+
+  describe('Ontology Files', () => {
+    it('MUST provide harmony.ttl ontology file', () => {
+      expect(existsSync(ontologyPath)).toBe(true)
+      const ttl = readFileSync(ontologyPath, 'utf-8')
+      expect(ttl).toContain('@prefix harmony:')
+      expect(ttl).toContain('harmony:Community')
+      expect(ttl).toContain('harmony:Message')
+      expect(ttl).toContain('harmony:SendMessage')
+    })
+
+    it('MUST provide harmony.jsonld context file', () => {
+      expect(existsSync(jsonldContextPath)).toBe(true)
+      const ctx = JSON.parse(readFileSync(jsonldContextPath, 'utf-8'))
+      expect(ctx['@context']).toBeDefined()
+      expect(ctx['@context'].harmony).toBe('https://harmony.example/vocab#')
+      expect(ctx['@context'].Community).toBe('harmony:Community')
+      expect(ctx['@context'].author).toBeDefined()
     })
   })
 })

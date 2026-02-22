@@ -26,6 +26,20 @@ describe('@harmony/identity', () => {
       expect(identity.credentials).toEqual([])
       expect(identity.capabilities).toEqual([])
     })
+
+    it('MUST create identity from OAuth recovery token', async () => {
+      const r1 = await manager.createFromOAuthRecovery('discord', 'token123')
+      expect(r1.identity.did).toMatch(/^did:key:z/)
+      expect(r1.identity.credentials).toHaveLength(1)
+      expect(r1.identity.credentials[0].type).toContain('OAuthIdentityCredential')
+      expect(r1.identity.credentials[0].credentialSubject.provider).toBe('discord')
+      // Deterministic
+      const r2 = await manager.createFromOAuthRecovery('discord', 'token123')
+      expect(r2.identity.did).toBe(r1.identity.did)
+      // Different token = different identity
+      const r3 = await manager.createFromOAuthRecovery('discord', 'token456')
+      expect(r3.identity.did).not.toBe(r1.identity.did)
+    })
   })
 
   describe('Credential Portfolio', () => {

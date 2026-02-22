@@ -37,14 +37,13 @@ export interface RecoveryApproval {
 
 export class IdentityManager {
   private didProvider: DIDKeyProvider
-  // @ts-ignore - reserved for future use
-  private _vcService: VCService
+  private vcService: VCService
 
   private crypto: CryptoProvider
   constructor(crypto: CryptoProvider) {
     this.crypto = crypto
     this.didProvider = new DIDKeyProvider(crypto)
-    this._vcService = new VCService(crypto)
+    this.vcService = new VCService(crypto)
   }
 
   async create(): Promise<{ identity: Identity; keyPair: KeyPair; mnemonic: string }> {
@@ -65,6 +64,34 @@ export class IdentityManager {
     const document = await this.didProvider.create(keyPair)
     return {
       identity: { did: document.id, document, credentials: [], capabilities: [] },
+      keyPair
+    }
+  }
+
+  async createFromOAuthRecovery(provider: string, token: string): Promise<{ identity: Identity; keyPair: KeyPair }> {
+    // Derive a deterministic keypair from the provider + token combination
+    const data = new TextEncoder().encode(`oauth-recovery:${provider}:${token}`)
+    const salt = new TextEncoder().encode('harmony-oauth-recovery')
+    const seed = await this.crypto.deriveKey(data, salt, `${provider}-recovery`)
+    const keyPair = await this.crypto.seedToKeyPair(seed)
+    const document = await this.didProvider.create(keyPair)
+
+    // Issue a self-signed OAuth credential
+    const credential = await this.vcService.issue({
+      issuerDID: document.id,
+      issuerKeyPair: keyPair,
+      subjectDID: document.id,
+      type: 'OAuthIdentityCredential',
+      claims: { provider, recoveredViaOAuth: true }
+    })
+
+    return {
+      identity: {
+        did: document.id,
+        document,
+        credentials: [credential],
+        capabilities: []
+      },
       keyPair
     }
   }

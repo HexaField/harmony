@@ -1,10 +1,10 @@
-import { Router } from 'express'
+import { Router, type Request, type Response } from 'express'
 import type { CloudService } from '../index.js'
 
 export function identityRoutes(cloud: CloudService): Router {
   const router = Router()
 
-  router.post('/identities', async (_req, res) => {
+  router.post('/identities', async (_req: Request, res: Response) => {
     try {
       const result = await cloud.createIdentity()
       res.status(201).json({
@@ -16,10 +16,13 @@ export function identityRoutes(cloud: CloudService): Router {
     }
   })
 
-  router.get('/identities/:did', async (req, res) => {
+  router.get('/identities/:did', async (req: Request, res: Response) => {
     try {
-      const identity = await cloud.resolveIdentity(req.params.did)
-      if (!identity) return res.status(404).json({ error: 'Not found' })
+      const identity = await cloud.resolveIdentity(req.params.did as string)
+      if (!identity) {
+        res.status(404).json({ error: 'Not found' })
+        return
+      }
       res.json({
         did: identity.did,
         credentials: identity.credentials.length,

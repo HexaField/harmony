@@ -36,23 +36,20 @@ export class MigrationBot {
   private linkTokens: Map<string, LinkToken> = new Map()
   private api: DiscordAPI
   private running = false
-  private botToken: string | null = null
 
   constructor(crypto: CryptoProvider, api: DiscordAPI) {
     this.api = api
     this.migration = new MigrationService(crypto)
   }
 
-  async start(token: string): Promise<void> {
+  async start(_token: string): Promise<void> {
     if (this.running) throw new Error('Bot is already running')
-    this.botToken = token
     this.running = true
   }
 
   async stop(): Promise<void> {
     if (!this.running) throw new Error('Bot is not running')
     this.running = false
-    this.botToken = null
   }
 
   isRunning(): boolean {

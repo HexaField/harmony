@@ -1,5 +1,4 @@
-import express from 'express'
-import type { Application } from 'express'
+import express, { type Application, type Request, type Response } from 'express'
 import { createCryptoProvider } from '@harmony/crypto'
 import { CloudService } from './index.js'
 import { identityRoutes } from './routes/identity.js'
@@ -22,7 +21,7 @@ export async function createApp(cloud?: CloudService): Promise<Application> {
   app.use('/api', storageRoutes(cloud))
   app.use('/api', friendsRoutes(cloud))
 
-  app.get('/health', (_req, res) => res.json({ status: 'ok' }))
+  app.get('/health', (_req: Request, res: Response) => res.json({ status: 'ok' }))
 
   return app
 }

@@ -138,9 +138,13 @@ function decodeMultibase(multibase: string): { prefix: number; key: Uint8Array }
 }
 
 export class DIDKeyProvider implements DIDProvider {
-  readonly method = 'key'
+  method = 'key' as const
 
-  constructor(private crypto: CryptoProvider) {}
+  private crypto: CryptoProvider
+
+  constructor(crypto: CryptoProvider) {
+    this.crypto = crypto
+  }
 
   async create(keyPair: KeyPair): Promise<DIDDocument> {
     const multibase = encodeMultibase(ED25519_MULTICODEC, keyPair.publicKey)

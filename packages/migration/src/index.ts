@@ -1,11 +1,9 @@
-import type { KeyPair, CryptoProvider, EncryptedPayload } from '@harmony/crypto'
+import type { KeyPair, CryptoProvider } from '@harmony/crypto'
 import type { Quad } from '@harmony/quads'
 import { MemoryQuadStore } from '@harmony/quads'
 import type { VerifiableCredential } from '@harmony/vc'
-import { VCService } from '@harmony/vc'
 import type { Capability } from '@harmony/zcap'
 import { ZCAPService } from '@harmony/zcap'
-import { DIDKeyProvider } from '@harmony/did'
 import { HarmonyType, HarmonyPredicate, RDFPredicate, XSDDatatype } from '@harmony/vocab'
 
 // Discord types
@@ -86,12 +84,10 @@ export interface EncryptedExportBundle {
 
 export class MigrationService {
   private crypto: CryptoProvider
-  private vcService: VCService
   private zcapService: ZCAPService
 
   constructor(crypto: CryptoProvider) {
     this.crypto = crypto
-    this.vcService = new VCService(crypto)
     this.zcapService = new ZCAPService(crypto)
   }
 
@@ -103,7 +99,7 @@ export class MigrationService {
     return data
   }
 
-  transformPersonalExport(export_: DiscordExport, ownerDID: string): Quad[] {
+  transformPersonalExport(export_: DiscordExport, _ownerDID: string): Quad[] {
     const quads: Quad[] = []
     const userURI = `harmony:user:${export_.account.id}`
     const g = `harmony:personal:${export_.account.id}`
@@ -134,7 +130,7 @@ export class MigrationService {
 
   transformServerExport(
     export_: DiscordServerExport,
-    adminDID: string,
+    _adminDID: string,
     options?: { excludeUsers?: string[]; anonymiseFormerMembers?: boolean }
   ): {
     quads: Quad[]
@@ -330,8 +326,6 @@ export class MigrationService {
     reissuedVCs: VerifiableCredential[]
     reissuedRootCapability: Capability
   }> {
-    const didProvider = new DIDKeyProvider(this.crypto)
-
     // Re-issue root capability
     const reissuedRootCapability = await this.zcapService.createRoot({
       ownerDID: params.adminDID,

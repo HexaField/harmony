@@ -1,5 +1,4 @@
 import type { KeyPair, CryptoProvider } from '@harmony/crypto'
-import type { DIDDocument } from '@harmony/did'
 import type { Proof, DIDResolver, RevocationStore, VerificationResult } from '@harmony/vc'
 import { createProof, verifyProof, getPublicKeyFromDocument } from '@harmony/vc'
 import type { Quad } from '@harmony/quads'
@@ -47,7 +46,10 @@ function isScopeNarrowerOrEqual(child: Record<string, unknown>, parent: Record<s
 }
 
 export class ZCAPService {
-  constructor(private crypto: CryptoProvider) {}
+  private crypto: CryptoProvider
+  constructor(crypto: CryptoProvider) {
+    this.crypto = crypto
+  }
 
   async createRoot(params: {
     ownerDID: string

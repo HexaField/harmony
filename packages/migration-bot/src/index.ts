@@ -35,10 +35,10 @@ export class MigrationBot {
   private migration: MigrationService
   private linkTokens: Map<string, LinkToken> = new Map()
 
-  constructor(
-    private crypto: CryptoProvider,
-    private api: DiscordAPI
-  ) {
+  private api: DiscordAPI
+
+  constructor(crypto: CryptoProvider, api: DiscordAPI) {
+    this.api = api
     this.migration = new MigrationService(crypto)
   }
 

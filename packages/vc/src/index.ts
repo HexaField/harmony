@@ -125,7 +125,10 @@ function getPublicKeyFromDocument(doc: DIDDocument, vmId: string): Uint8Array | 
 }
 
 export class VCService {
-  constructor(private crypto: CryptoProvider) {}
+  private crypto: CryptoProvider
+  constructor(crypto: CryptoProvider) {
+    this.crypto = crypto
+  }
 
   async issue(params: {
     issuerDID: string

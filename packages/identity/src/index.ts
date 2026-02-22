@@ -1,5 +1,5 @@
 import type { KeyPair, CryptoProvider, EncryptedPayload } from '@harmony/crypto'
-import type { DIDDocument, ServiceEndpoint } from '@harmony/did'
+import type { DIDDocument } from '@harmony/did'
 import { DIDKeyProvider, didDocumentToQuads, didDocumentFromQuads } from '@harmony/did'
 import type { VerifiableCredential, Proof } from '@harmony/vc'
 import { VCService } from '@harmony/vc'
@@ -37,11 +37,14 @@ export interface RecoveryApproval {
 
 export class IdentityManager {
   private didProvider: DIDKeyProvider
-  private vcService: VCService
+  // @ts-ignore - reserved for future use
+  private _vcService: VCService
 
-  constructor(private crypto: CryptoProvider) {
+  private crypto: CryptoProvider
+  constructor(crypto: CryptoProvider) {
+    this.crypto = crypto
     this.didProvider = new DIDKeyProvider(crypto)
-    this.vcService = new VCService(crypto)
+    this._vcService = new VCService(crypto)
   }
 
   async create(): Promise<{ identity: Identity; keyPair: KeyPair; mnemonic: string }> {

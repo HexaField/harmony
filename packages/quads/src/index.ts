@@ -161,7 +161,7 @@ function parseNQuadLine(line: string): Quad | null {
     pos = skipWS(line, p3)
     let graph = ''
     if (line[pos] !== '.') {
-      const [g, p4] = parseTerm(line, pos)
+      const [g, _p4] = parseTerm(line, pos)
       graph = g
     }
     if (!graph) graph = 'default'

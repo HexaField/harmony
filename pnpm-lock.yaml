@@ -214,6 +214,9 @@ importers:
       '@harmony/vc':
         specifier: workspace:*
         version: link:../vc
+      '@harmony/vocab':
+        specifier: workspace:*
+        version: link:../vocab
       '@harmony/zcap':
         specifier: workspace:*
         version: link:../zcap

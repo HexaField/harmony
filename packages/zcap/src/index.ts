@@ -1,4 +1,5 @@
 import type { KeyPair, CryptoProvider } from '@harmony/crypto'
+import { randomBytes } from '@harmony/crypto'
 import type { Proof, DIDResolver, RevocationStore, VerificationResult } from '@harmony/vc'
 import { createProof, verifyProof, getPublicKeyFromDocument } from '@harmony/vc'
 import type { Quad } from '@harmony/quads'
@@ -29,8 +30,7 @@ export interface Invocation {
 }
 
 function generateId(): string {
-  const bytes = new Uint8Array(16)
-  globalThis.crypto.getRandomValues(bytes)
+  const bytes = randomBytes(16)
   return 'urn:uuid:' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
 }
 

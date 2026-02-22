@@ -1,4 +1,5 @@
 import type { KeyPair, CryptoProvider } from '@harmony/crypto'
+import { randomBytes } from '@harmony/crypto'
 import type { DIDDocument } from '@harmony/did'
 import { base58btcEncode, base58btcDecode } from '@harmony/did'
 import type { Quad } from '@harmony/quads'
@@ -68,8 +69,7 @@ export class MemoryRevocationStore implements RevocationStore {
 }
 
 function generateId(): string {
-  const bytes = new Uint8Array(16)
-  globalThis.crypto.getRandomValues(bytes)
+  const bytes = randomBytes(16)
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
 }
 

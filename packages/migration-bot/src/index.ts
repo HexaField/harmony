@@ -74,6 +74,7 @@ export class MigrationBot {
     }
   }
 
+  // Node.js APIs acceptable here — migration-bot is inherently server-side (Discord API)
   async pushToLocal(bundle: EncryptedExportBundle, outputPath: string): Promise<void> {
     const { writeFile } = await import('fs/promises')
     const data = JSON.stringify(

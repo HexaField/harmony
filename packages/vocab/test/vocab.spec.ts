@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync, existsSync } from 'fs'
 import {
   HARMONY,
   VC,
@@ -15,8 +14,8 @@ import {
   RDFPredicate,
   XSDDatatype,
   Context,
-  ontologyPath,
-  jsonldContextPath
+  HARMONY_TURTLE,
+  HARMONY_JSONLD_CONTEXT
 } from '../src/index.js'
 
 describe('@harmony/vocab', () => {
@@ -89,22 +88,18 @@ describe('@harmony/vocab', () => {
   })
 
   describe('Ontology Files', () => {
-    it('MUST provide harmony.ttl ontology file', () => {
-      expect(existsSync(ontologyPath)).toBe(true)
-      const ttl = readFileSync(ontologyPath, 'utf-8')
-      expect(ttl).toContain('@prefix harmony:')
-      expect(ttl).toContain('harmony:Community')
-      expect(ttl).toContain('harmony:Message')
-      expect(ttl).toContain('harmony:SendMessage')
+    it('MUST export harmony Turtle ontology as string constant', () => {
+      expect(HARMONY_TURTLE).toContain('@prefix harmony:')
+      expect(HARMONY_TURTLE).toContain('harmony:Community')
+      expect(HARMONY_TURTLE).toContain('harmony:Message')
+      expect(HARMONY_TURTLE).toContain('harmony:SendMessage')
     })
 
-    it('MUST provide harmony.jsonld context file', () => {
-      expect(existsSync(jsonldContextPath)).toBe(true)
-      const ctx = JSON.parse(readFileSync(jsonldContextPath, 'utf-8'))
-      expect(ctx['@context']).toBeDefined()
-      expect(ctx['@context'].harmony).toBe('https://harmony.example/vocab#')
-      expect(ctx['@context'].Community).toBe('harmony:Community')
-      expect(ctx['@context'].author).toBeDefined()
+    it('MUST export harmony JSON-LD context as object constant', () => {
+      expect(HARMONY_JSONLD_CONTEXT['@context']).toBeDefined()
+      expect(HARMONY_JSONLD_CONTEXT['@context'].harmony).toBe('https://harmony.example/vocab#')
+      expect(HARMONY_JSONLD_CONTEXT['@context'].Community).toBe('harmony:Community')
+      expect(HARMONY_JSONLD_CONTEXT['@context'].author).toBeDefined()
     })
   })
 })

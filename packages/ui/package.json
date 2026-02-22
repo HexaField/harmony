@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "preview": "vite preview",
     "check": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -21,10 +22,10 @@
     "@harmony/protocol": "workspace:*"
   },
   "devDependencies": {
-    "@rollup/plugin-typescript": "^12.3.0",
-    "rollup": "^4.54.0",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.3",
     "solid-js": "^1.9.5",
-    "tslib": "^2.8.1",
+    "tailwindcss": "^3.4.17",
     "typescript": "^5.9.3",
     "vite": "^6.3.5",
     "vite-plugin-solid": "^2.11.6"

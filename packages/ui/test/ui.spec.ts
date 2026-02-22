@@ -2,18 +2,18 @@ import { describe, it, expect } from 'vitest'
 import { createAuthStore } from '../src/stores/auth.js'
 import { createCommunityStore } from '../src/stores/community.js'
 import { createChannelStore } from '../src/stores/channel.js'
-import { LoginView } from '../src/components/Auth/LoginView.js'
-import { CommunityList } from '../src/components/Community/CommunityList.js'
-import { CommunityHeader } from '../src/components/Community/CommunityHeader.js'
-import { MemberList } from '../src/components/Community/MemberList.js'
-import { ChannelList } from '../src/components/Channel/ChannelList.js'
-import { MessageList } from '../src/components/Channel/MessageList.js'
-import { MessageComposer } from '../src/components/Channel/MessageComposer.js'
-import { Message } from '../src/components/Channel/Message.js'
-import { TypingIndicator } from '../src/components/Channel/TypingIndicator.js'
-import { DMList } from '../src/components/DM/DMList.js'
-import { Avatar } from '../src/components/Shared/Avatar.js'
-import { App } from '../src/App.js'
+import { useLoginView } from '../src/components/Auth/LoginView.js'
+import { useCommunityList } from '../src/components/Community/CommunityList.js'
+import { useCommunityHeader } from '../src/components/Community/CommunityHeader.js'
+import { useMemberList } from '../src/components/Community/MemberList.js'
+import { useChannelList } from '../src/components/Channel/ChannelList.js'
+import { useMessageList } from '../src/components/Channel/MessageList.js'
+import { useMessageComposer } from '../src/components/Channel/MessageComposer.js'
+import { useMessage } from '../src/components/Channel/Message.js'
+import { useTypingIndicator } from '../src/components/Channel/TypingIndicator.js'
+import { useDMList } from '../src/components/DM/DMList.js'
+import { useAvatar } from '../src/components/Shared/Avatar.js'
+import { useApp } from '../src/App.js'
 import type { CommunityState, DecryptedMessage, ChannelInfo, MemberInfo, DMChannelState } from '@harmony/client'
 
 describe('@harmony/ui', () => {
@@ -118,12 +118,12 @@ describe('@harmony/ui', () => {
 
   describe('App', () => {
     it('MUST initialise with login view', () => {
-      const app = App()
+      const app = useApp()
       expect(app.view()).toBe('login')
     })
 
     it('MUST switch to chat view', () => {
-      const app = App()
+      const app = useApp()
       app.setView('chat')
       expect(app.view()).toBe('chat')
     })
@@ -132,7 +132,7 @@ describe('@harmony/ui', () => {
   describe('LoginView', () => {
     it('MUST handle create action', () => {
       let created = false
-      const view = LoginView({
+      const view = useLoginView({
         onLogin: () => {},
         onCreate: () => {
           created = true
@@ -144,7 +144,7 @@ describe('@harmony/ui', () => {
 
     it('MUST handle recover action', () => {
       let receivedMnemonic = ''
-      const view = LoginView({
+      const view = useLoginView({
         onLogin: (m) => {
           receivedMnemonic = m
         },
@@ -176,13 +176,13 @@ describe('@harmony/ui', () => {
           myCapabilities: []
         }
       ]
-      const list = CommunityList({ communities, activeCommunityId: 'c1', onSelect: () => {} })
+      const list = useCommunityList({ communities, activeCommunityId: 'c1', onSelect: () => {} })
       expect(list.communities().length).toBe(2)
     })
 
     it('MUST select community', () => {
       let selected = ''
-      const list = CommunityList({
+      const list = useCommunityList({
         communities: [],
         activeCommunityId: null,
         onSelect: (id) => {
@@ -204,7 +204,7 @@ describe('@harmony/ui', () => {
         myRoles: [],
         myCapabilities: []
       }
-      const header = CommunityHeader({ community })
+      const header = useCommunityHeader({ community })
       expect(header.name()).toBe('Test Community')
       expect(header.memberCount()).toBe(5)
     })
@@ -217,7 +217,7 @@ describe('@harmony/ui', () => {
         { did: 'did:key:b', roles: [], joinedAt: '', presence: { status: 'offline' } },
         { did: 'did:key:c', roles: [], joinedAt: '', presence: { status: 'idle' } }
       ]
-      const list = MemberList({ members })
+      const list = useMemberList({ members })
       expect(list.onlineCount()).toBe(2)
       expect(list.offlineCount()).toBe(1)
     })
@@ -230,7 +230,7 @@ describe('@harmony/ui', () => {
         { id: 'ch2', communityId: 'c1', name: 'voice', type: 'voice', createdAt: '' },
         { id: 'ch3', communityId: 'c1', name: 'news', type: 'announcement', createdAt: '' }
       ]
-      const list = ChannelList({ channels, activeChannelId: null, onSelect: () => {} })
+      const list = useChannelList({ channels, activeChannelId: null, onSelect: () => {} })
       expect(list.textChannels().length).toBe(1)
       expect(list.voiceChannels().length).toBe(1)
       expect(list.announcementChannels().length).toBe(1)
@@ -251,7 +251,7 @@ describe('@harmony/ui', () => {
           edited: false
         }
       ]
-      const list = MessageList({ messages, loading: false, hasMore: false, onLoadMore: () => {} })
+      const list = useMessageList({ messages, loading: false, hasMore: false, onLoadMore: () => {} })
       expect(list.messageCount()).toBe(1)
     })
   })
@@ -259,7 +259,7 @@ describe('@harmony/ui', () => {
   describe('MessageComposer', () => {
     it('MUST send message and clear input', () => {
       let sent = ''
-      const composer = MessageComposer({
+      const composer = useMessageComposer({
         onSend: (text) => {
           sent = text
         },
@@ -273,7 +273,7 @@ describe('@harmony/ui', () => {
 
     it('MUST not send empty messages', () => {
       let sent = false
-      const composer = MessageComposer({
+      const composer = useMessageComposer({
         onSend: () => {
           sent = true
         },
@@ -297,7 +297,7 @@ describe('@harmony/ui', () => {
         edited: true,
         editedAt: '2026-02-22T10:01:00Z'
       }
-      const component = Message({ message: msg, isOwn: true })
+      const component = useMessage({ message: msg, isOwn: true })
       expect(component.authorDID()).toBe('did:key:alice')
       expect(component.content().text).toBe('hello world')
       expect(component.edited()).toBe(true)
@@ -307,18 +307,18 @@ describe('@harmony/ui', () => {
 
   describe('TypingIndicator', () => {
     it('MUST show typing text for one user', () => {
-      const indicator = TypingIndicator({ typingUsers: ['did:key:alice123'] })
+      const indicator = useTypingIndicator({ typingUsers: ['did:key:alice123'] })
       expect(indicator.isTyping()).toBe(true)
       expect(indicator.text()).toContain('is typing')
     })
 
     it('MUST show typing text for multiple users', () => {
-      const indicator = TypingIndicator({ typingUsers: ['did:key:a', 'did:key:b'] })
+      const indicator = useTypingIndicator({ typingUsers: ['did:key:a', 'did:key:b'] })
       expect(indicator.text()).toContain('are typing')
     })
 
     it('MUST show count for 3+ users', () => {
-      const indicator = TypingIndicator({ typingUsers: ['a', 'b', 'c'] })
+      const indicator = useTypingIndicator({ typingUsers: ['a', 'b', 'c'] })
       expect(indicator.text()).toContain('3 people')
     })
   })
@@ -329,25 +329,25 @@ describe('@harmony/ui', () => {
         { recipientDID: 'did:key:a', messages: [], unreadCount: 3 },
         { recipientDID: 'did:key:b', messages: [], unreadCount: 2 }
       ]
-      const list = DMList({ channels, activeRecipientDID: null, onSelect: () => {} })
+      const list = useDMList({ channels, activeRecipientDID: null, onSelect: () => {} })
       expect(list.totalUnread()).toBe(5)
     })
   })
 
   describe('Avatar', () => {
     it('MUST generate initials from DID', () => {
-      const avatar = Avatar({ did: 'did:key:z6MkTest' })
+      const avatar = useAvatar({ did: 'did:key:z6MkTest' })
       expect(avatar.initials()).toBe('ST')
     })
 
     it('MUST generate deterministic background color', () => {
-      const avatar1 = Avatar({ did: 'did:key:same' })
-      const avatar2 = Avatar({ did: 'did:key:same' })
+      const avatar1 = useAvatar({ did: 'did:key:same' })
+      const avatar2 = useAvatar({ did: 'did:key:same' })
       expect(avatar1.backgroundColor()).toBe(avatar2.backgroundColor())
     })
 
     it('MUST default to md size', () => {
-      const avatar = Avatar({ did: 'did:key:test' })
+      const avatar = useAvatar({ did: 'did:key:test' })
       expect(avatar.size()).toBe('md')
     })
   })

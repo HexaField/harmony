@@ -316,6 +316,9 @@ importers:
       '@harmony/quads':
         specifier: workspace:*
         version: link:../quads
+      '@harmony/vc':
+        specifier: workspace:*
+        version: link:../vc
     devDependencies:
       '@rollup/plugin-typescript':
         specifier: ^12.3.0

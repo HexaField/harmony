@@ -109,7 +109,7 @@ describe('@harmony/cloud', () => {
       const doc = await didProvider.create(kp)
       const bundle = createTestBundle(doc.id)
       const { exportId } = await cloud.storeExport(bundle)
-      await cloud.deleteExport(exportId, doc.id, {} as any)
+      await cloud.deleteExport(exportId, doc.id)
       await expect(cloud.retrieveExport(exportId, doc.id)).rejects.toThrow('not found')
     })
 

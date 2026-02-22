@@ -104,7 +104,7 @@ export class CloudService {
     return entry.bundle
   }
 
-  async deleteExport(exportId: string, adminDID: string, _proof: Invocation): Promise<void> {
+  async deleteExport(exportId: string, adminDID: string, _proof?: Invocation): Promise<void> {
     const entry = this.exports.get(exportId)
     if (!entry) throw new Error('Export not found')
     if (entry.bundle.metadata.adminDID !== adminDID) throw new Error('Unauthorized')

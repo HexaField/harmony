@@ -70,7 +70,7 @@ export function storageRoutes(cloud: CloudService): Router {
         res.status(400).json({ error: 'Missing adminDID query param' })
         return
       }
-      await cloud.deleteExport(req.params.exportId as string, adminDID, {} as any)
+      await cloud.deleteExport(req.params.exportId as string, adminDID)
       res.status(204).send()
     } catch (err: any) {
       if (err.message.includes('not found')) {

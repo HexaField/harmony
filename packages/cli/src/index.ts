@@ -213,7 +213,7 @@ export async function communityDeleteRemote(
   adminDID: string
 ): Promise<CommandResult> {
   await ctx.cloud.initialize()
-  await ctx.cloud.deleteExport(exportId, adminDID, {} as any)
+  await ctx.cloud.deleteExport(exportId, adminDID)
   return {
     success: true,
     message: `Deleted export ${exportId} from cloud`,

@@ -1,88 +1,43 @@
-# Template Monorepo
+# Harmony
 
-This is a modern, full-stack TypeScript monorepo template managed with **pnpm workspaces**. It provides a pre-configured environment for building scalable applications with a shared core library, a SolidJS client, and an Express server.
+Open-source, self-hostable Discord alternative with sovereign identity.
 
-## 📂 Project Structure
+Built on W3C standards: DIDs, Verifiable Credentials, ZCAPs, and RDF linked data.
 
-The monorepo is organized into the following packages:
+Licensed under the [Cryptographic Autonomy License (CAL-1.0)](https://github.com/holochain/cryptographic-autonomy-license).
 
-- **`packages/client`**: A frontend application built with **SolidJS**, **Vite**, and **Tailwind CSS**. It includes **Storybook** for component development and **Playwright** for end-to-end testing.
-- **`packages/server`**: A backend server built with **Express**. It uses **tsx** for fast development execution.
-- **`packages/core`**: A shared library containing common logic, types, or utilities used by both the client and server. It is bundled using **Rollup**.
+## Status
 
-## 🚀 Getting Started
+🚧 Phase 1: Decentralised Foundations & Migration — in development.
 
-### Prerequisites
+## Architecture
 
-- **Node.js** (Latest LTS recommended)
-- **pnpm** (Package manager)
+See [PLAN.md](./PLAN.md) for the full project plan and [IMPLEMENTATION.md](./IMPLEMENTATION.md) for Phase 1 module specs.
 
-### Installation
+## Packages
 
-Install all dependencies across the monorepo:
+| Package | Description |
+|---------|-------------|
+| `@harmony/crypto` | Key generation, signing, verification, encryption |
+| `@harmony/quads` | RDF quad store interface + implementations |
+| `@harmony/vocab` | Harmony RDF vocabulary (ontology) |
+| `@harmony/did` | DID creation, resolution, document management |
+| `@harmony/vc` | Verifiable Credential issuance, verification, revocation |
+| `@harmony/zcap` | Authorization capabilities, delegation, invocation |
+| `@harmony/identity` | Composite identity manager (DID + VC + recovery + sync) |
+| `@harmony/migration` | Discord export parsing and RDF transformation |
+| `@harmony/migration-bot` | Discord bot for community server export |
+| `@harmony/cloud` | Identity service, encrypted storage, OAuth gateway |
+| `@harmony/cli` | Command-line interface |
+
+## Development
 
 ```bash
 pnpm install
+pnpm -r test
+pnpm -r check
 ```
 
-### Development
+## License
 
-Start the development servers for both the client and server concurrently:
-
-```bash
-pnpm dev
-```
-
-- **Client**: http://localhost:5173 (default Vite port)
-- **Server**: Check console output for port (typically configured in `src/index.ts`)
-
-## 🛠 Scripts
-
-Run these scripts from the root directory:
-
-| Script         | Description                                                |
-| :------------- | :--------------------------------------------------------- |
-| `pnpm dev`     | Starts client and server in development mode concurrently. |
-| `pnpm build`   | Builds all packages in the workspace.                      |
-| `pnpm test`    | Runs tests across all packages (Vitest & Playwright).      |
-| `pnpm lint`    | Lints code using Oxlint.                                   |
-| `pnpm format`  | Formats code using Oxfmt.                                  |
-| `pnpm check`   | Runs type checking (`tsc`) and linting.                    |
-| `pnpm prepare` | Sets up Husky git hooks.                                   |
-
-## 🧰 Tech Stack & Tooling
-
-### Core Technologies
-
-- **Language**: [TypeScript](https://www.typescriptlang.org/)
-- **Package Manager**: [pnpm](https://pnpm.io/) (Workspaces)
-- **Build Tools**: [Vite](https://vitejs.dev/) (Client), [Rollup](https://rollupjs.org/) (Core)
-
-### Frontend (`packages/client`)
-
-- **Framework**: [SolidJS](https://www.solidjs.com/)
-- **Styling**: [Tailwind CSS](https://tailwindcss.com/)
-- **Testing**: [Playwright](https://playwright.dev/)
-- **Documentation**: [Storybook](https://storybook.js.org/)
-
-### Backend (`packages/server`)
-
-- **Framework**: [Express](https://expressjs.com/)
-- **Runtime**: [tsx](https://github.com/privatenumber/tsx) (TypeScript execution)
-
-### Shared (`packages/core`)
-
-- **Testing**: [Vitest](https://vitest.dev/)
-
-### DevOps & Code Quality
-
-- **Linting**: [Oxlint](https://oxc.rs/docs/guide/usage/linter)
-- **Formatting**: [Oxfmt](https://oxc.rs/docs/guide/usage/formatter)
-- **Git Hooks**: [Husky](https://typicode.github.io/husky/) & [lint-staged](https://github.com/okonet/lint-staged)
-- **CI/CD Readiness**: Scripts are optimized for CI environments (`check`, `test`, `build`).
-
-## ⚙️ Configuration Files
-
-- `pnpm-workspace.yaml`: Defines the workspace structure.
-- `.oxfmtrc.json`: Oxfmt configuration.
-- `tsconfig.json`: Base TypeScript configuration.
+CAL-1.0 — see [LICENSE](./LICENSE).

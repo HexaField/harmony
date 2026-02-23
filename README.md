@@ -12,6 +12,16 @@ Harmony is a full-featured chat platform — text channels, DMs, threads, voice/
 
 Built entirely on open standards (DIDs, Verifiable Credentials, ZCAPs, RDF), Harmony proves that sovereign infrastructure doesn't have to mean bad UX.
 
+### Why does this exist?
+
+Every community that forms on a centralised platform is building on rented land. The platform decides who can speak, what content is allowed, what the moderation rules are, whether your community can export its own history, and ultimately whether it continues to exist at all. This isn't theoretical — communities get nuked, APIs get locked down, terms change overnight.
+
+The usual response is to build an "alternative" and hope people migrate. This almost never works. The coordination cost of moving an entire community is enormous, and the new platform is invariably worse than the incumbent for the first few years. The result is a graveyard of idealistic-but-empty federated platforms.
+
+Harmony takes a different approach. Instead of asking people to leave what works, it gives them something _in addition_ — a sovereign identity layer, encrypted portable history, and community-owned infrastructure — that coexists with Discord from day one. The migration isn't a cliff; it's a gradient.
+
+The deeper goal is to demonstrate that the W3C decentralised identity stack (DIDs, VCs, ZCAPs) isn't just an academic exercise — it can underpin real, usable software that people actually want to run. If a chat platform can work this way, so can everything else.
+
 ### Why not just use Discord?
 
 Discord is excellent software with a centralised trust model. Harmony offers the same capabilities with a decentralised one:
@@ -28,7 +38,16 @@ Discord is excellent software with a centralised trust model. Harmony offers the
 
 ### Migration, not abandonment
 
-You don't leave Discord to use Harmony — you **extend beyond it.** Link your Discord identity to a sovereign DID, import your community's history, and let the centre of gravity shift naturally. Near-zero cost to try. No "convince 200 people to jump simultaneously" problem.
+Most "alternatives" ask you to convince your entire community to jump ship simultaneously. That's not a migration strategy — it's a hostage negotiation.
+
+Harmony works differently. **You don't leave Discord to use Harmony — you extend beyond it.**
+
+1. **A community admin installs a migration bot** on their existing Discord server. The bot runs on the community's own machine — Harmony never touches Discord's API, and there's no centralised service to shut down.
+2. **The bot exports the community's history** — channels, messages, roles, threads, media — encrypted with the admin's DID keypair. The data lands on a Harmony instance (self-hosted or cloud) as RDF quads, fully searchable and semantically structured.
+3. **Members link their Discord identity to a sovereign DID** at their own pace. No deadline, no pressure. Each person who links gains an encrypted, portable copy of their participation history — something Discord itself doesn't offer.
+4. **The community now exists in both places.** Discord remains the daily driver for as long as people want. Harmony is there with the full history, the sovereign identity, and the E2EE infrastructure. The centre of gravity shifts naturally as the value proposition becomes obvious.
+
+The insight is that migration doesn't have to be a discrete event. It can be a continuous process where every step adds value and no step burns bridges. The cost to try is near-zero. The cost to stay is zero. The cost to fully transition is just... time.
 
 ---
 

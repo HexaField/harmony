@@ -1,4 +1,4 @@
-// String table for cloud worker
+// String table for portal worker
 export const strings = {
   IDENTITY_LINKED: 'Identity linked successfully',
   IDENTITY_ALREADY_LINKED_DISCORD: 'Discord ID already linked to a DID',

@@ -4,7 +4,7 @@ RUN corepack enable
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY packages/ packages/
 RUN pnpm install --frozen-lockfile
-RUN pnpm --filter @harmony/cloud build
+RUN pnpm --filter @harmony/portal build
 
 FROM node:22-alpine
 WORKDIR /app

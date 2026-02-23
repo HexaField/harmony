@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express'
-import type { CloudService } from '../index.js'
+import type { PortalService } from '../index.js'
 
-export function oauthRoutes(cloud: CloudService): Router {
+export function oauthRoutes(portal: PortalService): Router {
   const router = Router()
 
   router.post('/oauth/initiate', async (req: Request, res: Response) => {
@@ -11,7 +11,7 @@ export function oauthRoutes(cloud: CloudService): Router {
         res.status(400).json({ error: 'Missing provider or userDID' })
         return
       }
-      const result = await cloud.initiateOAuthLink({ provider, userDID })
+      const result = await portal.initiateOAuthLink({ provider, userDID })
       res.json(result)
     } catch (err: any) {
       res.status(500).json({ error: err.message })
@@ -25,7 +25,7 @@ export function oauthRoutes(cloud: CloudService): Router {
         res.status(400).json({ error: 'Missing required fields' })
         return
       }
-      const vc = await cloud.completeOAuthLink({
+      const vc = await portal.completeOAuthLink({
         provider,
         code,
         state,

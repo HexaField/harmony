@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express'
-import type { CloudService } from '../index.js'
+import type { PortalService } from '../index.js'
 
-export function storageRoutes(cloud: CloudService): Router {
+export function storageRoutes(portal: PortalService): Router {
   const router = Router()
 
   router.post('/storage/exports', async (req: Request, res: Response) => {
@@ -16,7 +16,7 @@ export function storageRoutes(cloud: CloudService): Router {
         nonce: new Uint8Array(nonce),
         metadata
       }
-      const result = await cloud.storeExport(bundle)
+      const result = await portal.storeExport(bundle)
       res.status(201).json(result)
     } catch (err: any) {
       res.status(500).json({ error: err.message })
@@ -30,7 +30,7 @@ export function storageRoutes(cloud: CloudService): Router {
         res.status(400).json({ error: 'Missing adminDID query param' })
         return
       }
-      const list = await cloud.listExports(adminDID)
+      const list = await portal.listExports(adminDID)
       res.json(list)
     } catch (err: any) {
       res.status(500).json({ error: err.message })
@@ -44,7 +44,7 @@ export function storageRoutes(cloud: CloudService): Router {
         res.status(400).json({ error: 'Missing adminDID query param' })
         return
       }
-      const bundle = await cloud.retrieveExport(req.params.exportId as string, adminDID)
+      const bundle = await portal.retrieveExport(req.params.exportId as string, adminDID)
       res.json({
         ciphertext: Array.from(bundle.ciphertext),
         nonce: Array.from(bundle.nonce),
@@ -70,7 +70,7 @@ export function storageRoutes(cloud: CloudService): Router {
         res.status(400).json({ error: 'Missing adminDID query param' })
         return
       }
-      await cloud.deleteExport(req.params.exportId as string, adminDID)
+      await portal.deleteExport(req.params.exportId as string, adminDID)
       res.status(204).send()
     } catch (err: any) {
       if (err.message.includes('not found')) {

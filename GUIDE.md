@@ -290,7 +290,7 @@ The desktop app is great for small communities, but if you want always-on hostin
 2. Edit `.env` with your settings:
    - `HARMONY_PORT` — the port for the WebSocket server (default: 4000)
    - `HARMONY_UI_PORT` — the port for the web UI (default: 8080)
-   - `HARMONY_CLOUD_URL` — the cloud service URL (default: the public cloud)
+   - `HARMONY_PORTAL_URL` — the portal service URL (default: the public portal)
    - `DISCORD_TOKEN` — only if you're running the Discord bot
 
 3. Edit `harmony.config.yaml` with your identity and preferences (see the "Server Configuration" section below).
@@ -349,23 +349,23 @@ harmony server stop
 
 The server reads a YAML config file. Here's what you can set:
 
-| Setting                              | What it controls                              | Default                    |
-| ------------------------------------ | --------------------------------------------- | -------------------------- |
-| `server.host`                        | Network interface to bind to                  | `0.0.0.0` (all interfaces) |
-| `server.port`                        | WebSocket port                                | `4000`                     |
-| `server.tls.cert` / `server.tls.key` | TLS certificate paths                         | None (unencrypted)         |
-| `storage.database`                   | Path to the SQLite database                   | `./harmony.db`             |
-| `storage.media`                      | Path for encrypted media files                | `./media`                  |
-| `identity.mnemonic`                  | Your 12-word recovery phrase                  | Required                   |
-| `federation.enabled`                 | Allow connections from other Harmony servers  | `true`                     |
-| `relay.enabled`                      | Register with a cloud relay for NAT traversal | `true`                     |
-| `relay.url`                          | Cloud relay address                           | `wss://relay.harmony.chat` |
-| `voice.enabled`                      | Enable voice and video channels               | `false`                    |
-| `voice.livekit.host`                 | LiveKit server address                        | Required if voice enabled  |
-| `moderation.rateLimit.maxMessages`   | Max messages per minute per user              | `30`                       |
-| `logging.level`                      | Log detail: `debug`, `info`, `warn`, `error`  | `info`                     |
-| `limits.maxConnections`              | Maximum simultaneous connections              | `1000`                     |
-| `limits.mediaMaxSize`                | Maximum upload size in bytes                  | `52428800` (50 MB)         |
+| Setting                              | What it controls                               | Default                    |
+| ------------------------------------ | ---------------------------------------------- | -------------------------- |
+| `server.host`                        | Network interface to bind to                   | `0.0.0.0` (all interfaces) |
+| `server.port`                        | WebSocket port                                 | `4000`                     |
+| `server.tls.cert` / `server.tls.key` | TLS certificate paths                          | None (unencrypted)         |
+| `storage.database`                   | Path to the SQLite database                    | `./harmony.db`             |
+| `storage.media`                      | Path for encrypted media files                 | `./media`                  |
+| `identity.mnemonic`                  | Your 12-word recovery phrase                   | Required                   |
+| `federation.enabled`                 | Allow connections from other Harmony servers   | `true`                     |
+| `relay.enabled`                      | Register with a portal relay for NAT traversal | `true`                     |
+| `relay.url`                          | Cloud relay address                            | `wss://relay.harmony.chat` |
+| `voice.enabled`                      | Enable voice and video channels                | `false`                    |
+| `voice.livekit.host`                 | LiveKit server address                         | Required if voice enabled  |
+| `moderation.rateLimit.maxMessages`   | Max messages per minute per user               | `30`                       |
+| `logging.level`                      | Log detail: `debug`, `info`, `warn`, `error`   | `info`                     |
+| `limits.maxConnections`              | Maximum simultaneous connections               | `1000`                     |
+| `limits.mediaMaxSize`                | Maximum upload size in bytes                   | `52428800` (50 MB)         |
 
 For TLS, you'll want a certificate from Let's Encrypt or similar. If you're behind a reverse proxy (nginx, Caddy), the proxy can handle TLS and you can leave the server unencrypted.
 
@@ -390,7 +390,7 @@ Members reconnect automatically or via the new invite. The community keeps its f
 
 ## Deploying the Cloud Service
 
-The cloud service provides three things that make Harmony easier to adopt:
+The portal service provides three things that make Harmony easier to adopt:
 
 1. **NAT relay** — Most home networks block incoming connections. The relay lets desktop nodes accept connections from the outside world without port forwarding. The relay only sees encrypted traffic.
 
@@ -398,11 +398,11 @@ The cloud service provides three things that make Harmony easier to adopt:
 
 3. **Invite resolution** — Makes `harmony.chat/invite/abc` links work. Shows a landing page for people who don't have Harmony yet, and deep-links into the app for people who do.
 
-The public cloud at `cloud.harmony.chat` provides all of this for free. You only need to self-host the cloud if you want full independence from any external service.
+The public portal at `portal.harmony.chat` provides all of this for free. You only need to self-host the portal if you want full independence from any external service.
 
-### Self-hosting the cloud
+### Self-hosting the portal
 
-The cloud runs on Cloudflare Workers. You'll need a Cloudflare account (free tier works).
+The portal runs on Cloudflare Workers. You'll need a Cloudflare account (free tier works).
 
 1. Clone the Harmony repo
 2. Configure your Cloudflare resources:
@@ -411,18 +411,18 @@ The cloud runs on Cloudflare Workers. You'll need a Cloudflare account (free tie
    - **KV namespace** — rate limiting and OAuth state
 3. Set your environment variables:
    - `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` — from the Discord Developer Portal (create an OAuth2 application)
-   - `DISCORD_REDIRECT_URI` — your cloud URL + `/api/oauth/discord/callback`
+   - `DISCORD_REDIRECT_URI` — your portal URL + `/api/oauth/discord/callback`
    - `ALLOWED_ORIGINS` — domains that can call the API
 4. Deploy:
 
    ```
-   cd packages/cloud-worker
+   cd packages/portal-worker
    wrangler deploy
    ```
 
-5. Point your Harmony instances at your cloud URL by setting `relay.url` and the cloud URL in their config.
+5. Point your Harmony instances at your portal URL by setting `relay.url` and the portal URL in their config.
 
-The cloud service is the same open-source code whether you run it yourself or use the public instance. Nothing is feature-gated.
+The portal service is the same open-source code whether you run it yourself or use the public instance. Nothing is feature-gated.
 
 ---
 
@@ -490,9 +490,9 @@ Run `harmony --help` for the full list.
 
 **My community is offline when my laptop is closed.** Your desktop runs the server. When it's off, the community is off. Options: keep the app running (it minimises to the system tray), set up federation with another node that's always on, or move the community to a dedicated server (VPS or homelab).
 
-**Members can't connect to my community.** You're probably behind NAT (most home networks are). Make sure the relay is enabled in your settings — it routes connections through the cloud relay automatically. If the relay is also not working, check your internet connection and that `relay.url` in your config points to a working relay.
+**Members can't connect to my community.** You're probably behind NAT (most home networks are). Make sure the relay is enabled in your settings — it routes connections through the portal relay automatically. If the relay is also not working, check your internet connection and that `relay.url` in your config points to a working relay.
 
-**I want to move from the public cloud to self-hosted.** Change `relay.url` and the cloud URL in your config to point at your own cloud deployment. Export and re-import any identity links if needed. The transition is seamless — same protocol, same code, different address.
+**I want to move from the public portal to self-hosted.** Change `relay.url` and the portal URL in your config to point at your own portal deployment. Export and re-import any identity links if needed. The transition is seamless — same protocol, same code, different address.
 
 **Server won't start.** Check your config file for syntax errors. Run `harmony server start --foreground` to see error output directly. Common issues: port already in use, invalid mnemonic, missing SQLite.
 

@@ -37,7 +37,7 @@ Harmony — open-source, self-hostable Discord alternative with sovereign identi
 5. `@harmony/identity` (depends on crypto, did, vc, zcap, quads)
 6. `@harmony/migration` (depends on crypto, did, vc, zcap, quads, identity)
 7. `@harmony/migration-bot` (depends on migration, discord.js)
-8. `@harmony/cloud` (depends on identity, migration, express)
+8. `@harmony/portal` (depends on identity, migration, express)
 9. `@harmony/cli` (depends on everything)
 
 ## Implementation Reference

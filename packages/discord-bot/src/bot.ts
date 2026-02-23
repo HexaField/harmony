@@ -48,7 +48,7 @@ export interface ExportState {
 // Bot configuration
 export interface BotConfig {
   token: string
-  cloudUrl: string
+  portalUrl: string
   serverUrl?: string
 }
 
@@ -343,7 +343,7 @@ export class HarmonyDiscordBot {
       return { success: true, message: t('IDENTITY_SHOW', { did }) }
     }
 
-    const linkUrl = `${this.config.cloudUrl}/api/oauth/discord?user=${userId}`
+    const linkUrl = `${this.config.portalUrl}/api/oauth/discord?user=${userId}`
     return { success: true, message: t('LINK_DM', { url: linkUrl }) }
   }
 

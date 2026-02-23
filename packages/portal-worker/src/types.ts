@@ -1,5 +1,5 @@
 // Cloudflare Workers environment interface
-export interface CloudWorkerEnv {
+export interface PortalWorkerEnv {
   DB: D1Database
   EXPORTS: R2Bucket
   KV: KVNamespace

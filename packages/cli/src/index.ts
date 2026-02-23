@@ -5,7 +5,7 @@ import { ZCAPService } from '@harmony/zcap'
 import { IdentityManager, type Identity } from '@harmony/identity'
 import { MemoryQuadStore, type QuadStore } from '@harmony/quads'
 import { MigrationService, type EncryptedExportBundle } from '@harmony/migration'
-import { CloudService } from '@harmony/cloud'
+import { PortalService } from '@harmony/portal'
 
 export interface CLIContext {
   crypto: CryptoProvider
@@ -14,7 +14,7 @@ export interface CLIContext {
   vcService: VCService
   zcapService: ZCAPService
   store: QuadStore
-  cloud: CloudService
+  portal: PortalService
   migration: MigrationService
 }
 
@@ -27,7 +27,7 @@ export function createCLIContext(): CLIContext {
     vcService: new VCService(crypto),
     zcapService: new ZCAPService(crypto),
     store: new MemoryQuadStore(),
-    cloud: new CloudService(crypto),
+    portal: new PortalService(crypto),
     migration: new MigrationService(crypto)
   }
 }
@@ -98,7 +98,7 @@ export async function storeImport(ctx: CLIContext, nquads: string): Promise<Comm
 // --- Identity commands ---
 
 export async function identityLinkDiscord(ctx: CLIContext, userDID: string): Promise<CommandResult> {
-  const { redirectUrl, state } = await ctx.cloud.initiateOAuthLink({ provider: 'discord', userDID })
+  const { redirectUrl, state } = await ctx.portal.initiateOAuthLink({ provider: 'discord', userDID })
   return {
     success: true,
     message: `Open this URL to link Discord: ${redirectUrl}`,
@@ -168,21 +168,21 @@ export async function communityImport(
 }
 
 export async function communityPush(ctx: CLIContext, bundle: EncryptedExportBundle): Promise<CommandResult> {
-  await ctx.cloud.initialize()
-  const { exportId } = await ctx.cloud.storeExport(bundle)
+  await ctx.portal.initialize()
+  const { exportId } = await ctx.portal.storeExport(bundle)
   return {
     success: true,
-    message: `Pushed to cloud. Export ID: ${exportId}`,
+    message: `Pushed to portal. Export ID: ${exportId}`,
     data: { exportId }
   }
 }
 
 export async function communityPull(ctx: CLIContext, exportId: string, adminDID: string): Promise<CommandResult> {
-  await ctx.cloud.initialize()
-  const bundle = await ctx.cloud.retrieveExport(exportId, adminDID)
+  await ctx.portal.initialize()
+  const bundle = await ctx.portal.retrieveExport(exportId, adminDID)
   return {
     success: true,
-    message: `Pulled export ${exportId} from cloud`,
+    message: `Pulled export ${exportId} from portal`,
     data: { bundle }
   }
 }
@@ -212,11 +212,11 @@ export async function communityDeleteRemote(
   exportId: string,
   adminDID: string
 ): Promise<CommandResult> {
-  await ctx.cloud.initialize()
-  await ctx.cloud.deleteExport(exportId, adminDID)
+  await ctx.portal.initialize()
+  await ctx.portal.deleteExport(exportId, adminDID)
   return {
     success: true,
-    message: `Deleted export ${exportId} from cloud`,
+    message: `Deleted export ${exportId} from portal`,
     data: { exportId }
   }
 }
@@ -224,8 +224,8 @@ export async function communityDeleteRemote(
 // --- Friends commands ---
 
 export async function friendsFind(ctx: CLIContext, discordUserIds: string[]): Promise<CommandResult> {
-  await ctx.cloud.initialize()
-  const linked = await ctx.cloud.findLinkedIdentities(discordUserIds)
+  await ctx.portal.initialize()
+  const linked = await ctx.portal.findLinkedIdentities(discordUserIds)
   return {
     success: true,
     message: `Found ${linked.size} linked identities`,
@@ -234,8 +234,8 @@ export async function friendsFind(ctx: CLIContext, discordUserIds: string[]): Pr
 }
 
 export async function friendsList(ctx: CLIContext, discordUserIds: string[]): Promise<CommandResult> {
-  await ctx.cloud.initialize()
-  const linked = await ctx.cloud.findLinkedIdentities(discordUserIds)
+  await ctx.portal.initialize()
+  const linked = await ctx.portal.findLinkedIdentities(discordUserIds)
   const entries = Array.from(linked.entries()).map(([discordId, did]) => ({ discordId, did }))
   return {
     success: true,

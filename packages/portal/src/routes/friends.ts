@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express'
-import type { CloudService } from '../index.js'
+import type { PortalService } from '../index.js'
 
-export function friendsRoutes(cloud: CloudService): Router {
+export function friendsRoutes(portal: PortalService): Router {
   const router = Router()
 
   router.post('/friends/find', async (req: Request, res: Response) => {
@@ -11,7 +11,7 @@ export function friendsRoutes(cloud: CloudService): Router {
         res.status(400).json({ error: 'Missing discordUserIds array' })
         return
       }
-      const linked = await cloud.findLinkedIdentities(discordUserIds)
+      const linked = await portal.findLinkedIdentities(discordUserIds)
       res.json(Object.fromEntries(linked))
     } catch (err: any) {
       res.status(500).json({ error: err.message })

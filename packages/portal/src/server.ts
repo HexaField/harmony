@@ -1,25 +1,25 @@
 import express, { type Application, type Request, type Response } from 'express'
 import { createCryptoProvider } from '@harmony/crypto'
-import { CloudService } from './index.js'
+import { PortalService } from './index.js'
 import { identityRoutes } from './routes/identity.js'
 import { oauthRoutes } from './routes/oauth.js'
 import { storageRoutes } from './routes/storage.js'
 import { friendsRoutes } from './routes/friends.js'
 
-export async function createApp(cloud?: CloudService): Promise<Application> {
+export async function createApp(portal?: PortalService): Promise<Application> {
   const app = express()
   app.use(express.json({ limit: '50mb' }))
 
-  if (!cloud) {
+  if (!portal) {
     const crypto = createCryptoProvider()
-    cloud = new CloudService(crypto)
+    portal = new PortalService(crypto)
   }
-  await cloud.initialize()
+  await portal.initialize()
 
-  app.use('/api', identityRoutes(cloud))
-  app.use('/api', oauthRoutes(cloud))
-  app.use('/api', storageRoutes(cloud))
-  app.use('/api', friendsRoutes(cloud))
+  app.use('/api', identityRoutes(portal))
+  app.use('/api', oauthRoutes(portal))
+  app.use('/api', storageRoutes(portal))
+  app.use('/api', friendsRoutes(portal))
 
   app.get('/health', (_req: Request, res: Response) => res.json({ status: 'ok' }))
 
@@ -32,7 +32,7 @@ if (isMain) {
   const port = parseInt(process.env.PORT || '3000', 10)
   createApp().then((app) => {
     app.listen(port, () => {
-      console.log(`Harmony Cloud listening on port ${port}`)
+      console.log(`Harmony Portal listening on port ${port}`)
     })
   })
 }

@@ -197,7 +197,7 @@ describe('@harmony/migration-bot', () => {
   })
 
   describe('Push to Cloud', () => {
-    it('MUST POST bundle to cloud endpoint', async () => {
+    it('MUST POST bundle to portal endpoint', async () => {
       const bot = new MigrationBot(crypto, createMockAPI())
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)
@@ -212,8 +212,8 @@ describe('@harmony/migration-bot', () => {
         return { ok: true, status: 200, statusText: 'OK' } as Response
       })
       try {
-        await bot.pushToCloud(bundle, 'https://cloud.example.com')
-        expect(capturedUrl).toBe('https://cloud.example.com/api/storage/exports')
+        await bot.pushToPortal(bundle, 'https://portal.example.com')
+        expect(capturedUrl).toBe('https://portal.example.com/api/storage/exports')
         expect(capturedBody.metadata.sourceServerId).toBe('server1')
       } finally {
         globalThis.fetch = originalFetch
@@ -231,7 +231,7 @@ describe('@harmony/migration-bot', () => {
         async () => ({ ok: false, status: 500, statusText: 'Internal Server Error' }) as Response
       )
       try {
-        await expect(bot.pushToCloud(bundle, 'https://cloud.example.com')).rejects.toThrow('Cloud push failed')
+        await expect(bot.pushToPortal(bundle, 'https://portal.example.com')).rejects.toThrow('Portal push failed')
       } finally {
         globalThis.fetch = originalFetch
       }

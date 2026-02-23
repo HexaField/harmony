@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { createCryptoProvider } from '@harmony/crypto'
 import { DIDKeyProvider } from '@harmony/did'
 import type { EncryptedExportBundle } from '@harmony/migration'
-import { CloudService } from '../src/index.js'
+import { PortalService } from '../src/index.js'
 import { createApp } from '../src/server.js'
 import type { Server } from 'http'
 
@@ -25,48 +25,48 @@ function createTestBundle(adminDID: string): EncryptedExportBundle {
   }
 }
 
-describe('@harmony/cloud', () => {
+describe('@harmony/portal', () => {
   describe('Identity Service', () => {
     it('MUST create identity and return mnemonic', async () => {
-      const cloud = new CloudService(crypto)
-      await cloud.initialize()
-      const result = await cloud.createIdentity()
+      const portal = new PortalService(crypto)
+      await portal.initialize()
+      const result = await portal.createIdentity()
       expect(result.identity.did).toMatch(/^did:key:z/)
       expect(result.mnemonic.split(' ')).toHaveLength(12)
     })
 
     it('MUST resolve identity by DID', async () => {
-      const cloud = new CloudService(crypto)
-      await cloud.initialize()
-      const { identity } = await cloud.createIdentity()
-      const resolved = await cloud.resolveIdentity(identity.did)
+      const portal = new PortalService(crypto)
+      await portal.initialize()
+      const { identity } = await portal.createIdentity()
+      const resolved = await portal.resolveIdentity(identity.did)
       expect(resolved).not.toBeNull()
       expect(resolved!.did).toBe(identity.did)
     })
 
     it('MUST return null for unknown DID', async () => {
-      const cloud = new CloudService(crypto)
-      await cloud.initialize()
-      const result = await cloud.resolveIdentity('did:key:zUnknown')
+      const portal = new PortalService(crypto)
+      await portal.initialize()
+      const result = await portal.resolveIdentity('did:key:zUnknown')
       expect(result).toBeNull()
     })
   })
 
   describe('OAuth Linking', () => {
     it('MUST generate valid OAuth redirect URL', async () => {
-      const cloud = new CloudService(crypto)
-      await cloud.initialize()
-      const result = await cloud.initiateOAuthLink({ provider: 'discord', userDID: 'did:key:z1' })
+      const portal = new PortalService(crypto)
+      await portal.initialize()
+      const result = await portal.initiateOAuthLink({ provider: 'discord', userDID: 'did:key:z1' })
       expect(result.redirectUrl).toContain('discord')
       expect(result.state).toBeTruthy()
     })
 
     it('MUST issue VC linking DID to provider identity', async () => {
-      const cloud = new CloudService(crypto)
-      await cloud.initialize()
+      const portal = new PortalService(crypto)
+      await portal.initialize()
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)
-      const vc = await cloud.completeOAuthLink({
+      const vc = await portal.completeOAuthLink({
         provider: 'discord',
         code: 'test-code',
         state: 'test-state',
@@ -82,55 +82,55 @@ describe('@harmony/cloud', () => {
 
   describe('Encrypted Storage', () => {
     it('MUST store and retrieve encrypted bundle', async () => {
-      const cloud = new CloudService(crypto)
-      await cloud.initialize()
+      const portal = new PortalService(crypto)
+      await portal.initialize()
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)
       const bundle = createTestBundle(doc.id)
-      const { exportId } = await cloud.storeExport(bundle)
-      const retrieved = await cloud.retrieveExport(exportId, doc.id)
+      const { exportId } = await portal.storeExport(bundle)
+      const retrieved = await portal.retrieveExport(exportId, doc.id)
       expect(retrieved.metadata.sourceServerName).toBe('Test Server')
     })
 
     it('MUST reject retrieval by non-admin DID', async () => {
-      const cloud = new CloudService(crypto)
-      await cloud.initialize()
+      const portal = new PortalService(crypto)
+      await portal.initialize()
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)
       const bundle = createTestBundle(doc.id)
-      const { exportId } = await cloud.storeExport(bundle)
-      await expect(cloud.retrieveExport(exportId, 'did:key:zWrong')).rejects.toThrow('Unauthorized')
+      const { exportId } = await portal.storeExport(bundle)
+      await expect(portal.retrieveExport(exportId, 'did:key:zWrong')).rejects.toThrow('Unauthorized')
     })
 
     it('MUST delete bundle with proof', async () => {
-      const cloud = new CloudService(crypto)
-      await cloud.initialize()
+      const portal = new PortalService(crypto)
+      await portal.initialize()
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)
       const bundle = createTestBundle(doc.id)
-      const { exportId } = await cloud.storeExport(bundle)
-      await cloud.deleteExport(exportId, doc.id)
-      await expect(cloud.retrieveExport(exportId, doc.id)).rejects.toThrow('not found')
+      const { exportId } = await portal.storeExport(bundle)
+      await portal.deleteExport(exportId, doc.id)
+      await expect(portal.retrieveExport(exportId, doc.id)).rejects.toThrow('not found')
     })
 
     it('MUST list exports for admin DID', async () => {
-      const cloud = new CloudService(crypto)
-      await cloud.initialize()
+      const portal = new PortalService(crypto)
+      await portal.initialize()
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)
-      await cloud.storeExport(createTestBundle(doc.id))
-      await cloud.storeExport(createTestBundle(doc.id))
-      const list = await cloud.listExports(doc.id)
+      await portal.storeExport(createTestBundle(doc.id))
+      await portal.storeExport(createTestBundle(doc.id))
+      const list = await portal.listExports(doc.id)
       expect(list).toHaveLength(2)
     })
 
     it('MUST serve metadata without decryption', async () => {
-      const cloud = new CloudService(crypto)
-      await cloud.initialize()
+      const portal = new PortalService(crypto)
+      await portal.initialize()
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)
-      await cloud.storeExport(createTestBundle(doc.id))
-      const list = await cloud.listExports(doc.id)
+      await portal.storeExport(createTestBundle(doc.id))
+      const list = await portal.listExports(doc.id)
       expect(list[0].metadata.channelCount).toBe(5)
       expect(list[0].metadata.memberCount).toBe(20)
     })
@@ -138,11 +138,11 @@ describe('@harmony/cloud', () => {
 
   describe('Friend Graph', () => {
     it('MUST find DIDs for linked Discord user IDs', async () => {
-      const cloud = new CloudService(crypto)
-      await cloud.initialize()
+      const portal = new PortalService(crypto)
+      await portal.initialize()
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)
-      await cloud.completeOAuthLink({
+      await portal.completeOAuthLink({
         provider: 'discord',
         code: 'code',
         state: 'state',
@@ -151,21 +151,21 @@ describe('@harmony/cloud', () => {
         providerUserId: 'discord456',
         providerUsername: 'User456'
       })
-      const found = await cloud.findLinkedIdentities(['discord456', 'discord789'])
+      const found = await portal.findLinkedIdentities(['discord456', 'discord789'])
       expect(found.get('discord456')).toBe(doc.id)
       expect(found.has('discord789')).toBe(false)
     })
 
     it('MUST return only users who have linked', async () => {
-      const cloud = new CloudService(crypto)
-      await cloud.initialize()
-      const found = await cloud.findLinkedIdentities(['unknown1', 'unknown2'])
+      const portal = new PortalService(crypto)
+      await portal.initialize()
+      const found = await portal.findLinkedIdentities(['unknown1', 'unknown2'])
       expect(found.size).toBe(0)
     })
   })
 })
 
-describe('@harmony/cloud HTTP Server', () => {
+describe('@harmony/portal HTTP Server', () => {
   let server: Server
   let baseUrl: string
 

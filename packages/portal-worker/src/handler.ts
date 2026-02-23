@@ -1,5 +1,5 @@
 // Worker request handler / router
-import type { CloudWorkerEnv, CommunityPreview } from './types.js'
+import type { PortalWorkerEnv, CommunityPreview } from './types.js'
 import { createIdentityStore } from './identity-store.js'
 import { createExportStore } from './export-store.js'
 import { createInviteResolver } from './invite-resolver.js'
@@ -50,8 +50,8 @@ function html(content: string, status = 200): WorkerResponse {
   }
 }
 
-export async function handleRequest(req: WorkerRequest, env: CloudWorkerEnv): Promise<WorkerResponse> {
-  const url = new URL(req.url, 'https://cloud.harmony.chat')
+export async function handleRequest(req: WorkerRequest, env: PortalWorkerEnv): Promise<WorkerResponse> {
+  const url = new URL(req.url, 'https://portal.harmony.chat')
   const path = url.pathname
   const origin = req.headers.origin ?? req.headers.Origin ?? ''
   const cors = corsHeaders(origin, env.ALLOWED_ORIGINS)

@@ -6,7 +6,7 @@ import { HarmonyDiscordBot } from '../src/bot.ts'
 import { t } from '../src/strings.ts'
 
 const token = process.env.DISCORD_TOKEN ?? ''
-const cloudUrl = process.env.HARMONY_CLOUD_URL ?? 'http://localhost:3001'
+const portalUrl = process.env.HARMONY_PORTAL_URL ?? 'http://localhost:3001'
 const serverUrl = process.env.HARMONY_SERVER_URL ?? 'ws://localhost:4000'
 
 if (!token) {
@@ -16,7 +16,7 @@ if (!token) {
 
 const bot = new HarmonyDiscordBot({
   token,
-  cloudUrl,
+  portalUrl,
   serverUrl
 })
 
@@ -42,7 +42,7 @@ async function main() {
       console.log('Set DISCORD_TOKEN to enable Discord gateway connection')
     }
 
-    console.log(`Cloud URL: ${cloudUrl}`)
+    console.log(`Cloud URL: ${portalUrl}`)
     console.log(`Server URL: ${serverUrl}`)
   } catch (err) {
     console.error('Failed to start bot:', err)

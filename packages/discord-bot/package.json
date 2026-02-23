@@ -16,11 +16,11 @@
     "start": "node --import tsx bin/harmony-bot.js"
   },
   "dependencies": {
-    "@harmony/cloud": "workspace:*",
     "@harmony/crypto": "workspace:*",
     "@harmony/identity": "workspace:*",
     "@harmony/migration": "workspace:*",
-    "@harmony/migration-bot": "workspace:*"
+    "@harmony/migration-bot": "workspace:*",
+    "@harmony/portal": "workspace:*"
   },
   "devDependencies": {
     "tslib": "^2.8.1"

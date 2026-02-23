@@ -128,7 +128,7 @@ describe('Electron App', () => {
   })
 
   // T13: Local server accessible via relay
-  it('T13: Remote client connects through cloud relay', async () => {
+  it('T13: Remote client connects through portal relay', async () => {
     await app.createIdentity()
     await app.startServer()
     expect(app.getState().connectionState).toBe('connected')

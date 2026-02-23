@@ -56,8 +56,8 @@ export class MigrationBot {
     return this.running
   }
 
-  async pushToCloud(bundle: EncryptedExportBundle, cloudUrl: string): Promise<void> {
-    const response = await fetch(`${cloudUrl}/api/storage/exports`, {
+  async pushToPortal(bundle: EncryptedExportBundle, portalUrl: string): Promise<void> {
+    const response = await fetch(`${portalUrl}/api/storage/exports`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -67,7 +67,7 @@ export class MigrationBot {
       })
     })
     if (!response.ok) {
-      throw new Error(`Cloud push failed: ${response.status} ${response.statusText}`)
+      throw new Error(`Portal push failed: ${response.status} ${response.statusText}`)
     }
   }
 

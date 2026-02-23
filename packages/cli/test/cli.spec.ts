@@ -145,7 +145,7 @@ describe('@harmony/cli', () => {
   })
 
   describe('community push/pull', () => {
-    it('MUST push and pull from cloud', async () => {
+    it('MUST push and pull from portal', async () => {
       const ctx = createCLIContext()
       const { identity, keyPair } = await ctx.identityManager.create()
       const serverExport: DiscordServerExport = {
@@ -189,7 +189,7 @@ describe('@harmony/cli', () => {
   })
 
   describe('community delete-remote', () => {
-    it('MUST delete export from cloud', async () => {
+    it('MUST delete export from portal', async () => {
       const ctx = createCLIContext()
       const { identity, keyPair } = await ctx.identityManager.create()
       const serverExport: DiscordServerExport = {

@@ -114,7 +114,7 @@ describe('Bot Commands', () => {
   let adapter: DiscordJSAdapter
 
   beforeEach(async () => {
-    bot = new HarmonyDiscordBot({ token: 'test-token', cloudUrl: 'https://cloud.harmony.chat' })
+    bot = new HarmonyDiscordBot({ token: 'test-token', portalUrl: 'https://portal.harmony.chat' })
     guild = createTestGuild()
     adapter = new DiscordJSAdapter(guild)
     await bot.start()

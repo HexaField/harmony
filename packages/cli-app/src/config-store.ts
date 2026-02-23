@@ -10,7 +10,7 @@ export interface CLIConfig {
     createdAt: string
   }
   serverUrl?: string
-  cloudUrl?: string
+  portalUrl?: string
   [key: string]: unknown
 }
 

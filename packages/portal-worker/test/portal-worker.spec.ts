@@ -14,7 +14,7 @@ import {
   RelayDurableObject,
   createMockWebSocket,
   handleRequest,
-  type CloudWorkerEnv,
+  type PortalWorkerEnv,
   type EncryptedExportBundle
 } from '../src/index.js'
 
@@ -22,7 +22,7 @@ let db: InMemoryD1
 let r2: InMemoryR2
 let kv: InMemoryKV
 
-function createEnv(): CloudWorkerEnv {
+function createEnv(): PortalWorkerEnv {
   return {
     DB: db,
     EXPORTS: r2,
@@ -184,7 +184,7 @@ describe('OAuth', () => {
     const resp = await handleRequest(
       {
         method: 'GET',
-        url: 'https://cloud.harmony.chat/api/oauth/discord/callback?state=teststate&code=discord_user_1',
+        url: 'https://portal.harmony.chat/api/oauth/discord/callback?state=teststate&code=discord_user_1',
         headers: {}
       },
       env
@@ -300,7 +300,7 @@ describe('Invites', () => {
     const resp = await handleRequest(
       {
         method: 'GET',
-        url: `https://cloud.harmony.chat/invite/${code}`,
+        url: `https://portal.harmony.chat/invite/${code}`,
         headers: { 'user-agent': 'Mozilla/5.0' }
       },
       env
@@ -325,7 +325,7 @@ describe('Invites', () => {
     const resp = await handleRequest(
       {
         method: 'GET',
-        url: `https://cloud.harmony.chat/invite/${code}`,
+        url: `https://portal.harmony.chat/invite/${code}`,
         headers: { 'user-agent': 'Harmony/0.1.0' }
       },
       env
@@ -458,7 +458,7 @@ describe('CORS', () => {
     const resp = await handleRequest(
       {
         method: 'GET',
-        url: 'https://cloud.harmony.chat/health',
+        url: 'https://portal.harmony.chat/health',
         headers: { origin: 'https://harmony.chat' }
       },
       env
@@ -475,7 +475,7 @@ describe('Health', () => {
     const resp = await handleRequest(
       {
         method: 'GET',
-        url: 'https://cloud.harmony.chat/health',
+        url: 'https://portal.harmony.chat/health',
         headers: {}
       },
       env

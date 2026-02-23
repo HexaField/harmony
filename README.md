@@ -43,7 +43,7 @@ Most alternatives ask you to convince your entire community to jump ship at once
 Harmony doesn't require that. You keep using Discord. You _also_ get sovereign identity and encrypted, portable infrastructure running alongside it.
 
 1. **A community admin installs a migration bot** on their existing Discord server. The bot runs on the community's own machine. Harmony never touches Discord's API, and there's no centralised service that can be shut down.
-2. **The bot exports the community's history** (channels, messages, roles, threads, media), encrypted with the admin's DID keypair. The data lands on a Harmony instance, self-hosted or cloud, as structured RDF quads.
+2. **The bot exports the community's history** (channels, messages, roles, threads, media), encrypted with the admin's DID keypair. The data lands on a Harmony instance, self-hosted or portal, as structured RDF quads.
 3. **Members link their Discord identity to a sovereign DID** whenever they feel like it. Each person who links gets an encrypted, portable copy of their participation history. Discord itself doesn't offer this.
 4. **The community now exists in both places.** Discord stays the daily driver for as long as people want. Harmony sits alongside it with the full history, the sovereign identity, and the E2EE infrastructure. The centre of gravity moves when it moves.
 
@@ -99,7 +99,7 @@ Every step adds value. No step burns a bridge. The cost to try is basically zero
 
 ### Platform
 
-- **Self-hostable** — Docker single-command deploy, full feature parity with cloud
+- **Self-hostable** — Docker single-command deploy, full feature parity with portal
 - **Cloud option** — managed hosting for communities that don't want to run servers
 - **Mobile** — PWA + native shells (Capacitor/Tauri) for iOS, Android, desktop
 - **Search** — client-side full-text (decrypted content) + server-side metadata queries
@@ -136,7 +136,7 @@ Every step adds value. No step burns a bridge. The cost to try is basically zero
    └────────┘ └──────────────┘
 
 Foundation: @harmony/crypto → did → vc → zcap → identity → quads → vocab
-Migration:  @harmony/migration → migration-bot → cloud → cli
+Migration:  @harmony/migration → migration-bot → portal → cli
 ```
 
 **Data model:** RDF quads — every message, credential, capability, and community structure is linked data, natively interoperable with the semantic web.
@@ -190,7 +190,7 @@ Migration:  @harmony/migration → migration-bot → cloud → cli
 | `@harmony/mobile`        | Capacitor/Tauri native shell + mobile-specific features |
 | `@harmony/migration`     | Discord export parsing, RDF transformation              |
 | `@harmony/migration-bot` | Discord bot for community export                        |
-| `@harmony/cloud`         | Identity service, OAuth gateway, encrypted storage      |
+| `@harmony/portal`        | Identity service, OAuth gateway, encrypted storage      |
 | `@harmony/cli`           | Command-line interface                                  |
 
 ---
@@ -207,7 +207,7 @@ Migration:  @harmony/migration → migration-bot → cloud → cli
 
 ```bash
 docker compose up -d
-# Your instance is running. Full feature parity with cloud.
+# Your instance is running. Full feature parity with portal.
 ```
 
 ### Development
@@ -226,7 +226,7 @@ pnpm -r check       # type-check
 
 1. **Community admin** installs the open-source migration bot on their Discord server
 2. **Bot exports** channels, messages, roles, threads — encrypted with the admin's DID
-3. **Data lands** on Harmony (cloud or self-hosted) — server stores only ciphertext
+3. **Data lands** on Harmony (portal or self-hosted) — server stores only ciphertext
 4. **Members link** their Discord identities → connections reconstruct automatically
 5. **Community is live** — full history, same people, sovereign infrastructure
 

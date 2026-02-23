@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @harmony/cloud-worker — Local development cloud server
+// @harmony/portal-worker — Local development portal server
 // Wraps the Cloudflare Worker handler with a Node.js HTTP server
 // Uses in-memory implementations of D1, R2, KV, and WebSocket relay
 
@@ -25,7 +25,7 @@ if (values.help) {
 Harmony Cloud Server (Local Development)
 
 Usage:
-  harmony-cloud [options]
+  harmony-portal [options]
 
 Options:
   -p, --port <number>   Port to listen on (default: 3001)
@@ -65,7 +65,7 @@ const relay = new RelayDurableObject()
 // Apply D1 schema
 await db.exec(SCHEMA_SQL)
 
-// Build the environment matching CloudWorkerEnv
+// Build the environment matching PortalWorkerEnv
 const env = {
   DB: db,
   EXPORTS: r2,

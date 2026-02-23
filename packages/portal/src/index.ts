@@ -12,7 +12,7 @@ export interface ExportMetadata {
   storedAt: string
 }
 
-export class CloudService {
+export class PortalService {
   private identityManager: IdentityManager
   private vcService: VCService
   private didProvider: DIDKeyProvider
@@ -20,8 +20,8 @@ export class CloudService {
   private identities: Map<string, { identity: Identity; keyPair: KeyPair }> = new Map()
   private discordLinks: Map<string, string> = new Map() // discordId → DID
 
-  private cloudKeyPair!: KeyPair
-  private cloudDID!: string
+  private portalKeyPair!: KeyPair
+  private portalDID!: string
 
   private crypto: CryptoProvider
   constructor(crypto: CryptoProvider) {
@@ -32,9 +32,9 @@ export class CloudService {
   }
 
   async initialize(): Promise<void> {
-    this.cloudKeyPair = await this.crypto.generateSigningKeyPair()
-    const doc = await this.didProvider.create(this.cloudKeyPair)
-    this.cloudDID = doc.id
+    this.portalKeyPair = await this.crypto.generateSigningKeyPair()
+    const doc = await this.didProvider.create(this.portalKeyPair)
+    this.portalDID = doc.id
   }
 
   async createIdentity(): Promise<{ identity: Identity; keyPair: KeyPair; mnemonic: string }> {
@@ -66,7 +66,7 @@ export class CloudService {
     providerUserId: string
     providerUsername: string
   }): Promise<VerifiableCredential> {
-    if (!this.cloudKeyPair) throw new Error('Cloud service not initialized')
+    if (!this.portalKeyPair) throw new Error('Portal service not initialized')
 
     const claims: Record<string, unknown> = {
       provider: params.provider,
@@ -81,8 +81,8 @@ export class CloudService {
     }
 
     const vc = await this.vcService.issue({
-      issuerDID: this.cloudDID,
-      issuerKeyPair: this.cloudKeyPair,
+      issuerDID: this.portalDID,
+      issuerKeyPair: this.portalKeyPair,
       subjectDID: params.userDID,
       type: params.provider === 'discord' ? 'DiscordIdentityCredential' : 'OAuthIdentityCredential',
       claims

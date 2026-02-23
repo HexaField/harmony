@@ -17,11 +17,11 @@
   "dependencies": {
     "@harmony/cli": "workspace:*",
     "@harmony/client": "workspace:*",
-    "@harmony/cloud": "workspace:*",
     "@harmony/crypto": "workspace:*",
     "@harmony/did": "workspace:*",
     "@harmony/identity": "workspace:*",
     "@harmony/migration": "workspace:*",
+    "@harmony/portal": "workspace:*",
     "@harmony/quads": "workspace:*",
     "@harmony/server-runtime": "workspace:*",
     "@harmony/vc": "workspace:*",

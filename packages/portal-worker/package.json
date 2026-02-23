@@ -1,8 +1,8 @@
 {
-  "name": "@harmony/cloud-worker",
+  "name": "@harmony/portal-worker",
   "version": "0.1.0",
   "bin": {
-    "harmony-cloud": "bin/harmony-cloud.js"
+    "harmony-portal": "bin/harmony-portal.js"
   },
   "type": "module",
   "main": "src/index.ts",
@@ -13,11 +13,11 @@
   "scripts": {
     "check": "tsc --noEmit",
     "test": "vitest run",
-    "start": "node --import tsx bin/harmony-cloud.js"
+    "start": "node --import tsx bin/harmony-portal.js"
   },
   "dependencies": {
-    "@harmony/cloud": "workspace:*",
     "@harmony/crypto": "workspace:*",
+    "@harmony/portal": "workspace:*",
     "ws": "^8.18.0"
   },
   "devDependencies": {

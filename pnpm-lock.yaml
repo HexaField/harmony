@@ -109,9 +109,6 @@ importers:
 
   packages/cli:
     dependencies:
-      '@harmony/cloud':
-        specifier: workspace:*
-        version: link:../cloud
       '@harmony/crypto':
         specifier: workspace:*
         version: link:../crypto
@@ -124,6 +121,9 @@ importers:
       '@harmony/migration':
         specifier: workspace:*
         version: link:../migration
+      '@harmony/portal':
+        specifier: workspace:*
+        version: link:../portal
       '@harmony/quads':
         specifier: workspace:*
         version: link:../quads
@@ -152,9 +152,6 @@ importers:
       '@harmony/client':
         specifier: workspace:*
         version: link:../client
-      '@harmony/cloud':
-        specifier: workspace:*
-        version: link:../cloud
       '@harmony/crypto':
         specifier: workspace:*
         version: link:../crypto
@@ -167,6 +164,9 @@ importers:
       '@harmony/migration':
         specifier: workspace:*
         version: link:../migration
+      '@harmony/portal':
+        specifier: workspace:*
+        version: link:../portal
       '@harmony/quads':
         specifier: workspace:*
         version: link:../quads
@@ -256,74 +256,6 @@ importers:
       ws:
         specifier: ^8.18.0
         version: 8.18.3
-
-  packages/cloud:
-    dependencies:
-      '@harmony/crypto':
-        specifier: workspace:*
-        version: link:../crypto
-      '@harmony/did':
-        specifier: workspace:*
-        version: link:../did
-      '@harmony/identity':
-        specifier: workspace:*
-        version: link:../identity
-      '@harmony/migration':
-        specifier: workspace:*
-        version: link:../migration
-      '@harmony/quads':
-        specifier: workspace:*
-        version: link:../quads
-      '@harmony/vc':
-        specifier: workspace:*
-        version: link:../vc
-      '@harmony/zcap':
-        specifier: workspace:*
-        version: link:../zcap
-      cors:
-        specifier: ^2.8.5
-        version: 2.8.5
-      dotenv:
-        specifier: ^17.2.3
-        version: 17.2.3
-      express:
-        specifier: ^5.2.1
-        version: 5.2.1
-      zod:
-        specifier: ^4.3.5
-        version: 4.3.5
-    devDependencies:
-      '@rollup/plugin-typescript':
-        specifier: ^12.3.0
-        version: 12.3.0(rollup@4.54.0)(tslib@2.8.1)(typescript@5.9.3)
-      '@types/express':
-        specifier: ^5.0.6
-        version: 5.0.6
-      rollup:
-        specifier: ^4.54.0
-        version: 4.54.0
-      tslib:
-        specifier: ^2.8.1
-        version: 2.8.1
-
-  packages/cloud-worker:
-    dependencies:
-      '@harmony/cloud':
-        specifier: workspace:*
-        version: link:../cloud
-      '@harmony/crypto':
-        specifier: workspace:*
-        version: link:../crypto
-      ws:
-        specifier: ^8.18.0
-        version: 8.18.3
-    devDependencies:
-      '@types/ws':
-        specifier: ^8.18.1
-        version: 8.18.1
-      tslib:
-        specifier: ^2.8.1
-        version: 2.8.1
 
   packages/crdt:
     devDependencies:
@@ -417,9 +349,6 @@ importers:
 
   packages/discord-bot:
     dependencies:
-      '@harmony/cloud':
-        specifier: workspace:*
-        version: link:../cloud
       '@harmony/crypto':
         specifier: workspace:*
         version: link:../crypto
@@ -432,6 +361,9 @@ importers:
       '@harmony/migration-bot':
         specifier: workspace:*
         version: link:../migration-bot
+      '@harmony/portal':
+        specifier: workspace:*
+        version: link:../portal
     devDependencies:
       tslib:
         specifier: ^2.8.1
@@ -736,6 +668,74 @@ importers:
       rollup:
         specifier: ^4.54.0
         version: 4.54.0
+      tslib:
+        specifier: ^2.8.1
+        version: 2.8.1
+
+  packages/portal:
+    dependencies:
+      '@harmony/crypto':
+        specifier: workspace:*
+        version: link:../crypto
+      '@harmony/did':
+        specifier: workspace:*
+        version: link:../did
+      '@harmony/identity':
+        specifier: workspace:*
+        version: link:../identity
+      '@harmony/migration':
+        specifier: workspace:*
+        version: link:../migration
+      '@harmony/quads':
+        specifier: workspace:*
+        version: link:../quads
+      '@harmony/vc':
+        specifier: workspace:*
+        version: link:../vc
+      '@harmony/zcap':
+        specifier: workspace:*
+        version: link:../zcap
+      cors:
+        specifier: ^2.8.5
+        version: 2.8.5
+      dotenv:
+        specifier: ^17.2.3
+        version: 17.2.3
+      express:
+        specifier: ^5.2.1
+        version: 5.2.1
+      zod:
+        specifier: ^4.3.5
+        version: 4.3.5
+    devDependencies:
+      '@rollup/plugin-typescript':
+        specifier: ^12.3.0
+        version: 12.3.0(rollup@4.54.0)(tslib@2.8.1)(typescript@5.9.3)
+      '@types/express':
+        specifier: ^5.0.6
+        version: 5.0.6
+      rollup:
+        specifier: ^4.54.0
+        version: 4.54.0
+      tslib:
+        specifier: ^2.8.1
+        version: 2.8.1
+
+  packages/portal-worker:
+    dependencies:
+      '@harmony/crypto':
+        specifier: workspace:*
+        version: link:../crypto
+      '@harmony/portal':
+        specifier: workspace:*
+        version: link:../portal
+      ws:
+        specifier: ^8.18.0
+        version: 8.18.3
+    devDependencies:
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       tslib:
         specifier: ^2.8.1
         version: 2.8.1

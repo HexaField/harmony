@@ -1,12 +1,12 @@
 import { Router, type Request, type Response } from 'express'
-import type { CloudService } from '../index.js'
+import type { PortalService } from '../index.js'
 
-export function identityRoutes(cloud: CloudService): Router {
+export function identityRoutes(portal: PortalService): Router {
   const router = Router()
 
   router.post('/identities', async (_req: Request, res: Response) => {
     try {
-      const result = await cloud.createIdentity()
+      const result = await portal.createIdentity()
       res.status(201).json({
         did: result.identity.did,
         mnemonic: result.mnemonic
@@ -18,7 +18,7 @@ export function identityRoutes(cloud: CloudService): Router {
 
   router.get('/identities/:did', async (req: Request, res: Response) => {
     try {
-      const identity = await cloud.resolveIdentity(req.params.did as string)
+      const identity = await portal.resolveIdentity(req.params.did as string)
       if (!identity) {
         res.status(404).json({ error: 'Not found' })
         return

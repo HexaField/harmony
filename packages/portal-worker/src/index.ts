@@ -1,6 +1,6 @@
-// @harmony/cloud-worker — Cloudflare Workers adapter
+// @harmony/portal-worker — Cloudflare Workers adapter
 export type {
-  CloudWorkerEnv,
+  PortalWorkerEnv,
   D1Database,
   D1PreparedStatement,
   D1Result,

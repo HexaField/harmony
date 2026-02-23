@@ -15,6 +15,13 @@ import { CRDTLog, clockTick, clockMerge } from '@harmony/crdt'
 import type { VCService, VerifiablePresentation, VerifiableCredential } from '@harmony/vc'
 import type { ZCAPService, Capability } from '@harmony/zcap'
 import type { MLSGroup, MLSProvider, DMChannel, DMProvider, KeyPackage, Welcome } from '@harmony/e2ee'
+import type { VoiceClient, VoiceConnection } from '@harmony/voice'
+import type { MediaClient, MediaRef, FileInput, DecryptedFile } from '@harmony/media'
+import type { ClientSearchIndex, SearchQuery, SearchResult } from '@harmony/search'
+import type { GovernanceEngine, ProposalDef, Proposal } from '@harmony/governance'
+import type { DelegationManager, UserDelegation } from '@harmony/governance'
+import type { ReputationEngine, ReputationProfile } from '@harmony/credentials'
+import type { PushNotificationService, PushRegistration } from '@harmony/mobile'
 
 // ── Types ──
 
@@ -159,6 +166,15 @@ export class HarmonyClient {
   // WebSocket factory for testing
   private _wsFactory: ((url: string) => WSLike) | null = null
 
+  // Phase 3 integrations
+  private voiceClient: VoiceClient | null = null
+  private mediaClient: MediaClient | null = null
+  private searchIndex: ClientSearchIndex | null = null
+  private governanceEngine: GovernanceEngine | null = null
+  private delegationManager: DelegationManager | null = null
+  private reputationEngine: ReputationEngine | null = null
+  private pushService: PushNotificationService | null = null
+
   constructor(options?: {
     vcService?: VCService
     zcapService?: ZCAPService
@@ -166,6 +182,13 @@ export class HarmonyClient {
     dmProvider?: DMProvider
     cryptoProvider?: CryptoProvider
     wsFactory?: (url: string) => WSLike
+    voiceClient?: VoiceClient
+    mediaClient?: MediaClient
+    searchIndex?: ClientSearchIndex
+    governanceEngine?: GovernanceEngine
+    delegationManager?: DelegationManager
+    reputationEngine?: ReputationEngine
+    pushService?: PushNotificationService
   }) {
     if (options) {
       this.vcService = options.vcService ?? null
@@ -174,6 +197,13 @@ export class HarmonyClient {
       this.dmProvider = options.dmProvider ?? null
       this.cryptoProvider = options.cryptoProvider ?? null
       this._wsFactory = options.wsFactory ?? null
+      this.voiceClient = options.voiceClient ?? null
+      this.mediaClient = options.mediaClient ?? null
+      this.searchIndex = options.searchIndex ?? null
+      this.governanceEngine = options.governanceEngine ?? null
+      this.delegationManager = options.delegationManager ?? null
+      this.reputationEngine = options.reputationEngine ?? null
+      this.pushService = options.pushService ?? null
     }
   }
 
@@ -703,6 +733,106 @@ export class HarmonyClient {
 
   async banMember(communityId: string, memberDID: string, reason?: string): Promise<void> {
     this.send(this.createMessage('member.ban', { communityId, memberDID, reason }))
+  }
+
+  // ── Voice ──
+
+  async joinVoice(channelId: string): Promise<VoiceConnection> {
+    if (!this.voiceClient) throw new Error('Voice client not configured')
+    if (!this._connected) throw new Error('Not connected')
+    // Request join token from server
+    this.send(this.createMessage('voice.join', { channelId }))
+    // Generate a client-side token with room info
+    const tokenData = { room: channelId, participant: this._did }
+    const token =
+      typeof btoa === 'function'
+        ? btoa(JSON.stringify(tokenData))
+        : Buffer.from(JSON.stringify(tokenData)).toString('base64')
+    const connection = await this.voiceClient.joinRoom(token)
+    this.emitter.emit('voice.joined', { channelId })
+    return connection
+  }
+
+  async leaveVoice(): Promise<void> {
+    if (!this.voiceClient) throw new Error('Voice client not configured')
+    const activeRoom = this.voiceClient.getActiveRoom()
+    if (!activeRoom) return
+    const roomId = activeRoom.roomId
+    await this.voiceClient.leaveRoom()
+    this.send(this.createMessage('voice.leave', { channelId: roomId }))
+    this.emitter.emit('voice.left', { channelId: roomId })
+  }
+
+  getVoiceConnection(): VoiceConnection | null {
+    return this.voiceClient?.getActiveRoom() ?? null
+  }
+
+  // ── Media ──
+
+  async uploadFile(communityId: string, channelId: string, file: FileInput): Promise<MediaRef> {
+    if (!this.mediaClient) throw new Error('Media client not configured')
+    // Use a dummy channel key (in real impl, would use MLS group key)
+    const channelKey = new Uint8Array(32)
+    return this.mediaClient.uploadFile(file, channelKey, this._did, communityId, channelId)
+  }
+
+  async downloadFile(ref: MediaRef): Promise<DecryptedFile> {
+    if (!this.mediaClient) throw new Error('Media client not configured')
+    const channelKey = new Uint8Array(32)
+    return this.mediaClient.downloadFile(ref, channelKey)
+  }
+
+  // ── Search ──
+
+  search(query: SearchQuery): SearchResult[] {
+    if (!this.searchIndex) throw new Error('Search index not configured')
+    return this.searchIndex.search(query)
+  }
+
+  indexMessage(msg: {
+    id: string
+    channelId: string
+    communityId: string
+    authorDID: string
+    text: string
+    timestamp: string
+    threadId?: string
+  }): void {
+    this.searchIndex?.indexMessage(msg)
+  }
+
+  // ── Governance ──
+
+  async createProposal(def: ProposalDef): Promise<Proposal> {
+    if (!this.governanceEngine) throw new Error('Governance engine not configured')
+    return this.governanceEngine.createProposal(def, this._did)
+  }
+
+  async signProposal(proposalId: string, vote: 'approve' | 'reject' = 'approve'): Promise<void> {
+    if (!this.governanceEngine) throw new Error('Governance engine not configured')
+    const proof = { type: 'Ed25519Signature2020', proofPurpose: 'assertionMethod', verificationMethod: this._did }
+    return this.governanceEngine.signProposal(proposalId, this._did, proof, vote)
+  }
+
+  // ── Delegation ──
+
+  async delegateTo(did: string, capabilities: string[]): Promise<UserDelegation> {
+    if (!this.delegationManager) throw new Error('Delegation manager not configured')
+    return this.delegationManager.createDelegation(this._did, did, capabilities)
+  }
+
+  // ── Reputation ──
+
+  async getReputation(did: string): Promise<ReputationProfile> {
+    if (!this.reputationEngine) throw new Error('Reputation engine not configured')
+    return this.reputationEngine.getReputation(did)
+  }
+
+  // ── Push Notifications ──
+
+  async registerPush(): Promise<PushRegistration> {
+    if (!this.pushService) throw new Error('Push service not configured')
+    return this.pushService.register()
   }
 
   // ── Internal ──

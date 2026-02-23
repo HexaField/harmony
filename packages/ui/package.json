@@ -15,11 +15,18 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@harmony/bot-api": "workspace:*",
     "@harmony/client": "workspace:*",
     "@harmony/crdt": "workspace:*",
+    "@harmony/credentials": "workspace:*",
     "@harmony/crypto": "workspace:*",
+    "@harmony/governance": "workspace:*",
     "@harmony/identity": "workspace:*",
-    "@harmony/protocol": "workspace:*"
+    "@harmony/media": "workspace:*",
+    "@harmony/mobile": "workspace:*",
+    "@harmony/protocol": "workspace:*",
+    "@harmony/search": "workspace:*",
+    "@harmony/voice": "workspace:*"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",

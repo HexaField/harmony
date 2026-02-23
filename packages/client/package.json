@@ -14,12 +14,18 @@
   },
   "dependencies": {
     "@harmony/crdt": "workspace:*",
+    "@harmony/credentials": "workspace:*",
     "@harmony/crypto": "workspace:*",
     "@harmony/did": "workspace:*",
     "@harmony/e2ee": "workspace:*",
+    "@harmony/governance": "workspace:*",
     "@harmony/identity": "workspace:*",
+    "@harmony/media": "workspace:*",
+    "@harmony/mobile": "workspace:*",
     "@harmony/protocol": "workspace:*",
+    "@harmony/search": "workspace:*",
     "@harmony/vc": "workspace:*",
+    "@harmony/voice": "workspace:*",
     "@harmony/zcap": "workspace:*"
   },
   "devDependencies": {

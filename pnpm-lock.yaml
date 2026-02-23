@@ -118,6 +118,9 @@ importers:
       '@harmony/crdt':
         specifier: workspace:*
         version: link:../crdt
+      '@harmony/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       '@harmony/crypto':
         specifier: workspace:*
         version: link:../crypto
@@ -127,15 +130,30 @@ importers:
       '@harmony/e2ee':
         specifier: workspace:*
         version: link:../e2ee
+      '@harmony/governance':
+        specifier: workspace:*
+        version: link:../governance
       '@harmony/identity':
         specifier: workspace:*
         version: link:../identity
+      '@harmony/media':
+        specifier: workspace:*
+        version: link:../media
+      '@harmony/mobile':
+        specifier: workspace:*
+        version: link:../mobile
       '@harmony/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@harmony/search':
+        specifier: workspace:*
+        version: link:../search
       '@harmony/vc':
         specifier: workspace:*
         version: link:../vc
+      '@harmony/voice':
+        specifier: workspace:*
+        version: link:../voice
       '@harmony/zcap':
         specifier: workspace:*
         version: link:../zcap
@@ -689,21 +707,42 @@ importers:
 
   packages/ui:
     dependencies:
+      '@harmony/bot-api':
+        specifier: workspace:*
+        version: link:../bot-api
       '@harmony/client':
         specifier: workspace:*
         version: link:../client
       '@harmony/crdt':
         specifier: workspace:*
         version: link:../crdt
+      '@harmony/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       '@harmony/crypto':
         specifier: workspace:*
         version: link:../crypto
+      '@harmony/governance':
+        specifier: workspace:*
+        version: link:../governance
       '@harmony/identity':
         specifier: workspace:*
         version: link:../identity
+      '@harmony/media':
+        specifier: workspace:*
+        version: link:../media
+      '@harmony/mobile':
+        specifier: workspace:*
+        version: link:../mobile
       '@harmony/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@harmony/search':
+        specifier: workspace:*
+        version: link:../search
+      '@harmony/voice':
+        specifier: workspace:*
+        version: link:../voice
     devDependencies:
       autoprefixer:
         specifier: ^10.4.21

@@ -1,6 +1,9 @@
 {
   "name": "@harmony/server-runtime",
   "version": "0.1.0",
+  "bin": {
+    "harmony-server": "bin/harmony-server.js"
+  },
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
@@ -10,7 +13,8 @@
   "scripts": {
     "build": "rollup -c",
     "check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "start": "node --import tsx bin/harmony-server.js"
   },
   "dependencies": {
     "@harmony/crypto": "workspace:*",

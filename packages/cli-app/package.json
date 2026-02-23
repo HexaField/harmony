@@ -2,7 +2,7 @@
   "name": "@harmony/cli-app",
   "version": "0.1.0",
   "bin": {
-    "harmony": "src/bin.ts"
+    "harmony": "bin/harmony.js"
   },
   "type": "module",
   "main": "src/index.ts",

@@ -1,0 +1,35 @@
+# Harmony Server Configuration
+server:
+  host: 0.0.0.0
+  port: 4000
+
+storage:
+  database: ./harmony.db
+  media: ./media
+
+identity: {}
+
+federation:
+  enabled: false
+
+relay:
+  enabled: false
+
+moderation:
+  rateLimit:
+    windowMs: 60000
+    maxMessages: 30
+
+voice:
+  enabled: false
+
+logging:
+  level: info
+  format: text
+
+limits:
+  maxConnections: 1000
+  maxCommunities: 100
+  maxChannelsPerCommunity: 500
+  maxMessageSize: 16384
+  mediaMaxSize: 52428800

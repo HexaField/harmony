@@ -1,406 +1,499 @@
-# Harmony Setup Guide
+# Harmony Guide
 
-This guide walks through setting up Harmony from scratch: creating an identity, running the server, deploying the cloud service, migrating a Discord community, and linking accounts.
-
----
-
-## Prerequisites
-
-- Node.js 22+
-- pnpm (`corepack enable`)
-- Docker (for cloud deployment)
-
-Clone and install:
-
-```bash
-git clone https://github.com/HexaField/harmony.git
-cd harmony
-pnpm install
-```
+Everything you need to get started with Harmony, whether you're joining a community, running your own, or migrating from Discord.
 
 ---
 
-## 1. Create Your Identity
+## Getting Harmony
 
-Everything in Harmony starts with a sovereign identity. This is a cryptographic keypair derived from a BIP-39 mnemonic phrase. You hold the mnemonic; nobody else does.
+### Desktop App (recommended)
 
-```typescript
-import { createCryptoProvider } from '@harmony/crypto'
-import { IdentityManager } from '@harmony/identity'
+Download the Harmony desktop app for your platform:
 
-const crypto = createCryptoProvider()
-const identityManager = new IdentityManager(crypto)
+- **macOS:** `Harmony.dmg`
+- **Windows:** `Harmony-Setup.exe`
+- **Linux:** `Harmony.AppImage` or `harmony.deb`
 
-const { identity, mnemonic } = await identityManager.create()
+The desktop app is the easiest way to use Harmony. It runs a personal server on your machine so your data stays with you. When you launch the app, you're not just connecting to someone else's server — you're running your own.
 
-console.log('Your DID:', identity.did) // did:key:z6Mk...
-console.log('Your mnemonic:', mnemonic) // 12 words — write these down
+### Web App
+
+If you don't want to install anything, you can use Harmony in a browser. Visit the web UI hosted by whatever community you're joining (they'll give you the URL). The experience is the same, but your data lives on their server rather than your machine.
+
+### Command Line (power users)
+
+Install the CLI globally:
+
+```
+npm install -g @harmony/cli
 ```
 
-Your DID is your identity everywhere in Harmony. The mnemonic is your backup. Lose the mnemonic and you lose the identity (unless you've set up social recovery).
-
-To recover an existing identity on a new device:
-
-```typescript
-const { identity } = await identityManager.createFromMnemonic(mnemonic)
-```
-
-### Social Recovery (optional)
-
-Distribute recovery shards to 5 trusted contacts. Any 3 can help you recover:
-
-```typescript
-const shards = await identityManager.createRecoveryShards(identity, keyPair, [
-  'did:key:z6Mk...trusted1',
-  'did:key:z6Mk...trusted2',
-  'did:key:z6Mk...trusted3',
-  'did:key:z6Mk...trusted4',
-  'did:key:z6Mk...trusted5'
-])
-// Distribute each shard to the corresponding contact
-```
+Run `harmony --help` to see all available commands. Everything the desktop app can do, the CLI can do too.
 
 ---
 
-## 2. Run a Harmony Server
+## Your First Launch
 
-The server is a WebSocket relay. It routes encrypted messages between clients and verifies authorization proofs (ZCAPs). It never sees message content.
+When you open Harmony for the first time, you'll see three options:
 
-```typescript
-import { HarmonyServer } from '@harmony/server'
-import { MemoryQuadStore } from '@harmony/quads'
-import { createCryptoProvider } from '@harmony/crypto'
+1. **Create your identity** — Start fresh with a new sovereign identity
+2. **Recover existing identity** — Restore an identity from a 12-word recovery phrase
+3. **Import from Discord** — Migrate a Discord community (takes you through the migration wizard)
 
-const crypto = createCryptoProvider()
-const store = new MemoryQuadStore()
+### Creating an identity
 
-const server = new HarmonyServer({
-  port: 4000,
-  host: '0.0.0.0',
-  store,
-  didResolver: { resolve: async (did) => ({ id: did, verificationMethod: [] }) },
-  revocationStore: { revoke: async () => {}, isRevoked: async () => false },
-  cryptoProvider: crypto
-})
+Choose "Create your identity." Harmony will generate a 12-word recovery phrase and display it on screen.
 
-await server.start()
-console.log('Harmony server running on ws://localhost:4000')
+**Write this phrase down on paper and store it somewhere safe.** This is the only way to recover your identity if you lose access to your device. Harmony doesn't have a "forgot password" option — your identity is yours alone, and nobody else can reset it.
+
+After you confirm you've saved the phrase, Harmony creates your identity and starts your personal server. You'll land on the home screen with options to create a community, join one, or find friends from Discord.
+
+### Recovering an identity
+
+Choose "Recover existing identity" and enter your 12-word recovery phrase. Harmony will restore your identity, including all your credentials, linked accounts, and community memberships.
+
+### Using the CLI
+
+```
+harmony init
 ```
 
-For production, swap `MemoryQuadStore` for a persistent store and provide real DID resolution and revocation checking.
-
-### Connect a client
-
-```typescript
-import { HarmonyClient } from '@harmony/client'
-
-const client = new HarmonyClient({
-  serverUrl: 'ws://localhost:4000',
-  did: identity.did,
-  keyPair: identity.keyPair
-})
-
-await client.connect()
-
-// Create a community
-const community = await client.createCommunity({
-  name: 'My Community',
-  description: 'A place for us'
-})
-
-// Create a channel
-const channel = await client.createChannel(community.id, {
-  name: 'general',
-  type: 'text'
-})
-
-// Send a message
-await client.sendMessage(channel.id, 'Hello, Harmony!')
-```
-
-All messages are E2EE by default. The server stores ciphertext only.
+This walks you through the same setup interactively in your terminal: create or recover an identity, configure your server connection, and save your settings.
 
 ---
 
-## 3. Deploy the Cloud Service
+## Joining a Community
 
-The cloud service handles OAuth identity linking, encrypted export storage, and acts as a migration gateway. It's optional — everything works without it — but it makes the Discord migration flow much smoother.
+Someone will share an invite link with you. It looks like this:
 
-### With Docker
-
-```bash
-docker build -t harmony-cloud .
-docker run -p 3000:3000 harmony-cloud
+```
+harmony.chat/invite/abc123
 ```
 
-The Dockerfile builds from the repo root and exposes port 3000.
+**From the desktop app:** Click the link. If Harmony is installed, it opens directly and asks you to confirm joining. If it's your first time, you'll create an identity first, then join automatically.
 
-### Without Docker
+**From the web:** Open the link in a browser. If you don't have Harmony installed, you'll see a landing page with the community name, a description, and a download button. If you're already using the web app, you'll be taken straight to the join screen.
 
-```bash
-pnpm --filter @harmony/cloud build
-PORT=3000 node packages/cloud/dist/server.js
+**From the CLI:**
+
+```
+harmony community join harmony.chat/invite/abc123
 ```
 
-### Endpoints
-
-| Endpoint                         | Purpose                                      |
-| -------------------------------- | -------------------------------------------- |
-| `GET /health`                    | Health check                                 |
-| `POST /api/identity/link`        | Link a Discord account to a DID              |
-| `POST /api/identity/verify`      | Verify an identity link                      |
-| `POST /api/storage/upload`       | Upload an encrypted community export         |
-| `GET /api/storage/download/:id`  | Download an encrypted export                 |
-| `DELETE /api/storage/delete/:id` | Delete an export (ZCAP-authorized)           |
-| `POST /api/friends/find`         | Find Harmony users from Discord friend lists |
-| `GET /api/oauth/discord`         | Discord OAuth flow                           |
-
-### Self-hosted cloud
-
-The cloud service is the same code whether you run it yourself or use a managed instance. There are no features reserved for hosted. Point your clients at your own cloud URL and everything works identically.
+Once you've joined, the community appears in your server list on the left. Click it to see channels, members, and start chatting.
 
 ---
 
-## 4. Set Up the Migration Bot
+## Creating a Community
 
-The migration bot is a Discord bot that exports a community's history. It runs on the community admin's own machine — Harmony never touches Discord's API directly.
+### From the desktop app
 
-### Create a Discord bot
+1. Click the **+** button in the server list
+2. Choose "Create a community"
+3. Enter a name and optional description
+4. Your community is live immediately
 
-1. Go to the [Discord Developer Portal](https://discord.com/developers/applications)
-2. Create a new application, add a bot
-3. Enable the **Message Content** intent and **Server Members** intent
-4. Generate an invite link with `bot` scope and these permissions: Read Messages, Read Message History, View Channels
-5. Invite the bot to your Discord server
+Your desktop runs the server for this community. Other people connect to your machine (through a relay if you're behind a home router, which most people are). This happens automatically — you don't need to configure anything.
 
-### Run the export
+### From the CLI
 
-```typescript
-import { MigrationBot, type DiscordAPI } from '@harmony/migration-bot'
-import { createCryptoProvider } from '@harmony/crypto'
-import { IdentityManager } from '@harmony/identity'
-
-const crypto = createCryptoProvider()
-const identityManager = new IdentityManager(crypto)
-const { identity } = await identityManager.createFromMnemonic('your twelve word mnemonic ...')
-
-// Implement the DiscordAPI interface with your bot token
-const discordAPI: DiscordAPI = {
-  getGuild: async (guildId) => {
-    /* fetch from Discord REST API */
-  },
-  getChannels: async (guildId) => {
-    /* ... */
-  },
-  getMessages: async (channelId, options) => {
-    /* paginated fetch */
-  },
-  getMembers: async (guildId) => {
-    /* ... */
-  },
-  getRoles: async (guildId) => {
-    /* ... */
-  }
-}
-
-const bot = new MigrationBot(crypto, discordAPI)
-
-const result = await bot.exportGuild({
-  guildId: 'YOUR_GUILD_ID',
-  adminDID: identity.did,
-  adminKeyPair: identity.keyPair,
-  onProgress: (progress) => {
-    console.log(`${progress.phase}: ${progress.current}/${progress.total}`)
-  }
-})
-
-console.log(`Export complete: ${result.quads.length} quads`)
-console.log(`Identity tokens: ${result.identityTokens.length}`)
+```
+harmony community create "My Community"
 ```
 
-The `DiscordAPI` interface is deliberately separate from any specific Discord library. You can use discord.js, Eris, or raw HTTP calls — the bot doesn't care.
+This creates the community on whatever server you're connected to (your local node by default).
 
-### What gets exported
+### Sharing your community
 
-- All text channels and their messages
+Generate an invite link:
+
+1. Open community settings (click the community name at the top)
+2. Go to "Invites"
+3. Click "Create invite link"
+4. Copy the link and share it
+
+Or from the CLI:
+
+```
+harmony community invite
+```
+
+The link works for anyone, on any platform. They'll be guided through getting Harmony if they don't have it yet.
+
+---
+
+## Migrating from Discord
+
+This is for community admins who want to bring their Discord server's history, channels, roles, and members into Harmony. Members don't need to do anything until the migration is ready — they'll get an invite link like any other new community.
+
+### Using the Desktop App (recommended)
+
+The desktop app has a step-by-step migration wizard. Click "Import from Discord" on the home screen (or find it in settings under "Migration").
+
+**Step 1: Create a Discord bot**
+
+The wizard links you to the Discord Developer Portal and walks you through creating a bot application. This takes about 2 minutes:
+
+1. Click the link to open the Discord Developer Portal in your browser
+2. Click "New Application" and give it a name (anything works)
+3. Go to the "Bot" section in the left sidebar
+4. Click "Reset Token" and copy the token
+5. Scroll down and enable "Message Content Intent" and "Server Members Intent"
+6. Go back to the wizard and paste the token
+
+**Step 2: Add the bot to your Discord server**
+
+The wizard generates an invite link with the right permissions. Click it, select your Discord server, and authorise.
+
+**Step 3: Choose what to export**
+
+The wizard shows your Discord server's channels and member count. Select the server and review what will be exported:
+
+- All text channels and their message history
 - Threads
 - Roles and permissions
 - Member list
 - Server metadata (name, description, icon)
 
-Messages are transformed into RDF quads and encrypted with the admin's DID keypair before leaving the machine.
+DMs are never touched. The bot only reads community channels.
+
+**Step 4: Run the export**
+
+Click "Start export." You'll see real-time progress:
+
+- Which channel is being exported
+- How many messages have been processed
+- Estimated time remaining
+
+A small server (a few thousand messages) takes under a minute. Large servers with hundreds of thousands of messages might take 10–20 minutes.
+
+You can cancel at any time without losing anything on the Discord side.
+
+**Step 5: Your community is ready**
+
+When the export finishes, you'll see a summary of what was imported. Your community is now live on your machine with all the history, channels, and roles from Discord.
+
+The wizard gives you:
+
+- An invite link to share with your community
+- A template message you can post in your Discord server to let people know
+
+**Step 6: Invite your members**
+
+Post the invite link in your Discord server. When members click it:
+
+1. They download Harmony (or open the web app)
+2. They create an identity
+3. They join the community and see the full history
+4. They can link their Discord account so their old messages show up under their Harmony identity
+
+### Using the CLI
+
+For admins who prefer the terminal:
+
+```
+harmony migrate discord
+```
+
+This runs the same process interactively: prompts for a bot token, lets you select a server, shows progress, and outputs an invite link at the end.
+
+For scripting or automation:
+
+```
+harmony migrate discord --token BOT_TOKEN --guild GUILD_ID
+```
+
+### Using the Standalone Discord Bot
+
+For larger communities or admins who want a persistent bot (with slash commands and automated member DMs), there's a standalone Discord bot that runs on a server.
+
+Set up with Docker:
+
+```
+docker compose --profile with-bot up -d
+```
+
+Or run it directly:
+
+```
+DISCORD_TOKEN=your-bot-token harmony-bot
+```
+
+Once running, use slash commands in Discord:
+
+| Command                  | What it does                                       |
+| ------------------------ | -------------------------------------------------- |
+| `/harmony setup`         | Configure Harmony for this server (admin only)     |
+| `/harmony export`        | Start exporting to Harmony (admin only)            |
+| `/harmony export status` | Check export progress                              |
+| `/harmony link`          | Link your Discord account to your Harmony identity |
+| `/harmony identity`      | Show your linked Harmony identity                  |
+| `/harmony info`          | Show Harmony info and invite link                  |
+
+The bot handles everything: exporting, progress reporting in the channel, and DMing each member with a link to connect their accounts.
 
 ---
 
-## 5. Migrate a Community
+## Linking Your Discord Account
 
-Once you have an export, push it to your Harmony instance (cloud or self-hosted).
+Linking connects your Discord identity to your Harmony identity. This means:
 
-### Encrypt and upload
-
-```typescript
-import { MigrationService } from '@harmony/migration'
-import { CloudService } from '@harmony/cloud'
-
-const crypto = createCryptoProvider()
-const migration = new MigrationService(crypto)
-const cloud = new CloudService(crypto)
-
-// Encrypt the export
-const bundle = await migration.encryptExport(result.quads, identity.keyPair, identity.did)
-
-// Push to cloud
-const uploadResult = await cloud.uploadExport(bundle)
-console.log('Export uploaded:', uploadResult.exportId)
-```
-
-### Download and decrypt on a self-hosted server
-
-If you started on a managed cloud and want to move to self-hosted:
-
-```typescript
-// Pull from cloud
-const downloaded = await cloud.downloadExport(exportId)
-
-// Decrypt with your key
-const decryptedQuads = await migration.decryptExport(downloaded, identity.keyPair)
-
-// Import into your local quad store
-await store.addAll(decryptedQuads)
-```
-
-The export is encrypted to your DID, so only you can decrypt it. The cloud service stores ciphertext. Moving from cloud to self-hosted is a download and a decrypt.
-
-### Re-sign for a new admin
-
-If community ownership transfers:
-
-```typescript
-const resigned = await migration.resignExport(decryptedQuads, newAdmin.keyPair, newAdmin.did)
-```
-
----
-
-## 6. Link Discord Accounts
-
-Community members link their Discord identity to a sovereign DID. This is how the migrated history connects to their new Harmony identity.
-
-### Generate an identity link token
-
-During the bot export, identity tokens are generated for each member. Distribute these through the Discord server (the bot can DM them to members).
-
-### Link via cloud
-
-```typescript
-const linkResult = await cloud.linkIdentity({
-  discordUserId: '123456789',
-  did: identity.did,
-  proof: identityToken // from the migration bot
-})
-```
-
-### Find friends
-
-Once members have linked their accounts, you can find which of your Discord friends are on Harmony:
-
-```typescript
-const friends = await cloud.findFriends([
-  '111111111', // Discord user IDs
-  '222222222',
-  '333333333'
-])
-// Returns DIDs for any that have linked
-```
-
-### What linking gives you
-
-- Your messages in the migrated history show up under your DID
-- Your roles and permissions carry over as Verifiable Credentials
+- Your messages from the migrated history show up under your Harmony name
+- Your roles and permissions carry over
 - Friends who've also linked are automatically discoverable
-- Your Discord account and Harmony identity are cryptographically linked (you can verify you're the same person across both platforms)
+- You can prove you're the same person across both platforms
+
+### From the desktop app or web
+
+1. Go to Settings → Identity
+2. Click "Link Discord account"
+3. You'll be redirected to Discord to authorise
+4. Once authorised, the link is created
+
+### From the CLI
+
+```
+harmony identity link discord
+```
+
+This opens a browser window for the Discord authorisation flow.
+
+### From Discord (if the bot is running)
+
+Type `/harmony link` in any channel where the bot is active. The bot will DM you a link to complete the process.
+
+### Finding Discord friends on Harmony
+
+Once you've linked your account:
+
+**Desktop/web:** Go to Friends → "Find Discord friends." Harmony checks which of your Discord contacts have also linked their accounts and suggests connections.
+
+**CLI:**
+
+```
+harmony friends find --discord
+```
 
 ---
 
-## 7. Day-to-Day Usage
+## Running a Dedicated Server
 
-Once the community is running on Harmony:
+The desktop app is great for small communities, but if you want always-on hosting (so the community stays available when your laptop is closed), run a dedicated server on a VPS, homelab, or Raspberry Pi.
+
+### With Docker (recommended)
+
+1. Copy the deployment files to your server:
+   - `docker-compose.yml`
+   - `.env.example` → rename to `.env`
+   - `harmony.config.example.yaml` → rename to `harmony.config.yaml`
+
+2. Edit `.env` with your settings:
+   - `HARMONY_PORT` — the port for the WebSocket server (default: 4000)
+   - `HARMONY_UI_PORT` — the port for the web UI (default: 8080)
+   - `HARMONY_CLOUD_URL` — the cloud service URL (default: the public cloud)
+   - `DISCORD_TOKEN` — only if you're running the Discord bot
+
+3. Edit `harmony.config.yaml` with your identity and preferences (see the "Server Configuration" section below).
+
+4. Start it:
+
+   ```
+   docker compose up -d
+   ```
+
+   This brings up the Harmony server and the web UI. Your community is accessible at `http://your-server:8080`.
+
+5. To include the Discord migration bot:
+
+   ```
+   docker compose --profile with-bot up -d
+   ```
+
+6. Check it's running:
+
+   ```
+   docker compose logs -f server
+   ```
+
+7. Stop it:
+
+   ```
+   docker compose down
+   ```
+
+Data is stored in Docker volumes. It persists across restarts and updates.
+
+### With the CLI
+
+If you'd rather not use Docker:
+
+```
+harmony server start --config harmony.config.yaml
+```
+
+This runs the server in the foreground. Use a process manager (systemd, pm2, etc.) to keep it running.
+
+Check status:
+
+```
+harmony server status
+```
+
+Stop:
+
+```
+harmony server stop
+```
+
+### Server Configuration
+
+The server reads a YAML config file. Here's what you can set:
+
+| Setting                              | What it controls                              | Default                    |
+| ------------------------------------ | --------------------------------------------- | -------------------------- |
+| `server.host`                        | Network interface to bind to                  | `0.0.0.0` (all interfaces) |
+| `server.port`                        | WebSocket port                                | `4000`                     |
+| `server.tls.cert` / `server.tls.key` | TLS certificate paths                         | None (unencrypted)         |
+| `storage.database`                   | Path to the SQLite database                   | `./harmony.db`             |
+| `storage.media`                      | Path for encrypted media files                | `./media`                  |
+| `identity.mnemonic`                  | Your 12-word recovery phrase                  | Required                   |
+| `federation.enabled`                 | Allow connections from other Harmony servers  | `true`                     |
+| `relay.enabled`                      | Register with a cloud relay for NAT traversal | `true`                     |
+| `relay.url`                          | Cloud relay address                           | `wss://relay.harmony.chat` |
+| `voice.enabled`                      | Enable voice and video channels               | `false`                    |
+| `voice.livekit.host`                 | LiveKit server address                        | Required if voice enabled  |
+| `moderation.rateLimit.maxMessages`   | Max messages per minute per user              | `30`                       |
+| `logging.level`                      | Log detail: `debug`, `info`, `warn`, `error`  | `info`                     |
+| `limits.maxConnections`              | Maximum simultaneous connections              | `1000`                     |
+| `limits.mediaMaxSize`                | Maximum upload size in bytes                  | `52428800` (50 MB)         |
+
+For TLS, you'll want a certificate from Let's Encrypt or similar. If you're behind a reverse proxy (nginx, Caddy), the proxy can handle TLS and you can leave the server unencrypted.
+
+### Moving a community from desktop to dedicated server
+
+If your community started on your laptop and you want to move it to a VPS:
+
+1. In the desktop app, go to community settings → "Export community"
+2. Save the export file
+3. Transfer it to your server
+4. On the server:
+
+   ```
+   harmony community import community.hbundle
+   ```
+
+5. Share the new invite link with your community
+
+Members reconnect automatically or via the new invite. The community keeps its full history, roles, and member list.
+
+---
+
+## Deploying the Cloud Service
+
+The cloud service provides three things that make Harmony easier to adopt:
+
+1. **NAT relay** — Most home networks block incoming connections. The relay lets desktop nodes accept connections from the outside world without port forwarding. The relay only sees encrypted traffic.
+
+2. **Identity linking** — Handles the Discord OAuth flow for linking accounts. Stores the mapping between Discord user IDs and Harmony DIDs.
+
+3. **Invite resolution** — Makes `harmony.chat/invite/abc` links work. Shows a landing page for people who don't have Harmony yet, and deep-links into the app for people who do.
+
+The public cloud at `cloud.harmony.chat` provides all of this for free. You only need to self-host the cloud if you want full independence from any external service.
+
+### Self-hosting the cloud
+
+The cloud runs on Cloudflare Workers. You'll need a Cloudflare account (free tier works).
+
+1. Clone the Harmony repo
+2. Configure your Cloudflare resources:
+   - **D1 database** — stores identity links and invite metadata
+   - **R2 bucket** — stores encrypted community export bundles
+   - **KV namespace** — rate limiting and OAuth state
+3. Set your environment variables:
+   - `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` — from the Discord Developer Portal (create an OAuth2 application)
+   - `DISCORD_REDIRECT_URI` — your cloud URL + `/api/oauth/discord/callback`
+   - `ALLOWED_ORIGINS` — domains that can call the API
+4. Deploy:
+
+   ```
+   cd packages/cloud-worker
+   wrangler deploy
+   ```
+
+5. Point your Harmony instances at your cloud URL by setting `relay.url` and the cloud URL in their config.
+
+The cloud service is the same open-source code whether you run it yourself or use the public instance. Nothing is feature-gated.
+
+---
+
+## Day-to-Day Usage
 
 ### Channels and messaging
 
-```typescript
-// List channels
-const channels = client.getChannels()
+The interface works like you'd expect if you've used Discord. Server list on the left, channels in a sidebar, messages in the centre, member list on the right.
 
-// Send messages (always E2EE)
-await client.sendMessage(channelId, 'Hello')
+- Click a channel to open it
+- Type a message and press Enter to send
+- Drag and drop files to upload them (they're encrypted automatically)
+- Use markdown: **bold**, _italic_, `code`, `code blocks`
+- React to messages by hovering and clicking the emoji button
+- Start a thread by right-clicking a message
+- Search with Ctrl+K (or Cmd+K on macOS)
 
-// Direct messages
-await client.sendDM(recipientDID, 'Hey, private message')
-```
+All messages are end-to-end encrypted. The server never sees your message content.
 
 ### Voice and video
 
-```typescript
-// Join a voice channel (requires LiveKit server)
-await client.joinVoice(channelId)
-await client.leaveVoice(channelId)
-```
+Click a voice channel to join. Controls appear at the bottom of the screen:
 
-### Moderation
+- Mute/unmute your microphone
+- Turn camera on/off
+- Share your screen
+- Leave the call
 
-Moderation is community-governed. There are no global bans. Each community sets its own rules.
+Voice requires a LiveKit server. Community admins configure this in their server settings. If voice isn't set up, voice channels won't appear.
 
-```typescript
-// Server-side rules (metadata-based, runs before decryption)
-// Slow mode, rate limits, raid detection, VC-gated admission
+### Direct messages
 
-// Client-side filtering (content-based, runs after decryption)
-// Community-defined word filters, content rules
-```
+Click the DM icon to see your conversations. Start a new one by clicking a user's name anywhere in the app and choosing "Message."
 
-### Delegation
+DMs are encrypted directly between you and the other person. They don't go through any community server.
 
-ZCAP delegation lets you grant scoped permissions to other users or bots:
+### Managing a community
 
-```typescript
-// Delegate posting rights to someone
-await client.delegateTo(otherDID, ['SendMessage', 'AddReaction'])
+If you're an admin:
 
-// Delegate to a bot with attenuation
-await client.delegateTo(botDID, ['SendMessage'], {
-  channels: ['channel-1'], // only in this channel
-  rateLimit: 10 // max 10 messages per minute
-})
-```
+- **Roles:** Community Settings → Roles. Create roles, assign permissions, drag to reorder priority.
+- **Members:** Community Settings → Members. Assign roles, remove members.
+- **Invites:** Community Settings → Invites. Create, revoke, and track invite links.
+- **Moderation:** Community Settings → Moderation. Set rate limits, enable raid detection, configure filters.
+- **Bots:** Community Settings → Bots. Install bots, manage their permissions (bots use the same ZCAP delegation system as users — scoped, revocable permissions).
+- **Governance:** Community Settings → Governance. Create proposals that require community votes before taking effect. Useful for rule changes, admin elections, or any decision the community should make together.
 
----
-
-## Architecture Reference
+From the CLI, every management task has a corresponding command:
 
 ```
-Client (browser/native)
-  └─ @harmony/client (SDK, E2EE, state)
-       ├─ @harmony/e2ee (MLS group keys, X25519 DMs)
-       ├─ @harmony/crdt (message ordering)
-       └─ WebSocket ──→ @harmony/server (relay, ZCAP verification)
-                              ├─ @harmony/federation (instance bridging)
-                              └─ @harmony/moderation (server-side rules)
-
-Identity stack: @harmony/crypto → @harmony/did → @harmony/vc → @harmony/zcap → @harmony/identity
-Data layer:     @harmony/vocab → @harmony/quads (RDF quad store)
-Migration:      @harmony/migration-bot → @harmony/migration → @harmony/cloud
+harmony channel create "announcements"
+harmony community invite
+harmony server status
 ```
 
-The server is a relay. It verifies ZCAP proofs and routes ciphertext. It never decrypts anything. If the server is compromised, the attacker gets encrypted blobs and authorization metadata. Message content stays private.
+Run `harmony --help` for the full list.
 
 ---
 
 ## Troubleshooting
 
-**"Cannot find module @harmony/..."** Run `pnpm install` from the repo root. All packages are workspace-linked.
+**I lost my recovery phrase.** If you set up social recovery (Settings → Identity → Recovery), contact 3 of your 5 recovery contacts to restore your identity. If you didn't set up social recovery, the identity is unrecoverable. This is the tradeoff of sovereign keys — nobody else can access your identity, which also means nobody else can recover it for you.
 
-**Identity lost** If you have your mnemonic, recover with `identityManager.createFromMnemonic()`. If you set up social recovery, collect 3 of 5 shards. If neither, the identity is gone — this is the tradeoff of sovereign keys.
+**The migration bot can't see my Discord channels.** In the Discord Developer Portal, make sure your bot has the "Message Content Intent" and "Server Members Intent" enabled. When inviting the bot, it needs Read Messages, Read Message History, and View Channels permissions.
 
-**Migration bot can't access channels** Check that the bot has Read Messages, Read Message History, and View Channels permissions in Discord. The Message Content intent must be enabled in the developer portal.
+**My community is offline when my laptop is closed.** Your desktop runs the server. When it's off, the community is off. Options: keep the app running (it minimises to the system tray), set up federation with another node that's always on, or move the community to a dedicated server (VPS or homelab).
 
-**Self-hosted server can't federate** Federation requires both instances to exchange ZCAP capabilities. The initiating instance needs a valid TLS endpoint reachable by the remote instance.
+**Members can't connect to my community.** You're probably behind NAT (most home networks are). Make sure the relay is enabled in your settings — it routes connections through the cloud relay automatically. If the relay is also not working, check your internet connection and that `relay.url` in your config points to a working relay.
+
+**I want to move from the public cloud to self-hosted.** Change `relay.url` and the cloud URL in your config to point at your own cloud deployment. Export and re-import any identity links if needed. The transition is seamless — same protocol, same code, different address.
+
+**Server won't start.** Check your config file for syntax errors. Run `harmony server start --foreground` to see error output directly. Common issues: port already in use, invalid mnemonic, missing SQLite.
+
+**Docker containers keep restarting.** Check logs: `docker compose logs server`. Usually it's a missing or invalid config file, or the database path isn't writable.

@@ -1,5 +1,5 @@
 import { createSignal, For, Show, type JSX } from 'solid-js'
-import type { CredentialType, SchemaField } from '@harmony/credentials'
+import type { CredentialType } from '@harmony/credentials'
 
 export interface IssueCredentialProps {
   credentialType: CredentialType

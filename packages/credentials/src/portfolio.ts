@@ -1,7 +1,6 @@
 import type { VerifiableCredential, VerifiablePresentation } from '@harmony/vc'
 import { VCService } from '@harmony/vc'
 import type { CryptoProvider, KeyPair } from '@harmony/crypto'
-import type { Quad } from '@harmony/quads'
 
 export interface HeldCredential {
   id: string

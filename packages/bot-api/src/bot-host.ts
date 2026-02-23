@@ -86,12 +86,10 @@ export class BotHost {
   private bots = new Map<string, RegisteredBot>()
   private store: QuadStore
   private auth: ZCAPBotAuth
-  private sandboxEnforcer: SandboxEnforcer
 
-  constructor(store: QuadStore, auth: ZCAPBotAuth, sandboxEnforcer: SandboxEnforcer) {
+  constructor(store: QuadStore, auth: ZCAPBotAuth, _sandboxEnforcer: SandboxEnforcer) {
     this.store = store
     this.auth = auth
-    this.sandboxEnforcer = sandboxEnforcer
   }
 
   async registerBot(

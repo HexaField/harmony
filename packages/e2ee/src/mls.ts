@@ -92,16 +92,6 @@ function deserializeGroupState(data: Uint8Array): GroupState {
   }
 }
 
-function encryptForMember(
-  plaintext: Uint8Array,
-  _memberEncKey: Uint8Array,
-  epochKey: Uint8Array
-): { ciphertext: Uint8Array; nonce: Uint8Array } {
-  const nonce = randomBytes(24)
-  const cipher = xchacha20poly1305(epochKey, nonce)
-  return { ciphertext: cipher.encrypt(plaintext), nonce }
-}
-
 // ── SimplifiedMLSGroup ──
 
 class SimplifiedMLSGroup implements MLSGroup {

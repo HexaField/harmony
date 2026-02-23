@@ -1,4 +1,4 @@
-import { Show, Switch, Match, type JSX } from 'solid-js'
+import { Switch, Match, type JSX } from 'solid-js'
 
 export interface FilePreviewProps {
   filename: string

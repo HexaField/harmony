@@ -1,7 +1,7 @@
 import { randomBytes } from '@harmony/crypto'
 import type { BotEventType, BotEvent } from './bot-host.js'
 import type { QuadStore, Quad } from '@harmony/quads'
-import { HarmonyType, HarmonyPredicate, RDFPredicate, XSDDatatype } from '@harmony/vocab'
+import { HarmonyType, HarmonyPredicate, RDFPredicate } from '@harmony/vocab'
 
 export interface WebhookConfig {
   id: string

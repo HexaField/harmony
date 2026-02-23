@@ -1,4 +1,4 @@
-import { createSignal, For, Show, type JSX } from 'solid-js'
+import { For, type JSX } from 'solid-js'
 
 export interface NotificationConfig {
   channelId: string

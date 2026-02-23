@@ -1,4 +1,4 @@
-import { Show, For, createSignal, type JSX } from 'solid-js'
+import { Show, For, type JSX } from 'solid-js'
 import type { VoiceParticipant } from '@harmony/voice'
 
 export interface VoiceChannelProps {

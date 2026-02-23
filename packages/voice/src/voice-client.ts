@@ -51,7 +51,6 @@ class VoiceConnectionImpl implements VoiceConnection {
   localAudioEnabled: boolean
   localVideoEnabled: boolean
   private localDID: string
-  private localScreenSharing = false
   private joinedCbs: ParticipantJoinedCb[] = []
   private leftCbs: ParticipantLeftCb[] = []
   private speakingCbs: SpeakingChangedCb[] = []
@@ -82,13 +81,11 @@ class VoiceConnectionImpl implements VoiceConnection {
   }
 
   async startScreenShare(): Promise<void> {
-    this.localScreenSharing = true
     const participant = this.participants.find((p) => p.did === this.localDID)
     if (participant) participant.screenSharing = true
   }
 
   async stopScreenShare(): Promise<void> {
-    this.localScreenSharing = false
     const participant = this.participants.find((p) => p.did === this.localDID)
     if (participant) participant.screenSharing = false
   }

@@ -1,4 +1,4 @@
-import type { BotPermission, BotEventType, BotEvent } from './bot-host.js'
+import type { BotEventType, BotEvent } from './bot-host.js'
 import type { ZCAPBotAuth } from './zcap-bot-auth.js'
 import type { SandboxEnforcer } from './sandbox.js'
 
@@ -52,7 +52,7 @@ export function createBotContext(
     communityId,
     capabilities,
 
-    async sendMessage(channelId: string, content: string): Promise<string> {
+    async sendMessage(_channelId: string, content: string): Promise<string> {
       if (!auth.hasBotPermission(botDID, communityId, 'SendMessage')) {
         throw new Error('Unauthorized: bot lacks SendMessage capability')
       }
@@ -60,33 +60,33 @@ export function createBotContext(
       sandbox.trackMessage(botDID)
 
       const msgId = `msg-bot-${++msgCounter}`
-      storage.messages.set(msgId, { channelId, content, authorDID: botDID })
+      storage.messages.set(msgId, { channelId: _channelId, content, authorDID: botDID })
       return msgId
     },
 
-    async editMessage(channelId: string, messageId: string, content: string): Promise<void> {
+    async editMessage(_channelId: string, _messageId: string, content: string): Promise<void> {
       if (!auth.hasBotPermission(botDID, communityId, 'SendMessage')) {
         throw new Error('Unauthorized: bot lacks SendMessage capability')
       }
       sandbox.trackApiCall(botDID)
-      const msg = storage.messages.get(messageId)
+      const msg = storage.messages.get(_messageId)
       if (msg && msg.authorDID === botDID) {
         msg.content = content
       }
     },
 
-    async deleteMessage(channelId: string, messageId: string): Promise<void> {
+    async deleteMessage(_channelId: string, _messageId: string): Promise<void> {
       if (!auth.hasBotPermission(botDID, communityId, 'SendMessage')) {
         throw new Error('Unauthorized: bot lacks SendMessage capability')
       }
       sandbox.trackApiCall(botDID)
-      const msg = storage.messages.get(messageId)
+      const msg = storage.messages.get(_messageId)
       if (msg && msg.authorDID === botDID) {
-        storage.messages.delete(messageId)
+        storage.messages.delete(_messageId)
       }
     },
 
-    async addReaction(channelId: string, messageId: string, emoji: string): Promise<void> {
+    async addReaction(_channelId: string, _messageId: string, _emoji: string): Promise<void> {
       if (!auth.hasBotPermission(botDID, communityId, 'SendMessage')) {
         throw new Error('Unauthorized: bot lacks SendMessage capability')
       }

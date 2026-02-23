@@ -52,7 +52,6 @@ export class AgentAuthManager {
   private actionCounts = new Map<string, { count: number; windowStart: number }>()
   private store: QuadStore
   private auditLog: AuditLog
-  private pendingApprovals = new Map<string, { action: string; target: string; resolve: (approved: boolean) => void }>()
 
   constructor(store: QuadStore) {
     this.store = store

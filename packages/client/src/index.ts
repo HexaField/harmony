@@ -14,7 +14,7 @@ import { serialise, deserialise } from '@harmony/protocol'
 import { CRDTLog, clockTick, clockMerge } from '@harmony/crdt'
 import type { VCService, VerifiablePresentation, VerifiableCredential } from '@harmony/vc'
 import type { ZCAPService, Capability } from '@harmony/zcap'
-import type { MLSGroup, MLSProvider, DMChannel, DMProvider, KeyPackage, Welcome } from '@harmony/e2ee'
+import type { MLSGroup, MLSProvider, DMChannel, DMProvider } from '@harmony/e2ee'
 import type { VoiceClient, VoiceConnection } from '@harmony/voice'
 import type { MediaClient, MediaRef, FileInput, DecryptedFile } from '@harmony/media'
 import type { ClientSearchIndex, SearchQuery, SearchResult } from '@harmony/search'
@@ -152,11 +152,6 @@ export class HarmonyClient {
   private _clock: LamportClock = { counter: 0, authorDID: '' }
 
   // Dependencies (injected or created)
-  private vcService: VCService | null = null
-  private zcapService: ZCAPService | null = null
-  private mlsProvider: MLSProvider | null = null
-  private dmProvider: DMProvider | null = null
-  private cryptoProvider: CryptoProvider | null = null
   private mlsGroups: Map<string, MLSGroup> = new Map()
   private dmEncChannels: Map<string, DMChannel> = new Map()
 
@@ -191,11 +186,6 @@ export class HarmonyClient {
     pushService?: PushNotificationService
   }) {
     if (options) {
-      this.vcService = options.vcService ?? null
-      this.zcapService = options.zcapService ?? null
-      this.mlsProvider = options.mlsProvider ?? null
-      this.dmProvider = options.dmProvider ?? null
-      this.cryptoProvider = options.cryptoProvider ?? null
       this._wsFactory = options.wsFactory ?? null
       this.voiceClient = options.voiceClient ?? null
       this.mediaClient = options.mediaClient ?? null
@@ -425,7 +415,7 @@ export class HarmonyClient {
     return sub
   }
 
-  async createChannel(communityId: string, params: ChannelCreatePayload): Promise<ChannelInfo> {
+  async createChannel(_communityId: string, params: ChannelCreatePayload): Promise<ChannelInfo> {
     this.send(this.createMessage('channel.create', params))
     return new Promise((resolve) => {
       const unsub = this.on('channel.created', (...args: unknown[]) => {
@@ -711,7 +701,7 @@ export class HarmonyClient {
 
   // ── Roles & Moderation ──
 
-  async createRole(communityId: string, params: RoleCreatePayload): Promise<void> {
+  async createRole(_communityId: string, params: RoleCreatePayload): Promise<void> {
     this.send(this.createMessage('role.create', params))
   }
 
@@ -810,7 +800,13 @@ export class HarmonyClient {
 
   async signProposal(proposalId: string, vote: 'approve' | 'reject' = 'approve'): Promise<void> {
     if (!this.governanceEngine) throw new Error('Governance engine not configured')
-    const proof = { type: 'Ed25519Signature2020', proofPurpose: 'assertionMethod', verificationMethod: this._did }
+    const proof = {
+      type: 'Ed25519Signature2020',
+      proofPurpose: 'assertionMethod',
+      verificationMethod: this._did,
+      created: new Date().toISOString(),
+      proofValue: ''
+    }
     return this.governanceEngine.signProposal(proposalId, this._did, proof, vote)
   }
 

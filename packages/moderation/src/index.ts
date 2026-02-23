@@ -51,7 +51,7 @@ export type ModerationRule = SlowModeRule | RateLimitRule | AccountAgeRule | Rai
 export interface ModerationDecision {
   allowed: boolean
   reason?: string
-  action?: 'none' | 'block' | 'flag' | 'slowMode' | 'rateLimit' | 'lockdown'
+  action?: 'none' | 'block' | 'flag' | 'slowMode' | 'rateLimit' | 'lockdown' | 'alert'
   rule?: ModerationRule
 }
 
@@ -198,7 +198,7 @@ export class ModerationPlugin {
 
   async handleJoin(
     communityId: string,
-    memberDID: string,
+    _memberDID: string,
     membershipVC: VerifiableCredential
   ): Promise<ModerationDecision> {
     const rules = this.rules.get(communityId) ?? []

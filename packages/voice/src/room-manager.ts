@@ -3,7 +3,6 @@ import type { QuadStore, Quad } from '@harmony/quads'
 import { HarmonyType, HarmonyPredicate, RDFPredicate, XSDDatatype } from '@harmony/vocab'
 import type { ZCAPInvocationProof } from '@harmony/protocol'
 import type { ZCAPService } from '@harmony/zcap'
-import type { LiveKitAdapter } from './room-manager.js'
 
 export interface VoiceRoom {
   id: string
@@ -70,14 +69,12 @@ export class VoiceRoomManager {
   private rooms = new Map<string, VoiceRoom>()
   private adapter: LiveKitAdapter
   private store: QuadStore
-  private zcap: ZCAPService
   private emptyRoomTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private autoDestroyTimeout: number
 
-  constructor(adapter: LiveKitAdapter, store: QuadStore, zcap: ZCAPService, opts?: { autoDestroyTimeout?: number }) {
+  constructor(adapter: LiveKitAdapter, store: QuadStore, _zcap: ZCAPService, opts?: { autoDestroyTimeout?: number }) {
     this.adapter = adapter
     this.store = store
-    this.zcap = zcap
     this.autoDestroyTimeout = opts?.autoDestroyTimeout ?? 30000
   }
 

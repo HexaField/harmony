@@ -1,12 +1,10 @@
 import { WebSocket } from 'ws'
-import type { KeyPair, CryptoProvider } from '@harmony/crypto'
-import { createCryptoProvider } from '@harmony/crypto'
+import type { KeyPair } from '@harmony/crypto'
+
 import type { ProtocolMessage, LamportClock, FederationEvent } from '@harmony/protocol'
 import { serialise, deserialise } from '@harmony/protocol'
 import type { Capability } from '@harmony/zcap'
-import { ZCAPService } from '@harmony/zcap'
 import type { DIDResolver, RevocationStore } from '@harmony/vc'
-import { CRDTLog } from '@harmony/crdt'
 
 // ── Types ──
 
@@ -52,12 +50,9 @@ export class FederationManager {
   private _peers: Map<string, FederationPeer> = new Map()
   private _connections: Map<string, WebSocket> = new Map()
   private _config: FederationConfig
-  private _crypto: CryptoProvider
-  private _zcapService: ZCAPService
   private _emitter = new FederationEmitter()
   private _messageIds: Set<string> = new Set() // dedup
   private _communityPeers: Map<string, Set<string>> = new Map() // communityId → peerDIDs
-  private _didResolver: DIDResolver | null = null
   private _revocationStore: RevocationStore | null = null
   private _onMessage: ((fromPeer: string, msg: ProtocolMessage) => void) | null = null
 
@@ -66,14 +61,10 @@ export class FederationManager {
     options?: {
       didResolver?: DIDResolver
       revocationStore?: RevocationStore
-      cryptoProvider?: CryptoProvider
       onMessage?: (fromPeer: string, msg: ProtocolMessage) => void
     }
   ) {
     this._config = config
-    this._crypto = options?.cryptoProvider ?? createCryptoProvider()
-    this._zcapService = new ZCAPService(this._crypto)
-    this._didResolver = options?.didResolver ?? null
     this._revocationStore = options?.revocationStore ?? null
     this._onMessage = options?.onMessage ?? null
   }

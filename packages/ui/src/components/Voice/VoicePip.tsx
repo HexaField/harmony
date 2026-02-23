@@ -1,4 +1,4 @@
-import { Show, type JSX } from 'solid-js'
+import { type JSX } from 'solid-js'
 
 export interface VoicePipProps {
   channelName: string

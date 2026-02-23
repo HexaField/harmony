@@ -29,7 +29,7 @@ export function useDelegationManager(props: DelegationManagerProps) {
     if (!targetDID().trim() || selectedCaps().size === 0) return
     props.onCreate(targetDID().trim(), Array.from(selectedCaps()))
     setTargetDID('')
-    setSelectedCaps(new Set())
+    setSelectedCaps(new Set<string>())
     setShowCreate(false)
   }
 

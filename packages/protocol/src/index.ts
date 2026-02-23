@@ -1,3 +1,4 @@
+import type { MessageType } from './messages.js'
 export type { MessageType } from './messages.js'
 export { CLIENT_TO_SERVER_TYPES, SERVER_TO_CLIENT_TYPES, FEDERATION_TYPES, ALL_MESSAGE_TYPES } from './messages.js'
 export type { ErrorCode, ErrorPayload } from './errors.js'

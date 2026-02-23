@@ -1,4 +1,4 @@
-import type { BotEvent, BotEventType, RegisteredBot } from './bot-host.js'
+import type { BotEvent, RegisteredBot } from './bot-host.js'
 import type { ZCAPBotAuth } from './zcap-bot-auth.js'
 
 export class EventDispatcher {

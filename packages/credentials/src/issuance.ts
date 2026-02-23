@@ -34,7 +34,7 @@ export class CredentialIssuer {
       issuerDID,
       issuerKeyPair,
       subjectDID,
-      types: ['VerifiableCredential', credType.def.name.replace(/\s+/g, '')],
+      type: credType.def.name.replace(/\s+/g, ''),
       claims: {
         ...fields,
         credentialTypeId: typeId,

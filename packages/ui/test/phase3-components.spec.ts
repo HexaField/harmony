@@ -29,7 +29,7 @@ import { useNotificationItem } from '../src/components/Notifications/Notificatio
 import { useNotificationSettings } from '../src/components/Notifications/NotificationSettings.js'
 
 import type { VoiceParticipant } from '@harmony/voice'
-import type { Proposal, ProposalDef, ConstitutionDoc, UserDelegation } from '@harmony/governance'
+import type { Proposal, ConstitutionDoc } from '@harmony/governance'
 import type { RegisteredBot, BotPermission } from '@harmony/bot-api'
 import type { HeldCredential, CredentialType, ReputationProfile } from '@harmony/credentials'
 import type { SearchResult } from '@harmony/search'
@@ -66,6 +66,13 @@ function mockBot(overrides?: Partial<RegisteredBot>): RegisteredBot {
     installedAt: '2026-01-01T00:00:00Z',
     capabilities: ['cap-1'],
     resourceUsage: { memoryMB: 64, cpuPercent: 5, messagesPerMinute: 10, apiCallsPerMinute: 20 },
+    sandbox: {
+      memoryLimitMB: 128,
+      cpuPercent: 10,
+      maxMessagesPerMinute: 60,
+      maxApiCallsPerMinute: 120,
+      networkAccess: false
+    },
     ...overrides
   }
 }

@@ -10,8 +10,6 @@ import { createCryptoProvider, randomBytes } from '@harmony/crypto'
 import type { ProtocolMessage, PresenceUpdatePayload, LamportClock, MessageType } from '@harmony/protocol'
 import { serialise, deserialise } from '@harmony/protocol'
 import { HarmonyPredicate, HarmonyType, HarmonyAction, HARMONY, RDFPredicate, XSDDatatype } from '@harmony/vocab'
-import type { SimplifiedMLSProvider, MLSGroup, Welcome, KeyPackage } from '@harmony/e2ee'
-import { CRDTLog } from '@harmony/crdt'
 
 // ── Server Config ──
 
@@ -83,8 +81,8 @@ export class MessageStore {
   }
 
   async storeMessage(communityId: string, channelId: string, message: ProtocolMessage): Promise<void> {
-    const graph = `${communityId}:${channelId}`
     const subject = message.id
+    const graph = `${communityId}:${channelId}`
 
     await this.store.addAll([
       { subject, predicate: RDFPredicate.type, object: HarmonyType.Message, graph },
@@ -176,11 +174,10 @@ export class MessageStore {
       object: HarmonyType.Message
     })
     if (quads.length === 0) return null
-    const graph = quads[0].graph
-    const authorQuads = await this.store.match({ subject: messageId, predicate: HarmonyPredicate.author, graph })
-    const tsQuads = await this.store.match({ subject: messageId, predicate: HarmonyPredicate.timestamp, graph })
-    const typeQuads = await this.store.match({ subject: messageId, predicate: `${HARMONY}messageType`, graph })
-    const payloadQuads = await this.store.match({ subject: messageId, predicate: `${HARMONY}payload`, graph })
+    const authorQuads = await this.store.match({ subject: messageId, predicate: HarmonyPredicate.author })
+    const tsQuads = await this.store.match({ subject: messageId, predicate: HarmonyPredicate.timestamp })
+    const typeQuads = await this.store.match({ subject: messageId, predicate: `${HARMONY}messageType` })
+    const payloadQuads = await this.store.match({ subject: messageId, predicate: `${HARMONY}payload` })
 
     if (!authorQuads.length || !tsQuads.length || !typeQuads.length || !payloadQuads.length) return null
 
@@ -208,9 +205,7 @@ export class MessageStore {
     after?: string
     limit: number
   }): Promise<ProtocolMessage[]> {
-    const pattern: Record<string, string> = {}
     if (params.channelId) {
-      const graph = `${params.communityId}:${params.channelId}`
       const results = await this.getHistory({
         communityId: params.communityId,
         channelId: params.channelId,
@@ -607,10 +602,7 @@ export class HarmonyServer {
   private config: ServerConfig
   private crypto: CryptoProvider
   private vcService: VCService
-  private zcapService: ZCAPService
   private communitySubscriptions: Map<string, Set<string>> = new Map() // communityId → connection IDs
-  private channelSubscriptions: Map<string, Set<string>> = new Map() // channelId → connection IDs
-  private _started = false
 
   constructor(config: ServerConfig) {
     this.config = config
@@ -618,7 +610,6 @@ export class HarmonyServer {
     this.messageStore = new MessageStore(config.store)
     this.communityManager = new CommunityManager(config.store, this.crypto)
     this.vcService = new VCService(this.crypto)
-    this.zcapService = new ZCAPService(this.crypto)
   }
 
   get messageStoreInstance(): MessageStore {
@@ -630,7 +621,6 @@ export class HarmonyServer {
 
   async start(): Promise<void> {
     this.wss = new WebSocketServer({ port: this.config.port, host: this.config.host })
-    this._started = true
 
     this.wss.on('connection', (ws: WebSocket, _req: IncomingMessage) => {
       const connId = 'conn:' + Array.from(randomBytes(8), (b) => b.toString(16).padStart(2, '0')).join('')
@@ -754,7 +744,6 @@ export class HarmonyServer {
   }
 
   async stop(): Promise<void> {
-    this._started = false
     if (this.wss) {
       for (const conn of this._connections.values()) {
         conn.ws.close()

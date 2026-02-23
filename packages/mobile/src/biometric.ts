@@ -14,7 +14,7 @@ export class InMemoryBiometricAuth implements BiometricAuth {
     return this.available
   }
 
-  async authenticate(reason: string): Promise<boolean> {
+  async authenticate(_reason: string): Promise<boolean> {
     if (!this.available) return false
     return this.shouldSucceed
   }

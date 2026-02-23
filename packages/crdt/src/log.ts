@@ -1,5 +1,5 @@
 import type { LamportClock } from './clock.js'
-import { clockCompare, clockMax, clockTick } from './clock.js'
+import { clockCompare, clockTick } from './clock.js'
 
 // ── CRDT Entry ──
 

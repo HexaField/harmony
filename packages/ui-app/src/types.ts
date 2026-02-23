@@ -317,6 +317,7 @@ export interface CommunityInfo {
   description?: string
   memberCount: number
   iconUrl?: string
+  serverUrl?: string
 }
 export interface ChannelInfo {
   id: string

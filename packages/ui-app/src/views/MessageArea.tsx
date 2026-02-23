@@ -1,6 +1,5 @@
-import { For, Show, createSignal, type Component } from 'solid-js'
+import { For, Show, createSignal, createEffect, on, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
-import { MessageInput as MessageInputLogic } from '../components/Messaging/index.js'
 import { MarkdownRenderer } from '../components/Shared/index.js'
 import { RelativeTime } from '../components/Shared/index.js'
 import { t } from '../i18n/strings.js'
@@ -9,16 +8,98 @@ import type { MessageData } from '../types.js'
 export const MessageArea: Component = () => {
   const store = useAppStore()
   const [inputContent, setInputContent] = createSignal('')
+  const [loadingHistory, setLoadingHistory] = createSignal(false)
   let messagesEndRef: HTMLDivElement | undefined
 
   const activeChannel = () => store.channels().find((c) => c.id === store.activeChannelId())
 
-  const channelMessages = () => store.messages().filter((m) => true) // In production, filter by channel
+  // Use per-channel message cache + current messages signal
+  const channelMessages = () => {
+    const channelId = store.activeChannelId()
+    if (!channelId) return []
+    // Combine cached messages with any in the global messages signal for this channel
+    const cached = store.channelMessages(channelId)
+    const global = store.messages()
+    // If we have cached messages, prefer those; otherwise fall back to global
+    return cached.length > 0 ? cached : global
+  }
 
-  function sendMessage() {
+  // When active channel changes, load history
+  createEffect(
+    on(
+      () => store.activeChannelId(),
+      (channelId) => {
+        if (!channelId) return
+
+        const client = store.client()
+        const communityId = store.activeCommunityId()
+
+        if (client?.isConnected() && communityId) {
+          // Request message history via sync
+          setLoadingHistory(true)
+          client
+            .syncChannel(communityId, channelId, { limit: 50 })
+            .catch(() => {
+              // Sync failed silently — messages from subscription will still appear
+            })
+            .finally(() => {
+              setLoadingHistory(false)
+            })
+        }
+
+        // Load cached messages into the messages signal for display
+        const cached = store.channelMessages(channelId)
+        if (cached.length > 0) {
+          store.setMessages(cached)
+        } else {
+          store.setMessages([])
+        }
+
+        requestAnimationFrame(() => {
+          messagesEndRef?.scrollIntoView({ behavior: 'instant' })
+        })
+      }
+    )
+  )
+
+  async function sendMessage() {
     const text = inputContent().trim()
     if (!text) return
 
+    const client = store.client()
+    const communityId = store.activeCommunityId()
+    const channelId = store.activeChannelId()
+
+    if (client?.isConnected() && communityId && channelId) {
+      try {
+        const msgId = await client.sendMessage(communityId, channelId, text)
+
+        const msg: MessageData = {
+          id: msgId,
+          content: text,
+          authorDid: store.did(),
+          authorName: 'You',
+          timestamp: new Date().toISOString(),
+          reactions: []
+        }
+        store.addMessage(msg)
+        store.addChannelMessage(channelId, msg)
+        setInputContent('')
+
+        requestAnimationFrame(() => {
+          messagesEndRef?.scrollIntoView({ behavior: 'smooth' })
+        })
+      } catch (err) {
+        console.error('Failed to send message:', err)
+        addLocalMessage(text)
+      }
+    } else {
+      addLocalMessage(text)
+    }
+  }
+
+  function addLocalMessage(text: string) {
+    const channelId = store.activeChannelId()
     const msg: MessageData = {
       id: 'msg:' + Date.now().toString(36),
       content: text,
@@ -28,9 +109,11 @@ export const MessageArea: Component = () => {
       reactions: []
     }
     store.addMessage(msg)
+    if (channelId) {
+      store.addChannelMessage(channelId, msg)
+    }
     setInputContent('')
 
-    // Auto-scroll to bottom
     requestAnimationFrame(() => {
       messagesEndRef?.scrollIntoView({ behavior: 'smooth' })
     })
@@ -43,17 +126,35 @@ export const MessageArea: Component = () => {
     }
   }
 
+  const isDisconnected = () => store.connectionState() === 'disconnected'
+
   return (
     <div class="flex flex-col flex-1 min-h-0">
       {/* Messages */}
       <div class="flex-1 overflow-y-auto px-4 py-2">
-        <Show when={channelMessages().length === 0}>
+        <Show when={loadingHistory()}>
+          <div class="flex items-center justify-center py-4 text-[var(--text-muted)] text-sm">
+            {t('MESSAGES_LOADING_HISTORY')}
+          </div>
+        </Show>
+
+        <Show when={channelMessages().length === 0 && !loadingHistory()}>
           <div class="flex flex-col items-center justify-center h-full text-[var(--text-muted)]">
-            <div class="text-4xl mb-4">#</div>
-            <h3 class="text-xl font-bold text-[var(--text-primary)] mb-1">
-              {t('ONBOARDING_WELCOME')} #{activeChannel()?.name ?? ''}
-            </h3>
-            <p class="text-sm">{t('MESSAGE_PLACEHOLDER', { channel: activeChannel()?.name ?? '' })}</p>
+            <Show
+              when={!isDisconnected()}
+              fallback={
+                <>
+                  <div class="text-4xl mb-4">📡</div>
+                  <p class="text-sm">{t('MESSAGES_CONNECTING')}</p>
+                </>
+              }
+            >
+              <div class="text-4xl mb-4">#</div>
+              <h3 class="text-xl font-bold text-[var(--text-primary)] mb-1">
+                {t('ONBOARDING_WELCOME')} #{activeChannel()?.name ?? ''}
+              </h3>
+              <p class="text-sm">{t('MESSAGE_PLACEHOLDER', { channel: activeChannel()?.name ?? '' })}</p>
+            </Show>
           </div>
         </Show>
 

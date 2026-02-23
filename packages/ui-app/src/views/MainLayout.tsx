@@ -1,4 +1,4 @@
-import { For, Show, createSignal, createEffect, type Component } from 'solid-js'
+import { Show, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 import { ServerListBar } from './ServerListBar.tsx'
@@ -6,39 +6,11 @@ import { ChannelSidebarView } from './ChannelSidebarView.tsx'
 import { MessageArea } from './MessageArea.tsx'
 import { MemberSidebarView } from './MemberSidebarView.tsx'
 import { SearchOverlayView } from './SearchOverlayView.tsx'
-import type { CommunityInfo, ChannelInfo, MemberData } from '../types.js'
+import { EmptyStateView } from './EmptyStateView.tsx'
+import { CreateCommunityModal } from './CreateCommunityModal.tsx'
 
 export const MainLayout: Component = () => {
   const store = useAppStore()
-
-  // Seed demo data if empty
-  createEffect(() => {
-    if (store.communities().length === 0) {
-      const demoCommunity: CommunityInfo = {
-        id: 'community:demo',
-        name: 'Harmony',
-        description: 'Welcome to Harmony',
-        memberCount: 3
-      }
-      store.setCommunities([demoCommunity])
-      store.setActiveCommunityId(demoCommunity.id)
-
-      const demoChannels: ChannelInfo[] = [
-        { id: 'ch:general', name: 'general', type: 'text', communityId: demoCommunity.id },
-        { id: 'ch:random', name: 'random', type: 'text', communityId: demoCommunity.id },
-        { id: 'ch:voice-lounge', name: 'voice-lounge', type: 'voice', communityId: demoCommunity.id }
-      ]
-      store.setChannels(demoChannels)
-      store.setActiveChannelId(demoChannels[0].id)
-
-      const demoMembers: MemberData[] = [
-        { did: store.did(), displayName: 'You', roles: ['admin'], status: 'online' },
-        { did: 'did:key:z6MkMember1', displayName: 'Alice', roles: ['moderator'], status: 'online' },
-        { did: 'did:key:z6MkMember2', displayName: 'Bob', roles: [], status: 'offline' }
-      ]
-      store.setMembers(demoMembers)
-    }
-  })
 
   // Keyboard shortcut: Ctrl+K for search
   if (typeof window !== 'undefined') {
@@ -54,47 +26,67 @@ export const MainLayout: Component = () => {
   }
 
   return (
-    <div class="flex h-screen overflow-hidden">
-      {/* Server list bar (left icon strip) */}
-      <ServerListBar />
-
-      {/* Channel sidebar */}
-      <ChannelSidebarView />
-
-      {/* Main content area */}
-      <div class="flex flex-col flex-1 min-w-0">
-        {/* Title bar */}
-        <TitleBarView />
-
-        {/* Connection state banner */}
-        <Show when={store.connectionState() === 'disconnected'}>
-          <div class="bg-[var(--error)] text-white text-center py-1 text-sm">{t('OFFLINE_BANNER')}</div>
-        </Show>
-        <Show when={store.connectionState() === 'reconnecting'}>
-          <div class="bg-[var(--warning)] text-black text-center py-1 text-sm">{t('RECONNECTING')}</div>
-        </Show>
-
-        {/* Message area */}
-        <MessageArea />
-      </div>
-
-      {/* Member sidebar (right) */}
-      <Show when={store.showMemberSidebar()}>
-        <MemberSidebarView />
+    <>
+      <Show when={store.communities().length === 0}>
+        <EmptyStateView />
       </Show>
 
-      {/* Search overlay */}
-      <Show when={store.showSearch()}>
-        <SearchOverlayView />
+      <Show when={store.communities().length > 0}>
+        <div class="flex h-screen overflow-hidden">
+          {/* Server list bar (left icon strip) */}
+          <ServerListBar />
+
+          {/* Channel sidebar */}
+          <ChannelSidebarView />
+
+          {/* Main content area */}
+          <div class="flex flex-col flex-1 min-w-0">
+            {/* Title bar */}
+            <TitleBarView />
+
+            {/* Connection state banner */}
+            <Show when={store.connectionState() === 'disconnected' && store.communities().length > 0}>
+              <div class="bg-[var(--error)] text-white text-center py-1 text-sm">
+                {store.connectionError() || t('OFFLINE_BANNER')}
+              </div>
+            </Show>
+            <Show when={store.connectionState() === 'reconnecting'}>
+              <div class="bg-[var(--warning)] text-black text-center py-1 text-sm">{t('ERROR_NETWORK_LOST')}</div>
+            </Show>
+
+            {/* Connection error */}
+            <Show when={store.connectionError()}>
+              <div class="bg-[var(--error)]/20 text-[var(--error)] text-center py-2 text-sm">
+                {store.connectionError()}
+              </div>
+            </Show>
+
+            {/* Message area */}
+            <MessageArea />
+          </div>
+
+          {/* Member sidebar (right) */}
+          <Show when={store.showMemberSidebar()}>
+            <MemberSidebarView />
+          </Show>
+
+          {/* Search overlay */}
+          <Show when={store.showSearch()}>
+            <SearchOverlayView />
+          </Show>
+        </div>
       </Show>
-    </div>
+
+      {/* Create community modal */}
+      <Show when={store.showCreateCommunity()}>
+        <CreateCommunityModal />
+      </Show>
+    </>
   )
 }
 
 const TitleBarView: Component = () => {
   const store = useAppStore()
-
-  const activeCommunity = () => store.communities().find((c) => c.id === store.activeCommunityId())
 
   const activeChannel = () => store.channels().find((c) => c.id === store.activeChannelId())
 

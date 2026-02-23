@@ -1,18 +1,41 @@
-import { createSignal, Show, type Component } from 'solid-js'
+import { createSignal, For, Show, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
-import { Onboarding } from '../components/Shell/index.js'
 import { t } from '../i18n/strings.js'
 import { createCryptoProvider } from '@harmony/crypto'
 import { IdentityManager } from '@harmony/identity'
+import { HarmonyClient } from '@harmony/client'
+
+type OnboardingStep = 'welcome' | 'mnemonic-display' | 'mnemonic-confirm' | 'recover'
 
 export const OnboardingView: Component = () => {
   const store = useAppStore()
-  const [step, setStep] = createSignal<'welcome' | 'create' | 'recover'>('welcome')
-  const [mnemonic, setMnemonic] = createSignal('')
+  const [step, setStep] = createSignal<OnboardingStep>('welcome')
   const [generatedMnemonic, setGeneratedMnemonic] = createSignal('')
   const [recoverInput, setRecoverInput] = createSignal('')
   const [error, setError] = createSignal('')
   const [loading, setLoading] = createSignal(false)
+  const [copied, setCopied] = createSignal(false)
+
+  // Confirmation quiz state
+  const [quizIndices, setQuizIndices] = createSignal<number[]>([])
+  const [quizAnswers, setQuizAnswers] = createSignal<Record<number, string>>({})
+  const [quizError, setQuizError] = createSignal(false)
+
+  function initClient() {
+    const client = new HarmonyClient({
+      wsFactory: (url: string) => new WebSocket(url) as any
+    })
+    store.setClient(client)
+  }
+
+  function pickQuizIndices(): number[] {
+    const indices: number[] = []
+    while (indices.length < 3) {
+      const idx = Math.floor(Math.random() * 12)
+      if (!indices.includes(idx)) indices.push(idx)
+    }
+    return indices.sort((a, b) => a - b)
+  }
 
   async function handleCreate() {
     setLoading(true)
@@ -24,11 +47,48 @@ export const OnboardingView: Component = () => {
       setGeneratedMnemonic(result.mnemonic)
       store.setDid(result.identity.did)
       store.setMnemonic(result.mnemonic)
-      setStep('create')
+      store.setIdentity(result.identity)
+      store.setKeyPair(result.keyPair)
+      // Don't init client yet — wait for mnemonic backup
+      setStep('mnemonic-display')
     } catch (err) {
       setError(String(err))
     } finally {
       setLoading(false)
+    }
+  }
+
+  function handleMnemonicSaved() {
+    const indices = pickQuizIndices()
+    setQuizIndices(indices)
+    setQuizAnswers({})
+    setQuizError(false)
+    setStep('mnemonic-confirm')
+  }
+
+  function handleVerify() {
+    const words = generatedMnemonic().split(/\s+/)
+    const answers = quizAnswers()
+    const allCorrect = quizIndices().every((idx) => answers[idx]?.trim().toLowerCase() === words[idx].toLowerCase())
+    if (allCorrect) {
+      finishOnboarding()
+    } else {
+      setQuizError(true)
+    }
+  }
+
+  function finishOnboarding() {
+    initClient()
+    // Identity is already set in store — App.tsx will show MainLayout
+  }
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(generatedMnemonic())
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // fallback
     }
   }
 
@@ -38,7 +98,7 @@ export const OnboardingView: Component = () => {
     try {
       const words = recoverInput().trim()
       if (words.split(/\s+/).length !== 12) {
-        setError(t('ONBOARDING_MNEMONIC_CONFIRM'))
+        setError(t('ONBOARDING_RECOVER_INVALID'))
         setLoading(false)
         return
       }
@@ -47,6 +107,9 @@ export const OnboardingView: Component = () => {
       const result = await idMgr.createFromMnemonic(words)
       store.setDid(result.identity.did)
       store.setMnemonic(words)
+      store.setIdentity(result.identity)
+      store.setKeyPair(result.keyPair)
+      initClient()
     } catch (err) {
       setError(String(err))
     } finally {
@@ -54,9 +117,12 @@ export const OnboardingView: Component = () => {
     }
   }
 
+  const mnemonicWords = () => generatedMnemonic().split(/\s+/)
+
   return (
     <div class="flex items-center justify-center h-screen bg-[var(--bg-primary)]">
       <div class="max-w-md w-full mx-4 p-8 rounded-2xl bg-[var(--bg-surface)] shadow-2xl">
+        {/* Step 1: Welcome */}
         <Show when={step() === 'welcome'}>
           <div class="text-center">
             <div class="text-5xl mb-4">🎵</div>
@@ -83,31 +149,87 @@ export const OnboardingView: Component = () => {
           </div>
         </Show>
 
-        <Show when={step() === 'create'}>
+        {/* Step 2: Mnemonic Display */}
+        <Show when={step() === 'mnemonic-display'}>
           <div class="text-center">
             <h2 class="text-2xl font-bold mb-2">{t('ONBOARDING_MNEMONIC_BACKUP')}</h2>
-            <p class="text-[var(--text-secondary)] text-sm mb-4">{t('ONBOARDING_MNEMONIC_CONFIRM')}</p>
-            <div class="bg-[var(--bg-input)] p-4 rounded-lg mb-4 font-mono text-sm leading-relaxed select-all">
-              {generatedMnemonic()}
+            <div class="bg-[var(--error)]/10 border border-[var(--error)]/30 rounded-lg p-3 mb-4">
+              <p class="text-sm text-[var(--error)]">⚠️ {t('ONBOARDING_MNEMONIC_WARNING')}</p>
             </div>
+            <div class="grid grid-cols-4 gap-2 mb-4">
+              <For each={mnemonicWords()}>
+                {(word, idx) => (
+                  <div class="bg-[var(--bg-input)] rounded-lg px-2 py-2 text-sm">
+                    <span class="text-[var(--text-muted)] text-xs mr-1">{idx() + 1}.</span>
+                    <span class="font-mono">{word}</span>
+                  </div>
+                )}
+              </For>
+            </div>
+            <button
+              onClick={handleCopy}
+              class="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] mb-4 transition-colors"
+            >
+              {copied() ? `✓ ${t('ONBOARDING_MNEMONIC_COPIED')}` : `📋 ${t('ONBOARDING_MNEMONIC_COPY')}`}
+            </button>
             <p class="text-xs text-[var(--text-muted)] mb-6">
               DID: <span class="font-mono">{store.did()}</span>
             </p>
             <button
-              onClick={() => {
-                store.setConnectionState('connected')
-              }}
+              onClick={handleMnemonicSaved}
               class="w-full py-3 px-6 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-semibold transition-colors"
             >
-              {t('ONBOARDING_CREATE_IDENTITY')}
+              {t('ONBOARDING_MNEMONIC_SAVED')}
             </button>
           </div>
         </Show>
 
+        {/* Step 3: Mnemonic Confirmation */}
+        <Show when={step() === 'mnemonic-confirm'}>
+          <div>
+            <h2 class="text-2xl font-bold mb-2 text-center">{t('ONBOARDING_MNEMONIC_VERIFY_TITLE')}</h2>
+            <p class="text-[var(--text-secondary)] text-sm mb-6 text-center">{t('ONBOARDING_MNEMONIC_CONFIRM')}</p>
+            <div class="space-y-4 mb-6">
+              <For each={quizIndices()}>
+                {(idx) => (
+                  <div>
+                    <label class="text-sm text-[var(--text-muted)] mb-1 block">
+                      {t('ONBOARDING_MNEMONIC_VERIFY_PROMPT', { position: String(idx + 1) })}
+                    </label>
+                    <input
+                      type="text"
+                      value={quizAnswers()[idx] || ''}
+                      onInput={(e) => setQuizAnswers((prev) => ({ ...prev, [idx]: e.currentTarget.value }))}
+                      class="w-full p-3 rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none font-mono text-sm"
+                      autocomplete="off"
+                    />
+                  </div>
+                )}
+              </For>
+            </div>
+            <Show when={quizError()}>
+              <p class="text-[var(--error)] text-sm mb-4 text-center">{t('ONBOARDING_MNEMONIC_VERIFY_FAIL')}</p>
+            </Show>
+            <button
+              onClick={handleVerify}
+              class="w-full py-3 px-6 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-semibold transition-colors mb-3"
+            >
+              {t('ONBOARDING_MNEMONIC_VERIFY')}
+            </button>
+            <button
+              onClick={finishOnboarding}
+              class="w-full text-center text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+            >
+              {t('ONBOARDING_MNEMONIC_SKIP')}
+            </button>
+          </div>
+        </Show>
+
+        {/* Recover */}
         <Show when={step() === 'recover'}>
           <div>
             <h2 class="text-2xl font-bold mb-2 text-center">{t('ONBOARDING_RECOVER_IDENTITY')}</h2>
-            <p class="text-[var(--text-secondary)] text-sm mb-4 text-center">{t('ONBOARDING_MNEMONIC_CONFIRM')}</p>
+            <p class="text-[var(--text-secondary)] text-sm mb-4 text-center">{t('ONBOARDING_RECOVER_PROMPT')}</p>
             <textarea
               value={recoverInput()}
               onInput={(e) => setRecoverInput(e.currentTarget.value)}
@@ -126,7 +248,7 @@ export const OnboardingView: Component = () => {
                 }}
                 class="flex-1 py-3 px-6 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)] font-semibold transition-colors"
               >
-                ← Back
+                {t('ONBOARDING_BACK')}
               </button>
               <button
                 onClick={handleRecover}

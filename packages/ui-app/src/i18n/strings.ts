@@ -51,6 +51,21 @@ export const en = {
   DM_NEW: 'New message',
   DM_EMPTY: 'No direct messages',
 
+  // Onboarding — mnemonic backup
+  ONBOARDING_MNEMONIC_WARNING:
+    'Write these words down and store them safely. This is the ONLY way to recover your identity.',
+  ONBOARDING_MNEMONIC_COPY: 'Copy to clipboard',
+  ONBOARDING_MNEMONIC_COPIED: 'Copied!',
+  ONBOARDING_MNEMONIC_SAVED: "I've saved my recovery phrase",
+  ONBOARDING_MNEMONIC_VERIFY_TITLE: 'Verify your recovery phrase',
+  ONBOARDING_MNEMONIC_VERIFY_PROMPT: 'What is word #{position}?',
+  ONBOARDING_MNEMONIC_VERIFY: 'Verify',
+  ONBOARDING_MNEMONIC_VERIFY_FAIL: 'Some words are incorrect. Please try again.',
+  ONBOARDING_MNEMONIC_SKIP: 'Skip verification',
+  ONBOARDING_RECOVER_PROMPT: 'Enter your 12-word recovery phrase to restore your identity.',
+  ONBOARDING_RECOVER_INVALID: 'Please enter a valid 12-word recovery phrase.',
+  ONBOARDING_BACK: '← Back',
+
   // Settings
   SETTINGS_USER: 'User settings',
   SETTINGS_IDENTITY: 'Identity',
@@ -62,6 +77,22 @@ export const en = {
   SETTINGS_NODE: 'Node',
   SETTINGS_THEME_DARK: 'Dark',
   SETTINGS_THEME_LIGHT: 'Light',
+  SETTINGS_SERVERS: 'Servers',
+  SETTINGS_ABOUT: 'About',
+  SETTINGS_BACK: '← Back',
+  SETTINGS_DID: 'DID',
+  SETTINGS_DISPLAY_NAME: 'Display name',
+  SETTINGS_DISPLAY_NAME_PLACEHOLDER: 'Enter display name',
+  SETTINGS_MNEMONIC: 'Recovery phrase',
+  SETTINGS_MNEMONIC_REVEAL: 'Reveal recovery phrase',
+  SETTINGS_MNEMONIC_REVEAL_WARNING:
+    'Never share your recovery phrase. Anyone with these words can take control of your identity.',
+  SETTINGS_MNEMONIC_HIDE: 'Hide',
+  SETTINGS_ADD_SERVER: 'Add server',
+  SETTINGS_NO_SERVERS: 'No servers connected',
+  SETTINGS_VERSION: 'Version',
+  SETTINGS_LICENSE: 'License',
+  SETTINGS_REPO: 'Repository',
 
   // Friends
   FRIENDS_LIST: 'Friends',
@@ -80,6 +111,39 @@ export const en = {
   // Search
   SEARCH_PLACEHOLDER: 'Search messages...',
   SEARCH_NO_RESULTS: 'No results found',
+
+  // Empty state
+  EMPTY_NO_COMMUNITIES: "You don't have any communities yet",
+  EMPTY_GET_STARTED: 'Create or join a community to get started',
+  EMPTY_JOIN_COMMUNITY: 'Join a community',
+  EMPTY_JOIN_INVITE_PLACEHOLDER: 'Paste an invite link...',
+  EMPTY_JOIN_SUBMIT: 'Join',
+
+  // Create community
+  CREATE_COMMUNITY_TITLE: 'Create a community',
+  CREATE_COMMUNITY_NAME: 'Community name',
+  CREATE_COMMUNITY_NAME_PLACEHOLDER: 'My awesome community',
+  CREATE_COMMUNITY_DESCRIPTION: 'Description (optional)',
+  CREATE_COMMUNITY_DESCRIPTION_PLACEHOLDER: 'What is this community about?',
+  CREATE_COMMUNITY_SUBMIT: 'Create',
+  CREATE_COMMUNITY_CANCEL: 'Cancel',
+  CREATE_COMMUNITY_CREATING: 'Creating...',
+
+  // Connection
+  CONNECTION_CONNECTING: 'Connecting to server...',
+  CONNECTION_FAILED: 'Failed to connect to server',
+  CONNECTION_RETRY: 'Retry',
+  CONNECTION_RECONNECT: 'Reconnect',
+
+  // Server
+  SERVER_URL_LABEL: 'Server URL',
+  SERVER_URL_PLACEHOLDER: 'ws://localhost:4000',
+  SERVER_CONNECTED: 'Connected',
+  SERVER_CONNECTING: 'Connecting',
+  SERVER_DISCONNECTED: 'Disconnected',
+  SERVER_ERROR: 'Connection error',
+  SERVER_AUTH_FAILED: 'Authentication failed',
+  SERVER_AUTH_CREATING_VP: 'Authenticating...',
 
   // Shared
   OFFLINE_BANNER: 'You are offline',
@@ -107,7 +171,69 @@ export const en = {
   BOT_DASHBOARD: 'Bot dashboard',
 
   // PWA
-  PWA_INSTALL: 'Install Harmony'
+  PWA_INSTALL: 'Install Harmony',
+
+  // Message persistence
+  MESSAGES_CONNECTING: 'Messages will appear when connected',
+  MESSAGES_LOADING_HISTORY: 'Loading message history...',
+
+  // Join community
+  JOIN_COMMUNITY_TITLE: 'Join a community',
+  JOIN_COMMUNITY_URL_LABEL: 'Server URL',
+  JOIN_COMMUNITY_URL_PLACEHOLDER: 'ws://localhost:4000',
+  JOIN_COMMUNITY_CONNECTING: 'Connecting...',
+  JOIN_COMMUNITY_JOINING: 'Joining...',
+  JOIN_COMMUNITY_CANCEL: 'Cancel',
+  JOIN_COMMUNITY_CONNECT: 'Connect',
+
+  // Error messages
+  ERROR_CONNECTION_FAILED: 'Could not connect to server at {url}. Check that the server is running.',
+  ERROR_AUTH_FAILED: 'Authentication failed. Your identity may not be recognized by this server.',
+  ERROR_COMMUNITY_CREATE_FAILED: 'Failed to create community: {error}',
+  ERROR_NETWORK_LOST: 'Network connection lost. Reconnecting...',
+  ERROR_COMMUNITY_JOIN_FAILED: 'Failed to join community: {error}',
+
+  // Migration wizard
+  MIGRATION_INTRO:
+    'Bring your Discord community to Harmony. Your history, roles, and members come with you — encrypted and under your control.',
+  MIGRATION_OPTION_COMMUNITY: 'Migrate a community',
+  MIGRATION_OPTION_COMMUNITY_DESC:
+    "Export your Discord server's channels, messages, roles, and members to Harmony. You'll need admin access and a bot token.",
+  MIGRATION_START_COMMUNITY: 'Start community migration',
+  MIGRATION_OPTION_LINK: 'Link your Discord account',
+  MIGRATION_OPTION_LINK_DESC:
+    'Connect your Discord identity to your Harmony DID. This lets other communities recognise you when they migrate.',
+  MIGRATION_START_LINK: 'Link account',
+  MIGRATION_BOT_SETUP_TITLE: 'Set up the migration bot',
+  MIGRATION_BOT_SETUP_STEP1: '1. Go to discord.com/developers/applications and create a new application.',
+  MIGRATION_BOT_SETUP_STEP2: '2. Under "Bot", click "Add Bot", then copy the bot token.',
+  MIGRATION_BOT_SETUP_STEP3:
+    '3. Invite the bot to your server with "Read Message History" and "View Channels" permissions.',
+  MIGRATION_BOT_TOKEN: 'Bot token',
+  MIGRATION_BOT_TOKEN_PLACEHOLDER: 'Paste your bot token here',
+  MIGRATION_DISCORD_SERVER_ID: 'Discord server ID',
+  MIGRATION_DISCORD_SERVER_ID_PLACEHOLDER: 'Right-click server → Copy Server ID',
+  MIGRATION_SERVER_URL: 'Harmony server URL',
+  MIGRATION_FIELDS_REQUIRED: 'Bot token and server ID are required.',
+  MIGRATION_START_EXPORT: 'Start export',
+  MIGRATION_EXPORTING: 'Exporting your Discord server...',
+  MIGRATION_EXPORTING_DESC:
+    "The bot is reading your server's channels, messages, and roles. This may take a few minutes for large servers.",
+  MIGRATION_EXPORTING_NOTE: 'The bot runs locally on your machine. Your data never passes through a third party.',
+  MIGRATION_IMPORTING: 'Importing into Harmony...',
+  MIGRATION_IMPORTING_DESC:
+    'Encrypting and importing your community data. Messages are encrypted with your DID keypair.',
+  MIGRATION_LINK_TITLE: 'Link your Discord account',
+  MIGRATION_LINK_DESC:
+    'Connect your Discord identity to your Harmony DID through the portal. This creates a verifiable credential proving the link.',
+  MIGRATION_LINK_YOUR_DID: 'Your Harmony DID',
+  MIGRATION_PORTAL_URL: 'Portal URL',
+  MIGRATION_LINK_DISCORD_BUTTON: 'Link with Discord',
+  MIGRATION_SKIP_LINKING: 'Skip for now',
+  MIGRATION_COMPLETE_TITLE: 'Migration complete',
+  MIGRATION_COMPLETE_DESC:
+    'Your community is ready. Members can link their Discord accounts to claim their Harmony identity.',
+  MIGRATION_COMPLETE_CONTINUE: 'Go to your community'
 } as const
 
 export type StringKey = keyof typeof en

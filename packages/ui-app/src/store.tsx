@@ -1,17 +1,16 @@
-import { createSignal, createContext, useContext, type JSX } from 'solid-js'
-import type {
-  CommunityInfo,
-  ChannelInfo,
-  MessageData,
-  MemberData,
-  DMConversationInfo,
-  ProposalInfo,
-  CredentialInfo,
-  BotInfo,
-  FriendInfo,
-  FriendRequest,
-  DeviceInfo
-} from './types.js'
+import { createSignal, createContext, useContext } from 'solid-js'
+import type { KeyPair } from '@harmony/crypto'
+import type { Identity } from '@harmony/identity'
+import { HarmonyClient } from '@harmony/client'
+import type { CommunityInfo, ChannelInfo, MessageData, MemberData, DMConversationInfo } from './types.js'
+
+export interface ServerEntry {
+  url: string
+  name: string
+  status: 'connected' | 'connecting' | 'disconnected' | 'error'
+  client: HarmonyClient | null
+  error?: string
+}
 
 export interface AppStore {
   // Identity
@@ -20,6 +19,22 @@ export interface AppStore {
   mnemonic: () => string
   setMnemonic: (m: string) => void
   isOnboarded: () => boolean
+
+  // Identity objects (for client connection)
+  identity: () => Identity | null
+  setIdentity: (i: Identity | null) => void
+  keyPair: () => KeyPair | null
+  setKeyPair: (k: KeyPair | null) => void
+
+  // Harmony client (legacy single-client accessor)
+  client: () => HarmonyClient | null
+  setClient: (c: HarmonyClient | null) => void
+
+  // Multi-server
+  servers: () => ServerEntry[]
+  setServers: (s: ServerEntry[]) => void
+  updateServer: (url: string, patch: Partial<ServerEntry>) => void
+  getServerClient: (url: string) => HarmonyClient | null
 
   // Communities
   communities: () => CommunityInfo[]
@@ -38,6 +53,11 @@ export interface AppStore {
   setMessages: (m: MessageData[]) => void
   addMessage: (m: MessageData) => void
 
+  // Per-channel message cache
+  channelMessages: (channelId: string) => MessageData[]
+  addChannelMessage: (channelId: string, m: MessageData) => void
+  setChannelMessages: (channelId: string, msgs: MessageData[]) => void
+
   // Members
   members: () => MemberData[]
   setMembers: (m: MemberData[]) => void
@@ -48,6 +68,8 @@ export interface AppStore {
   // Connection
   connectionState: () => 'connected' | 'disconnected' | 'reconnecting'
   setConnectionState: (s: 'connected' | 'disconnected' | 'reconnecting') => void
+  connectionError: () => string
+  setConnectionError: (e: string) => void
 
   // Theme
   theme: () => 'dark' | 'light'
@@ -58,11 +80,21 @@ export interface AppStore {
   setShowMemberSidebar: (s: boolean) => void
   showSearch: () => boolean
   setShowSearch: (s: boolean) => void
+  showCreateCommunity: () => boolean
+  setShowCreateCommunity: (s: boolean) => void
+  showSettings: () => boolean
+  setShowSettings: (s: boolean) => void
+  displayName: () => string
+  setDisplayName: (n: string) => void
 }
 
 export function createAppStore(): AppStore {
   const [did, setDid] = createSignal('')
   const [mnemonic, setMnemonic] = createSignal('')
+  const [identity, setIdentity] = createSignal<Identity | null>(null)
+  const [keyPair, setKeyPair] = createSignal<KeyPair | null>(null)
+  const [client, setClient] = createSignal<HarmonyClient | null>(null)
+  const [servers, setServers] = createSignal<ServerEntry[]>([])
   const [communities, setCommunities] = createSignal<CommunityInfo[]>([])
   const [activeCommunityId, setActiveCommunityId] = createSignal('')
   const [channels, setChannels] = createSignal<ChannelInfo[]>([])
@@ -73,12 +105,43 @@ export function createAppStore(): AppStore {
   const [connectionState, setConnectionState] = createSignal<'connected' | 'disconnected' | 'reconnecting'>(
     'disconnected'
   )
+  const [connectionError, setConnectionError] = createSignal('')
   const [theme, setTheme] = createSignal<'dark' | 'light'>('dark')
   const [showMemberSidebar, setShowMemberSidebar] = createSignal(true)
   const [showSearch, setShowSearch] = createSignal(false)
+  const [showCreateCommunity, setShowCreateCommunity] = createSignal(false)
+  const [showSettings, setShowSettings] = createSignal(false)
+  const [displayName, setDisplayName] = createSignal('')
 
   const addMessage = (m: MessageData) => {
     setMessages((prev) => [...prev, m])
+  }
+
+  // Per-channel message cache
+  const channelMessageCache = new Map<string, MessageData[]>()
+
+  const channelMessages = (channelId: string): MessageData[] => {
+    return channelMessageCache.get(channelId) ?? []
+  }
+
+  const addChannelMessage = (channelId: string, m: MessageData) => {
+    const existing = channelMessageCache.get(channelId) ?? []
+    // Avoid duplicates
+    if (existing.some((e) => e.id === m.id)) return
+    channelMessageCache.set(channelId, [...existing, m])
+  }
+
+  const setChannelMessages = (channelId: string, msgs: MessageData[]) => {
+    channelMessageCache.set(channelId, msgs)
+  }
+
+  const updateServer = (url: string, patch: Partial<ServerEntry>) => {
+    setServers((prev) => prev.map((s) => (s.url === url ? { ...s, ...patch } : s)))
+  }
+
+  const getServerClient = (url: string): HarmonyClient | null => {
+    const server = servers().find((s) => s.url === url)
+    return server?.client ?? null
   }
 
   return {
@@ -87,6 +150,16 @@ export function createAppStore(): AppStore {
     mnemonic,
     setMnemonic,
     isOnboarded: () => did().length > 0,
+    identity,
+    setIdentity,
+    keyPair,
+    setKeyPair,
+    client,
+    setClient,
+    servers,
+    setServers,
+    updateServer,
+    getServerClient,
     communities,
     setCommunities,
     activeCommunityId,
@@ -98,17 +171,28 @@ export function createAppStore(): AppStore {
     messages,
     setMessages,
     addMessage,
+    channelMessages,
+    addChannelMessage,
+    setChannelMessages,
     members,
     setMembers,
     dmConversations,
     connectionState,
     setConnectionState,
+    connectionError,
+    setConnectionError,
     theme,
     setTheme,
     showMemberSidebar,
     setShowMemberSidebar,
     showSearch,
-    setShowSearch
+    setShowSearch,
+    showCreateCommunity,
+    setShowCreateCommunity,
+    showSettings,
+    setShowSettings,
+    displayName,
+    setDisplayName
   }
 }
 

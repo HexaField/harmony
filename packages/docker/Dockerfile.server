@@ -29,4 +29,4 @@ VOLUME ["/var/harmony/data"]
 ENV HARMONY_CONFIG=/etc/harmony/config.yaml
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD wget -q --spider http://localhost:4001/health || exit 1
-CMD ["node", "--import", "tsx", "packages/server-runtime/src/bin.ts"]
+CMD ["node", "--import", "tsx", "packages/server-runtime/bin/harmony-server.js", "--config", "/etc/harmony/config.yaml"]

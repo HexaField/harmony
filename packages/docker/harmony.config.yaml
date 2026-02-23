@@ -1,0 +1,51 @@
+# Harmony Server Configuration
+# Copy this file to harmony.config.yaml and edit
+
+server:
+  host: 0.0.0.0
+  port: 4000
+
+storage:
+  database: /var/harmony/data/harmony.db
+  media: /var/harmony/data/media
+
+identity:
+  # Generate a mnemonic: harmony identity create
+  # mnemonic: "your twelve word mnemonic phrase goes here"
+
+federation:
+  enabled: false
+  # allowlist:
+  #   - did:key:z6Mk...
+
+relay:
+  enabled: true
+  url: wss://relay.harmony.chat
+  fallback: true
+
+moderation:
+  rateLimit:
+    windowMs: 60000
+    maxMessages: 30
+  raidDetection:
+    enabled: true
+    joinThreshold: 10
+    windowSeconds: 30
+
+voice:
+  enabled: false
+  # livekit:
+  #   host: livekit.example.com
+  #   apiKey: your-api-key
+  #   apiSecret: your-api-secret
+
+logging:
+  level: info
+  format: json
+
+limits:
+  maxConnections: 1000
+  maxCommunities: 100
+  maxChannelsPerCommunity: 500
+  maxMessageSize: 16384
+  mediaMaxSize: 52428800

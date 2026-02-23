@@ -62,11 +62,6 @@ export const ServerListBar: Component = () => {
   }
 
   // Group communities by server
-  function serverForCommunity(communityId: string): string | undefined {
-    const community = store.communities().find((c) => c.id === communityId)
-    return community?.serverUrl
-  }
-
   return (
     <div class="w-[var(--server-bar-width)] bg-[var(--bg-primary)] flex flex-col items-center py-3 gap-2 shrink-0 overflow-y-auto">
       {/* Home / DMs button */}

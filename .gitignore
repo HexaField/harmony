@@ -11,3 +11,6 @@ test-results
 .env.local
 
 .certs
+*.db
+*.db-shm
+*.db-wal

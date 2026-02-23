@@ -11,9 +11,9 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
   const [portalUrl, setPortalUrl] = createSignal('http://localhost:3001')
   const [botToken, setBotToken] = createSignal('')
   const [discordServerId, setDiscordServerId] = createSignal('')
-  const [exportProgress, setExportProgress] = createSignal(0)
+  const [exportProgress, _setExportProgress] = createSignal(0)
   const [error, setError] = createSignal('')
-  const [exportId, setExportId] = createSignal('')
+  const [_exportId, _setExportId] = createSignal('')
 
   const steps: MigrationStep[] = ['intro', 'bot-setup', 'bot-running', 'importing', 'linking', 'complete']
   const stepIndex = () => steps.indexOf(step())

@@ -21,6 +21,11 @@ export const OnboardingView: Component = () => {
   const [quizAnswers, setQuizAnswers] = createSignal<Record<number, string>>({})
   const [quizError, setQuizError] = createSignal(false)
 
+  // Pending identity — not committed to store until mnemonic backup confirmed
+  let pendingIdentity: import('@harmony/identity').Identity | null = null
+  let pendingKeyPair: import('@harmony/crypto').KeyPair | null = null
+  let pendingMnemonic = ''
+
   function initClient() {
     const client = new HarmonyClient({
       wsFactory: (url: string) => new WebSocket(url) as any
@@ -45,11 +50,10 @@ export const OnboardingView: Component = () => {
       const idMgr = new IdentityManager(crypto)
       const result = await idMgr.create()
       setGeneratedMnemonic(result.mnemonic)
-      store.setDid(result.identity.did)
-      store.setMnemonic(result.mnemonic)
-      store.setIdentity(result.identity)
-      store.setKeyPair(result.keyPair)
-      // Don't init client yet — wait for mnemonic backup
+      // Store locally — don't commit to app store yet (would trigger isOnboarded)
+      pendingIdentity = result.identity
+      pendingKeyPair = result.keyPair
+      pendingMnemonic = result.mnemonic
       setStep('mnemonic-display')
     } catch (err) {
       setError(String(err))
@@ -78,8 +82,14 @@ export const OnboardingView: Component = () => {
   }
 
   function finishOnboarding() {
+    if (pendingIdentity && pendingKeyPair) {
+      store.setDid(pendingIdentity.did)
+      store.setMnemonic(pendingMnemonic)
+      store.setIdentity(pendingIdentity)
+      store.setKeyPair(pendingKeyPair)
+    }
     initClient()
-    // Identity is already set in store — App.tsx will show MainLayout
+    // Identity is now set in store — App.tsx will show MainLayout
   }
 
   async function handleCopy() {

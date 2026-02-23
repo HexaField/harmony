@@ -1,7 +1,6 @@
 import { For, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { MemberList } from '../components/Members/index.js'
-import { t } from '../i18n/strings.js'
 
 export const MemberSidebarView: Component = () => {
   const store = useAppStore()

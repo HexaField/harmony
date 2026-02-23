@@ -247,6 +247,18 @@ The bot runs on the community's own machine. Harmony never touches Discord's API
 
 ---
 
+## Future Roadmap
+
+- **Automatic multi-node replication** — every node in a community holds a full replica; if any node is online, the community is available
+- **Zero-knowledge friend discovery** — prove you share a mutual contact without revealing who, using ZK proofs over Merkle-committed friend graphs
+- **Anonymous credentials (selective disclosure)** — present "I'm a moderator" without revealing which community, when you joined, or who appointed you (BBS+ signatures)
+- **Private group membership** — post messages to a community without the server knowing which member you are (ring signatures / cryptographic accumulators)
+- **Sealed sender** — hide message sender from the server, not just message content (Signal-style metadata privacy)
+- **Distributed key generation** — community admin keys split across N members via threshold signatures; no single point of trust or failure
+- **Verifiable moderation** — clients prove messages pass community content policy via ZK proofs, without revealing content to the server; enforceable rules without breaking E2EE
+
+---
+
 ## License
 
 [Cryptographic Autonomy License (CAL-1.0)](https://github.com/holochain/cryptographic-autonomy-license) — protects source openness like AGPL, plus legally requires that anyone running the software preserves end-user control of their identity and data.

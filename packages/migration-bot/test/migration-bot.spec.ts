@@ -237,4 +237,82 @@ describe('@harmony/migration-bot', () => {
       }
     })
   })
+
+  describe('Edge Cases', () => {
+    it('MUST handle empty channel (no messages)', async () => {
+      const api: DiscordAPI = {
+        ...createMockAPI(),
+        getChannelMessages: async () => []
+      }
+      const bot = new MigrationBot(crypto, api)
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const bundle = await bot.exportServer({ serverId: 'server1', adminDID: doc.id, adminKeyPair: kp })
+      expect(bundle).toBeDefined()
+      expect(bundle.metadata.messageCount).toBe(0)
+    })
+
+    it('MUST filter messages by channel IDs option', async () => {
+      const api = createMockAPI()
+      const bot = new MigrationBot(crypto, api)
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const bundle = await bot.exportServer({
+        serverId: 'server1',
+        adminDID: doc.id,
+        adminKeyPair: kp,
+        options: { channels: ['ch1'] }
+      })
+      expect(bundle).toBeDefined()
+    })
+
+    it('link token MUST have 32 hex chars', () => {
+      const bot = new MigrationBot(crypto, createMockAPI())
+      const t1 = bot.generateLinkToken('u1')
+      const t2 = bot.generateLinkToken('u2')
+      expect(t1.token).toHaveLength(32)
+      expect(t2.token).toHaveLength(32)
+      expect(t1.token).not.toBe(t2.token)
+    })
+
+    it('MUST reject unknown link token', () => {
+      const bot = new MigrationBot(crypto, createMockAPI())
+      expect(bot.verifyLinkToken('nonexistent')).toBeNull()
+    })
+
+    it('isRunning MUST return false initially', () => {
+      const bot = new MigrationBot(crypto, createMockAPI())
+      expect(bot.isRunning()).toBe(false)
+    })
+
+    it('MUST handle date filtering', async () => {
+      const api = createMockAPI(5)
+      const bot = new MigrationBot(crypto, api)
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const bundle = await bot.exportServer({
+        serverId: 'server1',
+        adminDID: doc.id,
+        adminKeyPair: kp,
+        options: { afterDate: '2023-01-15T10:02:00Z' }
+      })
+      expect(bundle).toBeDefined()
+    })
+
+    it('progress callback phases MUST include roles and members', async () => {
+      const api = createMockAPI()
+      const bot = new MigrationBot(crypto, api)
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const phases: string[] = []
+      await bot.exportServer({
+        serverId: 'server1',
+        adminDID: doc.id,
+        adminKeyPair: kp,
+        onProgress: (p) => phases.push(p.phase)
+      })
+      expect(phases).toContain('roles')
+      expect(phases).toContain('members')
+    })
+  })
 })

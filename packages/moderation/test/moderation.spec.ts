@@ -668,5 +668,256 @@ describe('@harmony/moderation', () => {
       expect(rules.map((r) => r.type)).toContain('slowMode')
       expect(rules.map((r) => r.type)).toContain('rateLimit')
     })
+
+    it('MUST return empty for community with no rules', () => {
+      const plugin = new ModerationPlugin()
+      expect(plugin.getRules('nonexistent')).toEqual([])
+    })
+
+    it('removeRule on non-existent rule MUST be no-op', () => {
+      const plugin = new ModerationPlugin()
+      plugin.addRule('c1', { id: 'r1', type: 'slowMode', channelId: 'ch1', intervalSeconds: 5 })
+      plugin.removeRule('c1', 'nonexistent')
+      expect(plugin.getRules('c1').length).toBe(1)
+    })
+
+    it('removeRule on non-existent community MUST be no-op', () => {
+      const plugin = new ModerationPlugin()
+      plugin.removeRule('nonexistent', 'r1')
+      // Should not throw
+    })
+  })
+
+  describe('Lockdown', () => {
+    it('MUST block messages during lockdown', async () => {
+      const plugin = new ModerationPlugin()
+      const rule: RaidDetectionRule = {
+        id: 'rd-block',
+        type: 'raidDetection',
+        joinThreshold: 1,
+        windowSeconds: 60,
+        lockdownDurationSeconds: 300,
+        action: 'lockdown'
+      }
+      plugin.addRule('c1', rule)
+
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const vc = await vcService.issue({
+        issuerDID: doc.id,
+        issuerKeyPair: kp,
+        subjectDID: doc.id,
+        type: 'CommunityMembershipCredential',
+        claims: {}
+      })
+      await plugin.handleJoin('c1', 'did:key:trigger', vc)
+
+      // Community should be locked down
+      expect(plugin.isLockedDown('c1')).toBe(true)
+
+      // Messages should be blocked
+      const result = await plugin.handleMessage('c1', createTestMessage('did:key:alice'))
+      expect(result.allowed).toBe(false)
+      expect(result.action).toBe('lockdown')
+    })
+
+    it('MUST block joins during lockdown', async () => {
+      const plugin = new ModerationPlugin()
+      const rule: RaidDetectionRule = {
+        id: 'rd-join-block',
+        type: 'raidDetection',
+        joinThreshold: 1,
+        windowSeconds: 60,
+        lockdownDurationSeconds: 300,
+        action: 'lockdown'
+      }
+      plugin.addRule('c1', rule)
+
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const vc = await vcService.issue({
+        issuerDID: doc.id,
+        issuerKeyPair: kp,
+        subjectDID: doc.id,
+        type: 'CommunityMembershipCredential',
+        claims: {}
+      })
+      await plugin.handleJoin('c1', 'did:key:trigger', vc)
+
+      // Subsequent join should be blocked
+      const result = await plugin.handleJoin('c1', 'did:key:blocked', vc)
+      expect(result.allowed).toBe(false)
+      expect(result.action).toBe('lockdown')
+    })
+
+    it('releaseLockdown MUST allow messages again', async () => {
+      const plugin = new ModerationPlugin()
+      const rule: RaidDetectionRule = {
+        id: 'rd-release',
+        type: 'raidDetection',
+        joinThreshold: 1,
+        windowSeconds: 60,
+        lockdownDurationSeconds: 300,
+        action: 'lockdown'
+      }
+      plugin.addRule('c1', rule)
+
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const vc = await vcService.issue({
+        issuerDID: doc.id,
+        issuerKeyPair: kp,
+        subjectDID: doc.id,
+        type: 'CommunityMembershipCredential',
+        claims: {}
+      })
+      await plugin.handleJoin('c1', 'did:key:trigger', vc)
+      expect(plugin.isLockedDown('c1')).toBe(true)
+
+      plugin.releaseLockdown('c1')
+      expect(plugin.isLockedDown('c1')).toBe(false)
+
+      const result = await plugin.handleMessage('c1', createTestMessage('did:key:alice'))
+      expect(result.allowed).toBe(true)
+    })
+
+    it('isLockedDown MUST return false for non-locked community', () => {
+      const plugin = new ModerationPlugin()
+      expect(plugin.isLockedDown('c1')).toBe(false)
+    })
+  })
+
+  describe('Content Filter Edge Cases', () => {
+    it('MUST handle empty text', () => {
+      const filter = new ContentFilter()
+      filter.addRule({ type: 'spam', pattern: /spam/i, confidence: 0.9, label: 'test' })
+      const result = filter.check({ text: '' })
+      expect(result.passed).toBe(true)
+      expect(result.flags).toEqual([])
+    })
+
+    it('MUST handle missing text field', () => {
+      const filter = new ContentFilter()
+      filter.addRule({ type: 'spam', pattern: /spam/i, confidence: 0.9, label: 'test' })
+      const result = filter.check({} as DecryptedContent)
+      expect(result.passed).toBe(true)
+    })
+
+    it('MUST flag with multiple matching rules', () => {
+      const filter = new ContentFilter()
+      filter.addRule({ type: 'spam', pattern: /buy/i, confidence: 0.8, label: 'spam-buy' })
+      filter.addRule({ type: 'toxic', pattern: /hate/i, confidence: 0.9, label: 'toxic-hate' })
+
+      const result = filter.check({ text: 'buy hate' })
+      expect(result.passed).toBe(false)
+      expect(result.flags.length).toBe(2)
+      expect(result.flags.map((f) => f.type)).toContain('spam')
+      expect(result.flags.map((f) => f.type)).toContain('toxic')
+    })
+  })
+
+  describe('Moderation Log Edge Cases', () => {
+    it('MUST query with limit', async () => {
+      const store = new MemoryQuadStore()
+      const log = new ModerationLog(store)
+
+      for (let i = 0; i < 5; i++) {
+        await log.log({
+          id: `limit-${i}`,
+          communityId: 'c1',
+          moderatorDID: 'did:key:admin',
+          targetDID: `did:key:user${i}`,
+          action: 'kick',
+          timestamp: new Date().toISOString()
+        })
+      }
+
+      const results = await log.query({ communityId: 'c1', limit: 3 })
+      expect(results.length).toBe(3)
+    })
+
+    it('MUST query with since filter', async () => {
+      const store = new MemoryQuadStore()
+      const log = new ModerationLog(store)
+
+      await log.log({
+        id: 'old',
+        communityId: 'c1',
+        moderatorDID: 'did:key:admin',
+        targetDID: 'did:key:u1',
+        action: 'kick',
+        timestamp: '2025-01-01T00:00:00Z'
+      })
+      await log.log({
+        id: 'new',
+        communityId: 'c1',
+        moderatorDID: 'did:key:admin',
+        targetDID: 'did:key:u2',
+        action: 'ban',
+        timestamp: '2026-06-01T00:00:00Z'
+      })
+
+      const results = await log.query({ communityId: 'c1', since: '2026-01-01T00:00:00Z' })
+      expect(results.length).toBe(1)
+      expect(results[0].id).toBe('new')
+    })
+
+    it('MUST return empty for no matching entries', async () => {
+      const store = new MemoryQuadStore()
+      const log = new ModerationLog(store)
+
+      const results = await log.query({ communityId: 'nonexistent' })
+      expect(results).toEqual([])
+    })
+
+    it('MUST store entry with expiresAt', async () => {
+      const store = new MemoryQuadStore()
+      const log = new ModerationLog(store)
+
+      await log.log({
+        id: 'expires-test',
+        communityId: 'c1',
+        moderatorDID: 'did:key:admin',
+        targetDID: 'did:key:user',
+        action: 'mute',
+        timestamp: new Date().toISOString(),
+        expiresAt: '2026-12-31T23:59:59Z'
+      })
+
+      const results = await log.query({ communityId: 'c1' })
+      expect(results[0].expiresAt).toBe('2026-12-31T23:59:59Z')
+    })
+  })
+
+  describe('Multiple Rules Interaction', () => {
+    it('MUST evaluate all rules (first failing wins)', async () => {
+      const plugin = new ModerationPlugin()
+      plugin.addRule('c1', { id: 'sm', type: 'slowMode', channelId: 'ch1', intervalSeconds: 10 })
+      plugin.addRule('c1', {
+        id: 'rl',
+        type: 'rateLimit',
+        scope: 'community',
+        scopeId: 'c1',
+        maxMessages: 100,
+        windowSeconds: 60
+      })
+
+      // First message passes both
+      const r1 = await plugin.handleMessage('c1', createTestMessage('did:key:alice', 'ch1'))
+      expect(r1.allowed).toBe(true)
+
+      // Second message fails slow mode (first rule)
+      const r2 = await plugin.handleMessage('c1', createTestMessage('did:key:alice', 'ch1'))
+      expect(r2.allowed).toBe(false)
+      expect(r2.action).toBe('slowMode')
+    })
+
+    it('MUST not affect messages without matching rules', async () => {
+      const plugin = new ModerationPlugin()
+      // No rules for c1
+      const result = await plugin.handleMessage('c1', createTestMessage('did:key:alice'))
+      expect(result.allowed).toBe(true)
+      expect(result.action).toBe('none')
+    })
   })
 })

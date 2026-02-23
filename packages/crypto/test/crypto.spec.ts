@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { createCryptoProvider } from '../src/index.js'
+import { createCryptoProvider, randomBytes, NobleCryptoProvider } from '../src/index.js'
+import type { KeyPair, EncryptedPayload, CryptoProvider } from '../src/index.js'
 
 const crypto = createCryptoProvider()
 
@@ -164,6 +165,121 @@ describe('@harmony/crypto', () => {
       expect(kp1.publicKey).toEqual(kp2.publicKey)
       expect(kp1.secretKey).toEqual(kp2.secretKey)
       expect(kp1.type).toBe('Ed25519')
+    })
+
+    it('MUST produce different seeds from different mnemonics', async () => {
+      const m1 = crypto.generateMnemonic()
+      const m2 = crypto.generateMnemonic()
+      const s1 = await crypto.mnemonicToSeed(m1)
+      const s2 = await crypto.mnemonicToSeed(m2)
+      expect(s1).not.toEqual(s2)
+    })
+  })
+
+  describe('Edge Cases', () => {
+    it('MUST sign and verify empty data', async () => {
+      const kp = await crypto.generateSigningKeyPair()
+      const data = new Uint8Array(0)
+      const sig = await crypto.sign(data, kp.secretKey)
+      expect(await crypto.verify(data, sig, kp.publicKey)).toBe(true)
+    })
+
+    it('MUST encrypt and decrypt empty plaintext', async () => {
+      const sender = await crypto.generateEncryptionKeyPair()
+      const recipient = await crypto.generateEncryptionKeyPair()
+      const plaintext = new Uint8Array(0)
+      const encrypted = await crypto.encrypt(plaintext, recipient.publicKey, sender.secretKey)
+      const decrypted = await crypto.decrypt(encrypted, sender.publicKey, recipient.secretKey)
+      expect(decrypted).toEqual(plaintext)
+    })
+
+    it('MUST symmetrically encrypt and decrypt empty plaintext', async () => {
+      const key = new Uint8Array(32).fill(1)
+      const plaintext = new Uint8Array(0)
+      const encrypted = await crypto.symmetricEncrypt(plaintext, key)
+      const decrypted = await crypto.symmetricDecrypt(encrypted, key)
+      expect(decrypted).toEqual(plaintext)
+    })
+
+    it('MUST encrypt and decrypt large data', async () => {
+      const sender = await crypto.generateEncryptionKeyPair()
+      const recipient = await crypto.generateEncryptionKeyPair()
+      const plaintext = new Uint8Array(100_000)
+      for (let i = 0; i < plaintext.length; i++) plaintext[i] = i % 256
+      const encrypted = await crypto.encrypt(plaintext, recipient.publicKey, sender.secretKey)
+      const decrypted = await crypto.decrypt(encrypted, sender.publicKey, recipient.secretKey)
+      expect(decrypted).toEqual(plaintext)
+    })
+
+    it('MUST reject verification with tampered data', async () => {
+      const kp = await crypto.generateSigningKeyPair()
+      const data = new TextEncoder().encode('hello')
+      const sig = await crypto.sign(data, kp.secretKey)
+      const tampered = new TextEncoder().encode('world')
+      expect(await crypto.verify(tampered, sig, kp.publicKey)).toBe(false)
+    })
+
+    it('MUST fail symmetric decryption with tampered ciphertext', async () => {
+      const key = new Uint8Array(32).fill(1)
+      const plaintext = new TextEncoder().encode('test')
+      const encrypted = await crypto.symmetricEncrypt(plaintext, key)
+      encrypted.ciphertext[0] ^= 0xff
+      await expect(crypto.symmetricDecrypt(encrypted, key)).rejects.toThrow()
+    })
+
+    it('MUST fail symmetric decryption with tampered nonce', async () => {
+      const key = new Uint8Array(32).fill(1)
+      const plaintext = new TextEncoder().encode('test')
+      const encrypted = await crypto.symmetricEncrypt(plaintext, key)
+      encrypted.nonce[0] ^= 0xff
+      await expect(crypto.symmetricDecrypt(encrypted, key)).rejects.toThrow()
+    })
+
+    it('MUST produce 32-byte derived keys', async () => {
+      const secret = new Uint8Array(32).fill(1)
+      const salt = new Uint8Array(16).fill(2)
+      const key = await crypto.deriveKey(secret, salt, 'test')
+      expect(key).toHaveLength(32)
+    })
+
+    it('randomBytes MUST produce correct length', () => {
+      expect(randomBytes(0)).toHaveLength(0)
+      expect(randomBytes(1)).toHaveLength(1)
+      expect(randomBytes(32)).toHaveLength(32)
+      expect(randomBytes(64)).toHaveLength(64)
+    })
+
+    it('randomBytes MUST produce unique output', () => {
+      const a = randomBytes(32)
+      const b = randomBytes(32)
+      expect(a).not.toEqual(b)
+    })
+
+    it('createCryptoProvider MUST return NobleCryptoProvider instance', () => {
+      const provider = createCryptoProvider()
+      expect(provider).toBeInstanceOf(NobleCryptoProvider)
+    })
+
+    it('key pair consistency: sign with generated key, verify succeeds', async () => {
+      const kp = await crypto.generateSigningKeyPair()
+      const msg = new TextEncoder().encode('consistency check')
+      const sig = await crypto.sign(msg, kp.secretKey)
+      expect(await crypto.verify(msg, sig, kp.publicKey)).toBe(true)
+    })
+
+    it('derived encryption keys should work for encrypt/decrypt', async () => {
+      const signing = await crypto.generateSigningKeyPair()
+      const encKP = await crypto.deriveEncryptionKeyPair(signing)
+      const sender = await crypto.generateEncryptionKeyPair()
+      const plaintext = new TextEncoder().encode('test derived')
+      const encrypted = await crypto.encrypt(plaintext, encKP.publicKey, sender.secretKey)
+      const decrypted = await crypto.decrypt(encrypted, sender.publicKey, encKP.secretKey)
+      expect(decrypted).toEqual(plaintext)
+    })
+
+    it('X25519 secret key MUST be 32 bytes', async () => {
+      const kp = await crypto.generateEncryptionKeyPair()
+      expect(kp.secretKey).toHaveLength(32)
     })
   })
 })

@@ -736,4 +736,139 @@ describe('@harmony/e2ee', () => {
       expect(new TextDecoder().decode(decrypted)).toBe('test')
     })
   })
+
+  describe('Edge Cases', () => {
+    it('MUST encrypt/decrypt empty plaintext', async () => {
+      const { group } = await createTestGroup()
+      const ct = await group.encrypt(new Uint8Array(0))
+      const result = await group.decrypt(ct)
+      expect(result.plaintext.length).toBe(0)
+    })
+
+    it('MUST encrypt/decrypt large plaintext (64KB)', async () => {
+      const { group } = await createTestGroup()
+      const large = new Uint8Array(65536)
+      for (let i = 0; i < large.length; i++) large[i] = i % 256
+      const ct = await group.encrypt(large)
+      const result = await group.decrypt(ct)
+      expect(result.plaintext.length).toBe(65536)
+      expect(result.plaintext[0]).toBe(0)
+      expect(result.plaintext[255]).toBe(255)
+    })
+
+    it('MUST reject tampered ciphertext (integrity)', async () => {
+      const { group } = await createTestGroup()
+      const ct = await group.encrypt(new TextEncoder().encode('integrity test'))
+      // Tamper with ciphertext
+      const tampered: MLSCiphertext = {
+        ...ct,
+        ciphertext: new Uint8Array(ct.ciphertext)
+      }
+      tampered.ciphertext[tampered.ciphertext.length - 1] ^= 0xff
+      await expect(group.decrypt(tampered)).rejects.toThrow()
+    })
+
+    it('MUST handle group with exactly 1 member', async () => {
+      const { group } = await createTestGroup()
+      expect(group.memberCount()).toBe(1)
+      const ct = await group.encrypt(new TextEncoder().encode('solo'))
+      const result = await group.decrypt(ct)
+      expect(new TextDecoder().decode(result.plaintext)).toBe('solo')
+    })
+
+    it('MUST reject removeMember for non-existent member', async () => {
+      const { group } = await createTestGroup()
+      await expect(group.removeMember(99)).rejects.toThrow()
+    })
+
+    it('MUST handle processCommit with update proposal', async () => {
+      const { group } = await createTestGroup()
+      const bobSig = await crypto.generateSigningKeyPair()
+      const bobEnc = await crypto.generateEncryptionKeyPair()
+      const bobKP = await mlsProvider.createKeyPackage({
+        did: 'did:key:bob',
+        signingKeyPair: bobSig,
+        encryptionKeyPair: bobEnc
+      })
+      const { welcome, commit } = await group.addMember(bobKP)
+      const bobGroup = await mlsProvider.joinFromWelcome(welcome, {
+        publicKey: bobEnc.publicKey,
+        secretKey: bobSig.secretKey,
+        type: 'Ed25519'
+      })
+      // Bob processes the add commit
+      // Creator updates keys and Bob processes it
+      const updateCommit = await group.updateKeys()
+      await bobGroup.processCommit(updateCommit)
+      // Both should be at same epoch
+      expect(bobGroup.epoch).toBe(group.epoch)
+      // Encrypt/decrypt should work
+      const ct = await group.encrypt(new TextEncoder().encode('after update'))
+      const result = await bobGroup.decrypt(ct)
+      expect(new TextDecoder().decode(result.plaintext)).toBe('after update')
+    })
+
+    it('MUST export, reload, then encrypt/decrypt', async () => {
+      const { group, signingKP } = await createTestGroup()
+      const state = group.exportState()
+      const loaded = await mlsProvider.loadGroup(state, signingKP)
+      const ct = await loaded.encrypt(new TextEncoder().encode('after reload'))
+      const result = await loaded.decrypt(ct)
+      expect(new TextDecoder().decode(result.plaintext)).toBe('after reload')
+    })
+
+    it('DM MUST handle multiple messages in sequence', async () => {
+      const aliceEnc = await crypto.generateEncryptionKeyPair()
+      const bobEnc = await crypto.generateEncryptionKeyPair()
+      const aliceCh = await dmProvider.createChannel({
+        senderDID: 'did:key:alice',
+        senderKeyPair: aliceEnc,
+        recipientDID: 'did:key:bob',
+        recipientPublicKey: bobEnc.publicKey
+      })
+      const bobCh = await dmProvider.openChannel({
+        recipientDID: 'did:key:bob',
+        recipientKeyPair: bobEnc,
+        senderDID: 'did:key:alice',
+        senderPublicKey: aliceEnc.publicKey
+      })
+      for (let i = 0; i < 10; i++) {
+        const ct = await aliceCh.encrypt(new TextEncoder().encode(`msg-${i}`))
+        const pt = await bobCh.decrypt(ct)
+        expect(new TextDecoder().decode(pt)).toBe(`msg-${i}`)
+      }
+    })
+
+    it('DM MUST fail with tampered nonce', async () => {
+      const aliceEnc = await crypto.generateEncryptionKeyPair()
+      const bobEnc = await crypto.generateEncryptionKeyPair()
+      const aliceCh = await dmProvider.createChannel({
+        senderDID: 'did:key:alice',
+        senderKeyPair: aliceEnc,
+        recipientDID: 'did:key:bob',
+        recipientPublicKey: bobEnc.publicKey
+      })
+      const bobCh = await dmProvider.openChannel({
+        recipientDID: 'did:key:bob',
+        recipientKeyPair: bobEnc,
+        senderDID: 'did:key:alice',
+        senderPublicKey: aliceEnc.publicKey
+      })
+      const ct = await aliceCh.encrypt(new TextEncoder().encode('test'))
+      const tampered = { ...ct, nonce: new Uint8Array(ct.nonce.length) }
+      await expect(bobCh.decrypt(tampered)).rejects.toThrow()
+    })
+
+    it('verifyKeyPackageSignature MUST return false for wrong signature', async () => {
+      const sigKP = await crypto.generateSigningKeyPair()
+      const encKP = await crypto.generateEncryptionKeyPair()
+      const kp = await mlsProvider.createKeyPackage({
+        did: 'did:key:test',
+        signingKeyPair: sigKP,
+        encryptionKeyPair: encKP
+      })
+      const badSig = { ...kp, signature: new Uint8Array(kp.signature.length) }
+      expect(verifyKeyPackageSignature(badSig)).toBe(false)
+    })
+  })
 })

@@ -593,4 +593,173 @@ describe('@harmony/federation', () => {
       expect(result.accepted).toBe(false)
     })
   })
+
+  describe('Edge Cases', () => {
+    it('MUST enforce max peers limit', async () => {
+      const instanceA = await createInstanceIdentity('A')
+      const fm = new FederationManager({
+        instanceDID: instanceA.did,
+        instanceKeyPair: instanceA.keyPair,
+        maxPeers: 1
+      })
+
+      const instanceB = await createInstanceIdentity('B')
+      const cap1 = await createFederationCap(instanceA.did, instanceA.keyPair, 'c1')
+      await fm.addPeer({ instanceDID: instanceB.did, endpoint: 'ws://b', capability: cap1 })
+
+      const instanceC = await createInstanceIdentity('C')
+      const cap2 = await createFederationCap(instanceA.did, instanceA.keyPair, 'c2')
+      await expect(fm.addPeer({ instanceDID: instanceC.did, endpoint: 'ws://c', capability: cap2 })).rejects.toThrow(
+        'Max peers reached'
+      )
+    })
+
+    it('MUST reject ZCAP without relay/federation action', async () => {
+      const instanceA = await createInstanceIdentity('A')
+      const fm = new FederationManager({
+        instanceDID: instanceA.did,
+        instanceKeyPair: instanceA.keyPair
+      })
+
+      // Create ZCAP with no relay action
+      const cap = await zcapService.createRoot({
+        ownerDID: instanceA.did,
+        ownerKeyPair: instanceA.keyPair,
+        scope: { community: 'c1' },
+        allowedAction: ['https://harmony.example/vocab#ManageChannel']
+      })
+
+      const instanceB = await createInstanceIdentity('B')
+      await expect(fm.addPeer({ instanceDID: instanceB.did, endpoint: 'ws://b', capability: cap })).rejects.toThrow(
+        'ZCAP does not include relay/federation action'
+      )
+    })
+
+    it('MUST reject message from unknown peer', async () => {
+      const instanceA = await createInstanceIdentity('A')
+      const fm = new FederationManager({
+        instanceDID: instanceA.did,
+        instanceKeyPair: instanceA.keyPair
+      })
+
+      const result = await fm.handleFederatedMessage('did:key:unknown', {
+        id: 'unknown-peer-msg',
+        type: 'federation.relay',
+        timestamp: new Date().toISOString(),
+        sender: 'did:key:unknown',
+        payload: { communityId: 'c1' }
+      })
+      expect(result.accepted).toBe(false)
+      expect(result.error).toBe('Unknown peer')
+    })
+
+    it('MUST reject message with revoked ZCAP', async () => {
+      const instanceA = await createInstanceIdentity('A')
+      const instanceB = await createInstanceIdentity('B')
+      const cap = await createFederationCap(instanceA.did, instanceA.keyPair, 'c1')
+
+      const fm = new FederationManager(
+        {
+          instanceDID: instanceA.did,
+          instanceKeyPair: instanceA.keyPair
+        },
+        { revocationStore }
+      )
+
+      await fm.addPeer({ instanceDID: instanceB.did, endpoint: 'ws://b', capability: cap })
+
+      // Manually revoke the ZCAP
+      await revocationStore.revoke(cap.id)
+
+      const result = await fm.handleFederatedMessage(instanceB.did, {
+        id: 'revoked-msg',
+        type: 'federation.relay',
+        timestamp: new Date().toISOString(),
+        sender: instanceB.did,
+        payload: { communityId: 'c1' }
+      })
+      expect(result.accepted).toBe(false)
+      expect(result.error).toBe('Federation ZCAP revoked')
+    })
+
+    it('MUST throw when connecting to unknown peer', async () => {
+      const instanceA = await createInstanceIdentity('A')
+      const fm = new FederationManager({
+        instanceDID: instanceA.did,
+        instanceKeyPair: instanceA.keyPair
+      })
+
+      await expect(fm.connectToPeer('did:key:unknown')).rejects.toThrow('Unknown peer')
+    })
+
+    it('MUST handle disconnect from non-connected peer gracefully', async () => {
+      const instanceA = await createInstanceIdentity('A')
+      const instanceB = await createInstanceIdentity('B')
+      const cap = await createFederationCap(instanceA.did, instanceA.keyPair, 'c1')
+
+      const fm = new FederationManager({
+        instanceDID: instanceA.did,
+        instanceKeyPair: instanceA.keyPair
+      })
+
+      await fm.addPeer({ instanceDID: instanceB.did, endpoint: 'ws://b', capability: cap })
+      // Disconnect without connecting first — should not throw
+      await fm.disconnectFromPeer(instanceB.did)
+      expect(fm.peers()[0].status).toBe('disconnected')
+    })
+
+    it('MUST emit peer.error on connection failure', async () => {
+      const instanceA = await createInstanceIdentity('A')
+      const instanceB = await createInstanceIdentity('B')
+      const cap = await createFederationCap(instanceA.did, instanceA.keyPair, 'c1')
+
+      const fm = new FederationManager({
+        instanceDID: instanceA.did,
+        instanceKeyPair: instanceA.keyPair
+      })
+
+      let errorEmitted = false
+      fm.on('peer.error', () => {
+        errorEmitted = true
+      })
+
+      await fm.addPeer({ instanceDID: instanceB.did, endpoint: 'ws://127.0.0.1:59999', capability: cap })
+      await expect(fm.connectToPeer(instanceB.did)).rejects.toThrow()
+      expect(errorEmitted).toBe(true)
+    })
+
+    it('MUST relay only to connected peers', async () => {
+      const instanceA = await createInstanceIdentity('A')
+      const instanceB = await createInstanceIdentity('B')
+      const cap = await createFederationCap(instanceA.did, instanceA.keyPair, 'c1')
+
+      const fm = new FederationManager({
+        instanceDID: instanceA.did,
+        instanceKeyPair: instanceA.keyPair
+      })
+
+      await fm.addPeer({ instanceDID: instanceB.did, endpoint: 'ws://b', capability: cap })
+
+      // Relay without connecting — should not throw, just skip
+      await fm.relayToFederated('c1', {
+        id: 'no-conn-relay',
+        type: 'channel.message',
+        timestamp: new Date().toISOString(),
+        sender: 'did:key:user',
+        payload: {}
+      })
+      // No error expected
+    })
+
+    it('removePeer on non-existent peer MUST be no-op', async () => {
+      const instanceA = await createInstanceIdentity('A')
+      const fm = new FederationManager({
+        instanceDID: instanceA.did,
+        instanceKeyPair: instanceA.keyPair
+      })
+
+      await fm.removePeer('did:key:nonexistent')
+      expect(fm.peers().length).toBe(0)
+    })
+  })
 })

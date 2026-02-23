@@ -529,3 +529,249 @@ describe('D1 Migration', () => {
     expect(did).toBe('did:key:test')
   })
 })
+
+// ── Edge Cases ──
+describe('Edge Cases', () => {
+  it('T34: Rate limiter blocks after max requests', async () => {
+    const limiter = createRateLimiter(kv)
+    for (let i = 0; i < 5; i++) {
+      await limiter.check('burst-ip', 5, 60)
+    }
+    const blocked = await limiter.check('burst-ip', 5, 60)
+    expect(blocked.allowed).toBe(false)
+    expect(blocked.remaining).toBe(0)
+  })
+
+  it('T35: Rate limiter allows different IPs independently', async () => {
+    const limiter = createRateLimiter(kv)
+    const r1 = await limiter.check('ip-a', 1, 60)
+    expect(r1.allowed).toBe(true)
+    const r2 = await limiter.check('ip-b', 1, 60)
+    expect(r2.allowed).toBe(true)
+  })
+
+  it('T36: Export download returns null for nonexistent', async () => {
+    const store = createExportStore(r2, db)
+    const bundle = await store.download('nonexistent-id')
+    expect(bundle).toBeNull()
+  })
+
+  it('T37: Invite stats returns null for nonexistent code', async () => {
+    const resolver = createInviteResolver(db)
+    const stats = await resolver.stats('nonexistent')
+    expect(stats).toBeNull()
+  })
+
+  it('T38: Health endpoint includes ok status', async () => {
+    const env = createEnv()
+    const resp = await handleRequest({ method: 'GET', url: 'https://portal.harmony.chat/health', headers: {} }, env)
+    const body = JSON.parse(resp.body)
+    expect(body.status).toBe('ok')
+  })
+
+  it('T39: Unknown route returns 404', async () => {
+    const env = createEnv()
+    const resp = await handleRequest(
+      { method: 'GET', url: 'https://portal.harmony.chat/nonexistent', headers: {} },
+      env
+    )
+    expect(resp.status).toBe(404)
+  })
+
+  it('T40: Identity link via HTTP handler', async () => {
+    const env = createEnv()
+    const resp = await handleRequest(
+      {
+        method: 'POST',
+        url: 'https://portal.harmony.chat/api/identity/link',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ discordUserId: 'httpUser1', did: 'did:key:zHttp1', proof: 'p1' })
+      },
+      env
+    )
+    expect(resp.status).toBe(200)
+    const body = JSON.parse(resp.body)
+    expect(body.success).toBe(true)
+  })
+
+  it('T41: Identity verify via HTTP handler', async () => {
+    const env = createEnv()
+    // First link
+    await handleRequest(
+      {
+        method: 'POST',
+        url: 'https://portal.harmony.chat/api/identity/link',
+        headers: {},
+        body: JSON.stringify({ discordUserId: 'verifyUser', did: 'did:key:zVerify', proof: 'p' })
+      },
+      env
+    )
+
+    const resp = await handleRequest(
+      {
+        method: 'POST',
+        url: 'https://portal.harmony.chat/api/identity/verify',
+        headers: {},
+        body: JSON.stringify({ discordUserId: 'verifyUser' })
+      },
+      env
+    )
+    expect(resp.status).toBe(200)
+    expect(JSON.parse(resp.body).did).toBe('did:key:zVerify')
+  })
+
+  it('T42: Identity verify returns 404 for unknown', async () => {
+    const env = createEnv()
+    const resp = await handleRequest(
+      {
+        method: 'POST',
+        url: 'https://portal.harmony.chat/api/identity/verify',
+        headers: {},
+        body: JSON.stringify({ discordUserId: 'nobody' })
+      },
+      env
+    )
+    expect(resp.status).toBe(404)
+  })
+
+  it('T43: Duplicate identity link returns 409', async () => {
+    const env = createEnv()
+    await handleRequest(
+      {
+        method: 'POST',
+        url: 'https://portal.harmony.chat/api/identity/link',
+        headers: {},
+        body: JSON.stringify({ discordUserId: 'dup1', did: 'did:key:zDup1', proof: 'p' })
+      },
+      env
+    )
+    const resp = await handleRequest(
+      {
+        method: 'POST',
+        url: 'https://portal.harmony.chat/api/identity/link',
+        headers: {},
+        body: JSON.stringify({ discordUserId: 'dup1', did: 'did:key:zDup2', proof: 'p' })
+      },
+      env
+    )
+    expect(resp.status).toBe(409)
+  })
+
+  it('T44: Directory register and list via HTTP', async () => {
+    const env = createEnv()
+    await handleRequest(
+      {
+        method: 'POST',
+        url: 'https://portal.harmony.chat/api/directory/register',
+        headers: {},
+        body: JSON.stringify({
+          communityId: 'c1',
+          name: 'Test Community',
+          endpoint: 'ws://test:4000',
+          memberCount: 10,
+          ownerDID: 'did:key:z1'
+        })
+      },
+      env
+    )
+    const resp = await handleRequest(
+      {
+        method: 'GET',
+        url: 'https://portal.harmony.chat/api/directory',
+        headers: {}
+      },
+      env
+    )
+    expect(resp.status).toBe(200)
+    const body = JSON.parse(resp.body)
+    expect(body.communities.length).toBeGreaterThan(0)
+  })
+
+  it('T45: Invite create and revoke via HTTP', async () => {
+    const env = createEnv()
+    const createResp = await handleRequest(
+      {
+        method: 'POST',
+        url: 'https://portal.harmony.chat/api/invite/create',
+        headers: {},
+        body: JSON.stringify({
+          communityId: 'c1',
+          endpoint: 'ws://test:4000',
+          metadata: { name: 'Test', memberCount: 5 },
+          createdBy: 'did:key:z1'
+        })
+      },
+      env
+    )
+    expect(createResp.status).toBe(200)
+    const { code } = JSON.parse(createResp.body)
+
+    const deleteResp = await handleRequest(
+      {
+        method: 'DELETE',
+        url: `https://portal.harmony.chat/api/invite/${code}`,
+        headers: {}
+      },
+      env
+    )
+    expect(deleteResp.status).toBe(200)
+  })
+
+  it('T46: Relay node disconnect cleans up correctly', () => {
+    const relay = new RelayDurableObject()
+    const ws1 = createMockWebSocket()
+    const ws2 = createMockWebSocket()
+    relay.handleNodeConnection(ws1, 'did:key:n1')
+    relay.handleNodeConnection(ws2, 'did:key:n2')
+    expect(relay.getConnectedNodes()).toHaveLength(2)
+    ws1.close()
+    expect(relay.getConnectedNodes()).toHaveLength(1)
+    expect(relay.getConnectedNodes()).toContain('did:key:n2')
+  })
+
+  it('T47: Relay client to non-existent node gets closed', () => {
+    const relay = new RelayDurableObject()
+    const clientWs = createMockWebSocket()
+    relay.handleClientConnection(clientWs, 'did:key:nonexistent')
+    // Client should be closed with error code
+    expect(clientWs.readyState).not.toBe(1)
+  })
+
+  it('T48: Export upload and list via HTTP handler', async () => {
+    const env = createEnv()
+    await handleRequest(
+      {
+        method: 'POST',
+        url: 'https://portal.harmony.chat/api/storage/upload',
+        headers: {},
+        body: JSON.stringify({
+          ciphertext: [1, 2, 3],
+          nonce: [4, 5],
+          metadata: {
+            exportDate: '2026-01-01',
+            sourceServerId: 's1',
+            sourceServerName: 'S',
+            adminDID: 'did:key:zA',
+            channelCount: 1,
+            messageCount: 1,
+            memberCount: 1,
+            quadCount: 1
+          }
+        })
+      },
+      env
+    )
+    const listResp = await handleRequest(
+      {
+        method: 'POST',
+        url: 'https://portal.harmony.chat/api/storage/list',
+        headers: {},
+        body: JSON.stringify({ adminDID: 'did:key:zA' })
+      },
+      env
+    )
+    expect(listResp.status).toBe(200)
+    const body = JSON.parse(listResp.body)
+    expect(body.exports.length).toBeGreaterThan(0)
+  })
+})

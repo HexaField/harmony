@@ -352,4 +352,188 @@ describe('@harmony/zcap', () => {
       expect(quads.length).toBeGreaterThan(0)
     })
   })
+
+  describe('Edge Cases', () => {
+    it('MUST reject scope widening in delegation', async () => {
+      const owner = await createTestIdentity()
+      const delegate = await createTestIdentity()
+      const root = await zcapService.createRoot({
+        ownerDID: owner.did,
+        ownerKeyPair: owner.kp,
+        scope: { community: 'test' },
+        allowedAction: ['harmony:SendMessage']
+      })
+      await expect(
+        zcapService.delegate({
+          parentCapability: root,
+          delegatorKeyPair: owner.kp,
+          invokerDID: delegate.did,
+          allowedAction: ['harmony:SendMessage'],
+          scope: { community: 'test', extra: 'wider' }
+        })
+      ).rejects.toThrow('Cannot widen scope')
+    })
+
+    it('MUST generate unique capability IDs', async () => {
+      const owner = await createTestIdentity()
+      const r1 = await zcapService.createRoot({
+        ownerDID: owner.did,
+        ownerKeyPair: owner.kp,
+        scope: {},
+        allowedAction: ['harmony:SendMessage']
+      })
+      const r2 = await zcapService.createRoot({
+        ownerDID: owner.did,
+        ownerKeyPair: owner.kp,
+        scope: {},
+        allowedAction: ['harmony:SendMessage']
+      })
+      expect(r1.id).not.toBe(r2.id)
+    })
+
+    it('root capability MUST NOT have parentCapability', async () => {
+      const owner = await createTestIdentity()
+      const root = await zcapService.createRoot({
+        ownerDID: owner.did,
+        ownerKeyPair: owner.kp,
+        scope: {},
+        allowedAction: ['harmony:SendMessage']
+      })
+      expect(root.parentCapability).toBeUndefined()
+    })
+
+    it('MUST verify 3-level delegation chain', async () => {
+      const owner = await createTestIdentity()
+      const mid = await createTestIdentity()
+      const leaf = await createTestIdentity()
+      const root = await zcapService.createRoot({
+        ownerDID: owner.did,
+        ownerKeyPair: owner.kp,
+        scope: { community: 'test' },
+        allowedAction: ['harmony:SendMessage', 'harmony:AddReaction']
+      })
+      const level1 = await zcapService.delegate({
+        parentCapability: root,
+        delegatorKeyPair: owner.kp,
+        invokerDID: mid.did,
+        allowedAction: ['harmony:SendMessage', 'harmony:AddReaction'],
+        scope: { community: 'test' }
+      })
+      const level2 = await zcapService.delegate({
+        parentCapability: level1,
+        delegatorKeyPair: mid.kp,
+        invokerDID: leaf.did,
+        allowedAction: ['harmony:SendMessage'],
+        scope: { community: 'test' }
+      })
+      const inv = await zcapService.invoke({
+        capability: level2,
+        invokerKeyPair: leaf.kp,
+        action: 'harmony:SendMessage',
+        target: 'ch:1'
+      })
+      const result = await zcapService.verifyInvocation(inv, [root, level1, level2], resolver)
+      expect(result.valid).toBe(true)
+    })
+
+    it('MUST reject invocation with missing capability in chain', async () => {
+      const owner = await createTestIdentity()
+      const root = await zcapService.createRoot({
+        ownerDID: owner.did,
+        ownerKeyPair: owner.kp,
+        scope: {},
+        allowedAction: ['harmony:SendMessage']
+      })
+      const inv = await zcapService.invoke({
+        capability: root,
+        invokerKeyPair: owner.kp,
+        action: 'harmony:SendMessage',
+        target: 'ch:1'
+      })
+      // Pass empty chain
+      const result = await zcapService.verifyInvocation(inv, [], resolver)
+      expect(result.valid).toBe(false)
+    })
+
+    it('capabilityToQuads MUST include all allowed actions', async () => {
+      const owner = await createTestIdentity()
+      const root = await zcapService.createRoot({
+        ownerDID: owner.did,
+        ownerKeyPair: owner.kp,
+        scope: {},
+        allowedAction: ['harmony:SendMessage', 'harmony:AddReaction']
+      })
+      const quads = capabilityToQuads(root)
+      const actionQuads = quads.filter((q) => q.predicate === 'https://w3id.org/zcap#allowedAction')
+      expect(actionQuads).toHaveLength(2)
+    })
+
+    it('capabilityToQuads MUST include parentCapability for delegated cap', async () => {
+      const owner = await createTestIdentity()
+      const delegate = await createTestIdentity()
+      const root = await zcapService.createRoot({
+        ownerDID: owner.did,
+        ownerKeyPair: owner.kp,
+        scope: {},
+        allowedAction: ['harmony:SendMessage']
+      })
+      const child = await zcapService.delegate({
+        parentCapability: root,
+        delegatorKeyPair: owner.kp,
+        invokerDID: delegate.did,
+        allowedAction: ['harmony:SendMessage'],
+        scope: {}
+      })
+      const quads = capabilityToQuads(child)
+      const parentQuad = quads.find((q) => q.predicate === 'https://w3id.org/zcap#parentCapability')
+      expect(parentQuad).toBeDefined()
+      expect(parentQuad!.object).toBe(root.id)
+    })
+
+    it('invocationToQuads MUST include action and target', async () => {
+      const owner = await createTestIdentity()
+      const root = await zcapService.createRoot({
+        ownerDID: owner.did,
+        ownerKeyPair: owner.kp,
+        scope: {},
+        allowedAction: ['harmony:SendMessage']
+      })
+      const inv = await zcapService.invoke({
+        capability: root,
+        invokerKeyPair: owner.kp,
+        action: 'harmony:SendMessage',
+        target: 'ch:general'
+      })
+      const quads = invocationToQuads(inv)
+      expect(quads.find((q) => q.predicate === 'https://w3id.org/zcap#action')?.object).toBe('harmony:SendMessage')
+      expect(quads.find((q) => q.predicate === 'https://w3id.org/zcap#target')?.object).toBe('ch:general')
+    })
+
+    it('MUST verify non-expired caveat', async () => {
+      const owner = await createTestIdentity()
+      const delegate = await createTestIdentity()
+      const root = await zcapService.createRoot({
+        ownerDID: owner.did,
+        ownerKeyPair: owner.kp,
+        scope: {},
+        allowedAction: ['harmony:SendMessage']
+      })
+      const child = await zcapService.delegate({
+        parentCapability: root,
+        delegatorKeyPair: owner.kp,
+        invokerDID: delegate.did,
+        allowedAction: ['harmony:SendMessage'],
+        scope: {},
+        caveats: [{ type: 'harmony:Expiry', value: '2099-01-01T00:00:00Z' }]
+      })
+      const inv = await zcapService.invoke({
+        capability: child,
+        invokerKeyPair: delegate.kp,
+        action: 'harmony:SendMessage',
+        target: 'ch:1'
+      })
+      const result = await zcapService.verifyInvocation(inv, [root, child], resolver)
+      expect(result.valid).toBe(true)
+    })
+  })
 })

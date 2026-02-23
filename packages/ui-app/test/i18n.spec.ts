@@ -1,0 +1,128 @@
+import { describe, it, expect } from 'vitest'
+import { en, t } from '../src/i18n/strings.js'
+
+describe('i18n strings', () => {
+  it('all string values are non-empty', () => {
+    for (const [key, value] of Object.entries(en)) {
+      expect(value, `${key} should be non-empty`).toBeTruthy()
+      expect(typeof value).toBe('string')
+    }
+  })
+
+  it('t() returns correct string for known key', () => {
+    expect(t('ONBOARDING_WELCOME')).toBe('Welcome to Harmony')
+  })
+
+  it('t() substitutes parameters', () => {
+    const result = t('ERROR_CONNECTION_FAILED', { url: 'ws://test:4000' })
+    expect(result).toContain('ws://test:4000')
+    expect(result).not.toContain('{url}')
+  })
+
+  it('t() handles multiple parameters', () => {
+    const result = t('ONBOARDING_MNEMONIC_VERIFY_PROMPT', { position: '5' })
+    expect(result).toContain('5')
+    expect(result).not.toContain('{position}')
+  })
+
+  // Verify all new keys added today exist
+  const requiredKeys = [
+    'ONBOARDING_WELCOME',
+    'ONBOARDING_CREATE_IDENTITY',
+    'ONBOARDING_RECOVER_IDENTITY',
+    'ONBOARDING_MNEMONIC_BACKUP',
+    'ONBOARDING_MNEMONIC_WARNING',
+    'ONBOARDING_MNEMONIC_COPY',
+    'ONBOARDING_MNEMONIC_COPIED',
+    'ONBOARDING_MNEMONIC_SAVED',
+    'ONBOARDING_MNEMONIC_VERIFY_TITLE',
+    'ONBOARDING_MNEMONIC_VERIFY_PROMPT',
+    'ONBOARDING_MNEMONIC_VERIFY',
+    'ONBOARDING_MNEMONIC_VERIFY_FAIL',
+    'ONBOARDING_MNEMONIC_SKIP',
+    'ONBOARDING_MNEMONIC_CONFIRM',
+    'ONBOARDING_RECOVER_PROMPT',
+    'ONBOARDING_RECOVER_INVALID',
+    'ONBOARDING_BACK',
+    'CREATE_COMMUNITY_TITLE',
+    'CREATE_COMMUNITY_NAME',
+    'CREATE_COMMUNITY_NAME_PLACEHOLDER',
+    'CREATE_COMMUNITY_DESCRIPTION',
+    'CREATE_COMMUNITY_DESCRIPTION_PLACEHOLDER',
+    'CREATE_COMMUNITY_SUBMIT',
+    'CREATE_COMMUNITY_CANCEL',
+    'CREATE_COMMUNITY_CREATING',
+    'SERVER_URL_LABEL',
+    'SERVER_URL_PLACEHOLDER',
+    'SERVER_AUTH_CREATING_VP',
+    'SETTINGS_USER',
+    'SETTINGS_IDENTITY',
+    'SETTINGS_SERVERS',
+    'SETTINGS_APPEARANCE',
+    'SETTINGS_ABOUT',
+    'SETTINGS_BACK',
+    'SETTINGS_DID',
+    'SETTINGS_DISPLAY_NAME',
+    'SETTINGS_DISPLAY_NAME_PLACEHOLDER',
+    'SETTINGS_MNEMONIC',
+    'SETTINGS_MNEMONIC_REVEAL',
+    'SETTINGS_MNEMONIC_REVEAL_WARNING',
+    'SETTINGS_MNEMONIC_HIDE',
+    'SETTINGS_ADD_SERVER',
+    'SETTINGS_NO_SERVERS',
+    'SETTINGS_VERSION',
+    'SETTINGS_LICENSE',
+    'SETTINGS_REPO',
+    'SETTINGS_THEME_DARK',
+    'SETTINGS_THEME_LIGHT',
+    'EMPTY_NO_COMMUNITIES',
+    'EMPTY_GET_STARTED',
+    'EMPTY_JOIN_COMMUNITY',
+    'JOIN_COMMUNITY_URL_LABEL',
+    'JOIN_COMMUNITY_URL_PLACEHOLDER',
+    'JOIN_COMMUNITY_CONNECTING',
+    'JOIN_COMMUNITY_CONNECT',
+    'JOIN_COMMUNITY_CANCEL',
+    'MIGRATION_TITLE',
+    'MIGRATION_INTRO',
+    'MIGRATION_OPTION_COMMUNITY',
+    'MIGRATION_OPTION_COMMUNITY_DESC',
+    'MIGRATION_START_COMMUNITY',
+    'MIGRATION_OPTION_LINK',
+    'MIGRATION_OPTION_LINK_DESC',
+    'MIGRATION_START_LINK',
+    'MIGRATION_BOT_SETUP_TITLE',
+    'MIGRATION_BOT_TOKEN',
+    'MIGRATION_BOT_TOKEN_PLACEHOLDER',
+    'MIGRATION_DISCORD_SERVER_ID',
+    'MIGRATION_DISCORD_SERVER_ID_PLACEHOLDER',
+    'MIGRATION_SERVER_URL',
+    'MIGRATION_FIELDS_REQUIRED',
+    'MIGRATION_START_EXPORT',
+    'MIGRATION_EXPORTING',
+    'MIGRATION_EXPORTING_DESC',
+    'MIGRATION_EXPORTING_NOTE',
+    'MIGRATION_IMPORTING',
+    'MIGRATION_IMPORTING_DESC',
+    'MIGRATION_LINK_TITLE',
+    'MIGRATION_LINK_DESC',
+    'MIGRATION_LINK_YOUR_DID',
+    'MIGRATION_PORTAL_URL',
+    'MIGRATION_LINK_DISCORD_BUTTON',
+    'MIGRATION_SKIP_LINKING',
+    'MIGRATION_COMPLETE_TITLE',
+    'MIGRATION_COMPLETE_DESC',
+    'MIGRATION_COMPLETE_CONTINUE',
+    'ERROR_CONNECTION_FAILED',
+    'ERROR_AUTH_FAILED',
+    'ERROR_NETWORK_LOST',
+    'ERROR_GENERIC',
+    'CONNECTION_CONNECTING'
+  ] as const
+
+  for (const key of requiredKeys) {
+    it(`has key: ${key}`, () => {
+      expect(en[key as keyof typeof en]).toBeTruthy()
+    })
+  }
+})

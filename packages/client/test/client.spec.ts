@@ -544,6 +544,209 @@ describe('@harmony/client', () => {
     })
   })
 
+  describe('Accessors', () => {
+    it('myDID() MUST return correct DID after connect', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+      expect(client.myDID()).toBe(identity.did)
+      await client.disconnect()
+    })
+
+    it('community(id) MUST return specific community or null', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      expect(client.community('nonexistent')).toBeNull()
+
+      const community = await client.createCommunity({ name: 'Accessor Test' })
+      expect(client.community(community.id)).not.toBeNull()
+      expect(client.community(community.id)?.info.name).toBe('Accessor Test')
+
+      await client.disconnect()
+    })
+  })
+
+  describe('DM Edit/Delete', () => {
+    it('MUST edit DM message', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      const msgId = await client.sendDM('did:key:recipient', 'original')
+      // Should not throw
+      await client.editDM('did:key:recipient', msgId, 'edited')
+      await client.disconnect()
+    })
+
+    it('MUST delete DM message', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      const msgId = await client.sendDM('did:key:recipient', 'to delete')
+      await client.deleteDM('did:key:recipient', msgId)
+
+      const dms = client.dmChannels()
+      const channel = dms.find((d) => d.recipientDID === 'did:key:recipient')
+      expect(channel?.messages.find((m) => m.id === msgId)).toBeUndefined()
+      await client.disconnect()
+    })
+  })
+
+  describe('Role Management', () => {
+    it('MUST send role.create message', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      await client.createRole('c1', { communityId: 'c1', name: 'Mod', permissions: ['kick'], position: 1 })
+      await client.disconnect()
+    })
+
+    it('MUST send role.update message', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      await client.updateRole('c1', 'r1', { communityId: 'c1', name: 'Admin', permissions: ['all'], position: 0 })
+      await client.disconnect()
+    })
+
+    it('MUST send role.delete message', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      await client.deleteRole('c1', 'r1')
+      await client.disconnect()
+    })
+
+    it('MUST assign role to member', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      await client.assignRole('c1', 'did:key:member', 'r1')
+      await client.disconnect()
+    })
+  })
+
+  describe('Kick/Ban', () => {
+    it('MUST send kick message', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      await client.kickMember('c1', 'did:key:baduser', 'spam')
+      await client.disconnect()
+    })
+
+    it('MUST send ban message', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      await client.banMember('c1', 'did:key:baduser', 'harassment')
+      await client.disconnect()
+    })
+  })
+
+  describe('Error Events', () => {
+    it('MUST emit error event on server error message', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      let errorReceived = false
+      client.on('error', () => {
+        errorReceived = true
+      })
+
+      // Trigger error by sending invalid ZCAP proof
+      const conn = server.connections()[0]
+      server.sendToConnectionById(conn.id, {
+        id: 'err-test',
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'FORBIDDEN', message: 'Test error' }
+      })
+
+      await new Promise((r) => setTimeout(r, 200))
+      expect(errorReceived).toBe(true)
+      await client.disconnect()
+    })
+  })
+
+  describe('Channel Operations', () => {
+    it('MUST delete channel', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      // Should not throw
+      await client.deleteChannel('c1', 'ch1')
+      await client.disconnect()
+    })
+  })
+
+  describe('Reconnection', () => {
+    it('MUST emit reconnecting event on server disconnect', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      let reconnecting = false
+      client.on('reconnecting', () => {
+        reconnecting = true
+      })
+
+      // Force disconnect the client's connection from server side
+      const conns = server.connections()
+      for (const conn of conns) conn.ws.close()
+      await new Promise((r) => setTimeout(r, 2500))
+
+      expect(reconnecting).toBe(true)
+      await client.disconnect()
+    })
+
+    it('MUST support manual reconnect', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+      await client.disconnect()
+
+      // Server is still running, just reconnect
+      await client.reconnect()
+      expect(client.isConnected()).toBe(true)
+      await client.disconnect()
+    })
+  })
+
+  describe('Clock Management', () => {
+    it('MUST increment clock on each send', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      const community = await client.createCommunity({ name: 'Clock Inc' })
+      const channelId = community.channels[0]?.id ?? 'ch1'
+      const sub = client.subscribeChannel(community.id, channelId)
+
+      await client.sendMessage(community.id, channelId, 'msg1')
+      await client.sendMessage(community.id, channelId, 'msg2')
+      await client.sendMessage(community.id, channelId, 'msg3')
+
+      expect(sub.messages[0].clock.counter).toBeLessThan(sub.messages[1].clock.counter)
+      expect(sub.messages[1].clock.counter).toBeLessThan(sub.messages[2].clock.counter)
+
+      sub.unsubscribe()
+      await client.disconnect()
+    })
+  })
+
   describe('Sync', () => {
     it('MUST sync channel history on request', async () => {
       const { identity, keyPair, vp } = await createTestIdentity()

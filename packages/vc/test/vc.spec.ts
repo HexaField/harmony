@@ -302,5 +302,173 @@ describe('@harmony/vc', () => {
       expect(quads.length).toBeGreaterThan(0)
       expect(quads.some((q) => q.graph === vc.id)).toBe(true)
     })
+
+    it('MUST include issuer quad in serialization', async () => {
+      const issuer = await createTestIdentity()
+      const subject = await createTestIdentity()
+      const vc = await vcService.issue({
+        issuerDID: issuer.did,
+        issuerKeyPair: issuer.kp,
+        subjectDID: subject.did,
+        type: 'Test',
+        claims: {}
+      })
+      const quads = vcToQuads(vc)
+      const issuerQuad = quads.find((q) => q.predicate === 'https://www.w3.org/2018/credentials#issuer')
+      expect(issuerQuad).toBeDefined()
+      expect(issuerQuad!.object).toBe(issuer.did)
+    })
+
+    it('MUST include issuanceDate quad with dateTime datatype', async () => {
+      const issuer = await createTestIdentity()
+      const subject = await createTestIdentity()
+      const vc = await vcService.issue({
+        issuerDID: issuer.did,
+        issuerKeyPair: issuer.kp,
+        subjectDID: subject.did,
+        type: 'Test',
+        claims: {}
+      })
+      const quads = vcToQuads(vc)
+      const dateQuad = quads.find((q) => q.predicate === 'https://www.w3.org/2018/credentials#issuanceDate')
+      expect(dateQuad).toBeDefined()
+      expect((dateQuad!.object as { datatype: string }).datatype).toBe('http://www.w3.org/2001/XMLSchema#dateTime')
+    })
+  })
+
+  describe('Edge Cases', () => {
+    it('MUST handle VC with expirationDate in the future (valid)', async () => {
+      const issuer = await createTestIdentity()
+      const subject = await createTestIdentity()
+      const vc = await vcService.issue({
+        issuerDID: issuer.did,
+        issuerKeyPair: issuer.kp,
+        subjectDID: subject.did,
+        type: 'Test',
+        claims: {},
+        expirationDate: '2099-01-01T00:00:00Z'
+      })
+      expect(vc.expirationDate).toBe('2099-01-01T00:00:00Z')
+      const result = await vcService.verify(vc, resolver)
+      expect(result.valid).toBe(true)
+      expect(result.checks.find((c) => c.name === 'expiration')?.passed).toBe(true)
+    })
+
+    it('MUST verify VC without expiration (no expiration check needed)', async () => {
+      const issuer = await createTestIdentity()
+      const subject = await createTestIdentity()
+      const vc = await vcService.issue({
+        issuerDID: issuer.did,
+        issuerKeyPair: issuer.kp,
+        subjectDID: subject.did,
+        type: 'Test',
+        claims: {}
+      })
+      expect(vc.expirationDate).toBeUndefined()
+      const result = await vcService.verify(vc, resolver)
+      expect(result.valid).toBe(true)
+    })
+
+    it('MUST present multiple VCs in one VP', async () => {
+      const issuer = await createTestIdentity()
+      const holder = await createTestIdentity()
+      const vc1 = await vcService.issue({
+        issuerDID: issuer.did,
+        issuerKeyPair: issuer.kp,
+        subjectDID: holder.did,
+        type: 'TypeA',
+        claims: { a: 1 }
+      })
+      const vc2 = await vcService.issue({
+        issuerDID: issuer.did,
+        issuerKeyPair: issuer.kp,
+        subjectDID: holder.did,
+        type: 'TypeB',
+        claims: { b: 2 }
+      })
+      const vp = await vcService.present({
+        holderDID: holder.did,
+        holderKeyPair: holder.kp,
+        credentials: [vc1, vc2]
+      })
+      expect(vp.verifiableCredential).toHaveLength(2)
+      const result = await vcService.verifyPresentation(vp, resolver)
+      expect(result.valid).toBe(true)
+    })
+
+    it('MUST present empty credentials array in VP', async () => {
+      const holder = await createTestIdentity()
+      const vp = await vcService.present({
+        holderDID: holder.did,
+        holderKeyPair: holder.kp,
+        credentials: []
+      })
+      expect(vp.verifiableCredential).toHaveLength(0)
+      const result = await vcService.verifyPresentation(vp, resolver)
+      expect(result.valid).toBe(true)
+    })
+
+    it('MUST reject VP with unresolvable holder', async () => {
+      const holder = await createTestIdentity()
+      const vp = await vcService.present({
+        holderDID: holder.did,
+        holderKeyPair: holder.kp,
+        credentials: []
+      })
+      const failResolver = async () => null
+      const result = await vcService.verifyPresentation(vp, failResolver)
+      expect(result.valid).toBe(false)
+    })
+
+    it('MemoryRevocationStore MUST not duplicate revocations', async () => {
+      const store = new MemoryRevocationStore()
+      await store.revoke('cred:1', 'reason1')
+      await store.revoke('cred:1', 'reason2') // duplicate
+      const list = await store.list()
+      expect(list).toHaveLength(1)
+      expect(list[0].reason).toBe('reason1') // first reason kept
+    })
+
+    it('MemoryRevocationStore revocation entries MUST have revokedAt', async () => {
+      const store = new MemoryRevocationStore()
+      await store.revoke('cred:1')
+      const list = await store.list()
+      expect(list[0].revokedAt).toBeTruthy()
+      expect(new Date(list[0].revokedAt).toISOString()).toBe(list[0].revokedAt)
+    })
+
+    it('MUST verify VC with revocationStore but not revoked', async () => {
+      const issuer = await createTestIdentity()
+      const subject = await createTestIdentity()
+      const vc = await vcService.issue({
+        issuerDID: issuer.did,
+        issuerKeyPair: issuer.kp,
+        subjectDID: subject.did,
+        type: 'Test',
+        claims: {}
+      })
+      const store = new MemoryRevocationStore()
+      const result = await vcService.verify(vc, resolver, store)
+      expect(result.valid).toBe(true)
+      expect(result.checks.find((c) => c.name === 'revocation')?.passed).toBe(true)
+    })
+
+    it('verification result MUST include all check names', async () => {
+      const issuer = await createTestIdentity()
+      const subject = await createTestIdentity()
+      const vc = await vcService.issue({
+        issuerDID: issuer.did,
+        issuerKeyPair: issuer.kp,
+        subjectDID: subject.did,
+        type: 'Test',
+        claims: {}
+      })
+      const result = await vcService.verify(vc, resolver)
+      const checkNames = result.checks.map((c) => c.name)
+      expect(checkNames).toContain('structure')
+      expect(checkNames).toContain('expiration')
+      expect(checkNames).toContain('issuerResolution')
+      expect(checkNames).toContain('proofVerification')
+    })
   })
 })

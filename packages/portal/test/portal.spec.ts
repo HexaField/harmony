@@ -266,3 +266,116 @@ describe('@harmony/portal HTTP Server', () => {
     expect(body.state).toBeTruthy()
   })
 })
+
+describe('@harmony/portal Edge Cases', () => {
+  it('MUST support GitHub OAuth provider', async () => {
+    const portal = new PortalService(crypto)
+    await portal.initialize()
+    const result = await portal.initiateOAuthLink({ provider: 'github', userDID: 'did:key:z1' })
+    expect(result.redirectUrl).toContain('github')
+  })
+
+  it('MUST support Google OAuth provider', async () => {
+    const portal = new PortalService(crypto)
+    await portal.initialize()
+    const result = await portal.initiateOAuthLink({ provider: 'google', userDID: 'did:key:z1' })
+    expect(result.redirectUrl).toContain('google')
+  })
+
+  it('MUST issue OAuthIdentityCredential for non-discord providers', async () => {
+    const portal = new PortalService(crypto)
+    await portal.initialize()
+    const kp = await crypto.generateSigningKeyPair()
+    const doc = await didProvider.create(kp)
+    const vc = await portal.completeOAuthLink({
+      provider: 'github',
+      code: 'code',
+      state: 'state',
+      userDID: doc.id,
+      userKeyPair: kp,
+      providerUserId: 'gh123',
+      providerUsername: 'TestUser'
+    })
+    expect(vc.type).toContain('OAuthIdentityCredential')
+    expect(vc.credentialSubject.provider).toBe('github')
+  })
+
+  it('completeOAuthLink MUST throw if portal not initialized', async () => {
+    const portal = new PortalService(crypto)
+    const kp = await crypto.generateSigningKeyPair()
+    const doc = await didProvider.create(kp)
+    await expect(
+      portal.completeOAuthLink({
+        provider: 'discord',
+        code: 'c',
+        state: 's',
+        userDID: doc.id,
+        userKeyPair: kp,
+        providerUserId: 'd1',
+        providerUsername: 'u'
+      })
+    ).rejects.toThrow('not initialized')
+  })
+
+  it('MUST reject retrieval of nonexistent export', async () => {
+    const portal = new PortalService(crypto)
+    await portal.initialize()
+    await expect(portal.retrieveExport('nonexistent', 'did:key:z1')).rejects.toThrow('not found')
+  })
+
+  it('MUST reject deletion by non-admin', async () => {
+    const portal = new PortalService(crypto)
+    await portal.initialize()
+    const kp = await crypto.generateSigningKeyPair()
+    const doc = await didProvider.create(kp)
+    const bundle = createTestBundle(doc.id)
+    const { exportId } = await portal.storeExport(bundle)
+    await expect(portal.deleteExport(exportId, 'did:key:zWrong')).rejects.toThrow('Unauthorized')
+  })
+
+  it('MUST return empty list for admin with no exports', async () => {
+    const portal = new PortalService(crypto)
+    await portal.initialize()
+    const list = await portal.listExports('did:key:zNobody')
+    expect(list).toHaveLength(0)
+  })
+
+  it('discord linking MUST be discoverable via findLinkedIdentities', async () => {
+    const portal = new PortalService(crypto)
+    await portal.initialize()
+    const kp = await crypto.generateSigningKeyPair()
+    const doc = await didProvider.create(kp)
+    await portal.completeOAuthLink({
+      provider: 'discord',
+      code: 'c',
+      state: 's',
+      userDID: doc.id,
+      userKeyPair: kp,
+      providerUserId: 'disc999',
+      providerUsername: 'User999'
+    })
+    const found = await portal.findLinkedIdentities(['disc999'])
+    expect(found.get('disc999')).toBe(doc.id)
+  })
+
+  it('MUST isolate exports between different admins', async () => {
+    const portal = new PortalService(crypto)
+    await portal.initialize()
+    const kp1 = await crypto.generateSigningKeyPair()
+    const doc1 = await didProvider.create(kp1)
+    const kp2 = await crypto.generateSigningKeyPair()
+    const doc2 = await didProvider.create(kp2)
+    await portal.storeExport(createTestBundle(doc1.id))
+    await portal.storeExport(createTestBundle(doc2.id))
+    expect(await portal.listExports(doc1.id)).toHaveLength(1)
+    expect(await portal.listExports(doc2.id)).toHaveLength(1)
+  })
+
+  it('OAuth state MUST be unique each time', async () => {
+    const portal = new PortalService(crypto)
+    await portal.initialize()
+    const r1 = await portal.initiateOAuthLink({ provider: 'discord', userDID: 'did:key:z1' })
+    const r2 = await portal.initiateOAuthLink({ provider: 'discord', userDID: 'did:key:z1' })
+    expect(r1.state).not.toBe(r2.state)
+  })
+})

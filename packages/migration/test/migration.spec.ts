@@ -291,4 +291,143 @@ describe('@harmony/migration', () => {
       expect(parsed.servers).toEqual([])
     })
   })
+
+  describe('Edge Cases', () => {
+    it('MUST handle empty server export (no channels, roles, members, messages)', async () => {
+      const emptyExport: DiscordServerExport = {
+        server: { id: 'empty', name: 'Empty', ownerId: 'u1' },
+        channels: [],
+        roles: [],
+        members: [],
+        messages: new Map(),
+        pins: new Map()
+      }
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const { quads, pendingMemberMap } = migration.transformServerExport(emptyExport, doc.id)
+      // Should still have community quad
+      expect(quads.length).toBeGreaterThan(0)
+      expect(quads.some((q) => q.object === HarmonyType.Community)).toBe(true)
+      expect(pendingMemberMap.size).toBe(0)
+    })
+
+    it('MUST handle special characters in message content', async () => {
+      const exp = createTestServerExport()
+      // Modify a message to have special chars
+      const msgs = exp.messages.get('ch1')!
+      msgs[0].content = 'Hello <script>alert("xss")</script> "quotes" & ampersand'
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const { quads } = migration.transformServerExport(exp, doc.id)
+      const contentQuads = quads.filter((q) => q.predicate === HarmonyPredicate.content)
+      const found = contentQuads.find((q) => typeof q.object === 'object' && q.object.value.includes('<script>'))
+      expect(found).toBeDefined()
+    })
+
+    it('MUST handle message without replyTo', async () => {
+      const exp = createTestServerExport()
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const { quads } = migration.transformServerExport(exp, doc.id)
+      // msg1 has no replyTo, only msg2 does
+      const replyQuads = quads.filter((q) => q.predicate === HarmonyPredicate.replyTo)
+      expect(replyQuads).toHaveLength(1)
+    })
+
+    it('MUST handle message without reactions', async () => {
+      const exp: DiscordServerExport = {
+        server: { id: 's1', name: 'Test', ownerId: 'u1' },
+        channels: [{ id: 'ch1', name: 'general', type: 'text' }],
+        roles: [],
+        members: [{ userId: 'u1', username: 'Alice', roles: [], joinedAt: '2023-01-01T00:00:00Z' }],
+        messages: new Map([
+          [
+            'ch1',
+            [
+              {
+                id: 'msg1',
+                channelId: 'ch1',
+                author: { id: 'u1', username: 'Alice' },
+                content: 'No reactions',
+                timestamp: '2023-01-01T00:00:00Z'
+              }
+            ]
+          ]
+        ]),
+        pins: new Map()
+      }
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const { quads } = migration.transformServerExport(exp, doc.id)
+      const reactionQuads = quads.filter((q) => q.object === HarmonyType.Reaction)
+      expect(reactionQuads).toHaveLength(0)
+    })
+
+    it('MUST handle channel with categoryId', async () => {
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const { quads } = migration.transformServerExport(createTestServerExport(), doc.id)
+      const categoryQuads = quads.filter((q) => q.predicate === HarmonyPredicate.inCategory)
+      expect(categoryQuads.length).toBeGreaterThan(0)
+    })
+
+    it('MUST handle personal export with missing optional fields', () => {
+      const raw = {
+        account: { id: 'u1', username: 'Test', discriminator: '0' }
+      } as unknown as DiscordExport
+      const parsed = migration.parsePersonalExport(raw)
+      expect(parsed.messages).toEqual([])
+      expect(parsed.servers).toEqual([])
+      expect(parsed.connections).toEqual([])
+    })
+
+    it('MUST handle message with missing content (null/undefined)', () => {
+      const raw: DiscordExport = {
+        account: { id: 'u1', username: 'Test', discriminator: '0' },
+        messages: [
+          { id: 'm1', channelId: 'ch1', author: { id: 'u1', username: 'T' }, content: undefined as any, timestamp: '' }
+        ],
+        servers: [],
+        connections: []
+      }
+      const parsed = migration.parsePersonalExport(raw)
+      expect(parsed.messages[0].content).toBe('')
+      expect(parsed.messages[0].timestamp).toBeTruthy()
+    })
+
+    it('encrypt/decrypt MUST round-trip with metadata intact', async () => {
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const { quads } = migration.transformServerExport(createTestServerExport(), doc.id)
+      const metadata = {
+        exportDate: '2024-06-01T00:00:00Z',
+        sourceServerId: 'server1',
+        sourceServerName: 'Test Server',
+        adminDID: doc.id,
+        channelCount: 4,
+        messageCount: 2,
+        memberCount: 3
+      }
+      const bundle = await migration.encryptExport(quads, kp, metadata)
+      expect(bundle.metadata).toEqual(metadata)
+      const decrypted = await migration.decryptExport(bundle, kp)
+      expect(decrypted.length).toBe(quads.length)
+    })
+
+    it('resignCommunityCredentials MUST include roles in reissued VCs', async () => {
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const { quads } = migration.transformServerExport(createTestServerExport(), doc.id)
+      const result = await migration.resignCommunityCredentials({
+        quads,
+        adminDID: doc.id,
+        adminKeyPair: kp,
+        newServiceEndpoint: 'https://new.example.com'
+      })
+      // Alice has role1
+      const aliceVC = result.reissuedVCs.find((vc) => vc.credentialSubject.memberName === 'Alice')
+      expect(aliceVC).toBeDefined()
+      expect((aliceVC!.credentialSubject.roles as string[]).length).toBeGreaterThan(0)
+    })
+  })
 })

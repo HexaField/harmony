@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { clockCompare, clockMax, clockMerge, clockTick, CRDTLog, CRDTOpLog } from '../src/index.js'
+import { clockCompare, clockMax, clockMerge, clockTick, clockCreate, CRDTLog, CRDTOpLog } from '../src/index.js'
 import type { LamportClock, EditOp, DeleteOp } from '../src/index.js'
 
 describe('@harmony/crdt', () => {
@@ -363,6 +363,188 @@ describe('@harmony/crdt', () => {
       expect(diff.length).toBe(2)
       const tombstoned = diff.find((e) => e.id === 'e2')
       expect(tombstoned?.tombstone).toBe(true)
+    })
+  })
+
+  describe('Clock Helpers', () => {
+    it('clockCreate MUST create clock with counter 0', () => {
+      const c = clockCreate('did:key:A')
+      expect(c.counter).toBe(0)
+      expect(c.authorDID).toBe('did:key:A')
+    })
+
+    it('clockMax MUST return higher clock', () => {
+      const a: LamportClock = { counter: 2, authorDID: 'did:key:A' }
+      const b: LamportClock = { counter: 5, authorDID: 'did:key:B' }
+      expect(clockMax(a, b)).toBe(b)
+      expect(clockMax(b, a)).toBe(b)
+    })
+
+    it('clockMax MUST use authorDID tie-break', () => {
+      const a: LamportClock = { counter: 1, authorDID: 'did:key:A' }
+      const b: LamportClock = { counter: 1, authorDID: 'did:key:B' }
+      expect(clockMax(a, b)).toBe(b) // B > A
+    })
+
+    it('clockMerge MUST keep local authorDID', () => {
+      const local: LamportClock = { counter: 1, authorDID: 'did:key:L' }
+      const remote: LamportClock = { counter: 10, authorDID: 'did:key:R' }
+      const merged = clockMerge(local, remote)
+      expect(merged.authorDID).toBe('did:key:L')
+      expect(merged.counter).toBe(11)
+    })
+
+    it('clockCompare MUST return 0 for identical clocks', () => {
+      const c: LamportClock = { counter: 5, authorDID: 'did:key:X' }
+      expect(clockCompare(c, { ...c })).toBe(0)
+    })
+  })
+
+  describe('CRDTLog Additional', () => {
+    it('latest() MUST return null for empty log', () => {
+      const log = new CRDTLog<string>('did:key:A')
+      expect(log.latest()).toBeNull()
+    })
+
+    it('latest() MUST skip tombstoned entries', () => {
+      const log = new CRDTLog<string>('did:key:A')
+      log.append('m1', { counter: 1, authorDID: 'did:key:A' }, 'e1')
+      log.append('m2', { counter: 2, authorDID: 'did:key:A' }, 'e2')
+      log.tombstone('e2')
+      expect(log.latest()?.id).toBe('e1')
+    })
+
+    it('tick() MUST increment and return new clock', () => {
+      const log = new CRDTLog<string>('did:key:A')
+      log.append('m1', { counter: 5, authorDID: 'did:key:A' }, 'e1')
+      const ticked = log.tick('did:key:A')
+      expect(ticked.counter).toBe(6)
+      expect(ticked.authorDID).toBe('did:key:A')
+    })
+
+    it('currentClock() MUST return current internal clock', () => {
+      const log = new CRDTLog<string>('did:key:A')
+      expect(log.currentClock().counter).toBe(0)
+      log.append('m1', { counter: 3, authorDID: 'did:key:A' }, 'e1')
+      expect(log.currentClock().counter).toBe(3)
+    })
+
+    it('updateEntry() MUST change data for existing entry', () => {
+      const log = new CRDTLog<string>('did:key:A')
+      log.append('original', { counter: 1, authorDID: 'did:key:A' }, 'e1')
+      log.updateEntry('e1', 'updated')
+      expect(log.getEntry('e1')?.data).toBe('updated')
+    })
+
+    it('updateEntry() on non-existent entry MUST be no-op', () => {
+      const log = new CRDTLog<string>('did:key:A')
+      log.updateEntry('nonexistent', 'value')
+      expect(log.size()).toBe(0)
+    })
+
+    it('getEntry() MUST return undefined for non-existent entry', () => {
+      const log = new CRDTLog<string>('did:key:A')
+      expect(log.getEntry('nonexistent')).toBeUndefined()
+    })
+
+    it('tombstone() on non-existent entry MUST be no-op', () => {
+      const log = new CRDTLog<string>('did:key:A')
+      log.tombstone('nonexistent')
+      expect(log.size()).toBe(0)
+    })
+
+    it('entriesSince MUST exclude tombstoned entries', () => {
+      const log = new CRDTLog<string>('did:key:A')
+      log.append('m1', { counter: 1, authorDID: 'did:key:A' }, 'e1')
+      log.append('m2', { counter: 2, authorDID: 'did:key:A' }, 'e2')
+      log.append('m3', { counter: 3, authorDID: 'did:key:A' }, 'e3')
+      log.tombstone('e2')
+      const since = log.entriesSince({ counter: 0, authorDID: '' })
+      expect(since.length).toBe(2)
+      expect(since.map((e) => e.id)).toEqual(['e1', 'e3'])
+    })
+
+    it('entriesBefore MUST exclude tombstoned entries', () => {
+      const log = new CRDTLog<string>('did:key:A')
+      log.append('m1', { counter: 1, authorDID: 'did:key:A' }, 'e1')
+      log.append('m2', { counter: 2, authorDID: 'did:key:A' }, 'e2')
+      log.append('m3', { counter: 3, authorDID: 'did:key:A' }, 'e3')
+      log.tombstone('e1')
+      const before = log.entriesBefore({ counter: 4, authorDID: 'did:key:A' }, 10)
+      expect(before.length).toBe(2)
+    })
+
+    it('MUST handle large fanout (many concurrent writers)', () => {
+      const log = new CRDTLog<string>('did:key:main')
+      for (let i = 0; i < 100; i++) {
+        log.merge({ counter: 1, authorDID: `did:key:writer${i.toString().padStart(3, '0')}` }, `msg-${i}`, `e${i}`)
+      }
+      expect(log.size()).toBe(100)
+      // All at same counter, should be sorted by authorDID
+      const entries = log.entries()
+      for (let i = 1; i < entries.length; i++) {
+        expect(clockCompare(entries[i - 1].clock, entries[i].clock)).toBeLessThanOrEqual(0)
+      }
+    })
+
+    it('merge MUST deduplicate by id', () => {
+      const log = new CRDTLog<string>('did:key:A')
+      log.merge({ counter: 1, authorDID: 'did:key:B' }, 'msg', 'e1')
+      log.merge({ counter: 1, authorDID: 'did:key:B' }, 'msg-dup', 'e1')
+      expect(log.size()).toBe(1)
+    })
+
+    it('merge MUST auto-generate id from clock if not provided', () => {
+      const log = new CRDTLog<string>('did:key:A')
+      log.merge({ counter: 1, authorDID: 'did:key:B' }, 'msg')
+      expect(log.size()).toBe(1)
+      const entry = log.entries()[0]
+      expect(entry.id).toBe('did:key:B:1')
+    })
+
+    it('append MUST auto-generate id from clock if not provided', () => {
+      const log = new CRDTLog<string>('did:key:A')
+      log.append('msg', { counter: 1, authorDID: 'did:key:A' })
+      expect(log.size()).toBe(1)
+      expect(log.entries()[0].id).toBe('did:key:A:1')
+    })
+  })
+
+  describe('CRDTOpLog Additional', () => {
+    it('resolveLatestEdit MUST return null for non-existent entry', () => {
+      const opLog = new CRDTOpLog()
+      expect(opLog.resolveLatestEdit('nonexistent')).toBeNull()
+    })
+
+    it('isDeleted MUST return false for non-deleted entry', () => {
+      const opLog = new CRDTOpLog()
+      expect(opLog.isDeleted('e1')).toBe(false)
+    })
+
+    it('opsForEntry MUST return empty for unknown entry', () => {
+      const opLog = new CRDTOpLog()
+      expect(opLog.opsForEntry('unknown')).toEqual([])
+    })
+
+    it('allOps MUST return empty for fresh log', () => {
+      const opLog = new CRDTOpLog()
+      expect(opLog.allOps()).toEqual([])
+    })
+
+    it('MUST handle interleaved edit and delete ops', () => {
+      const opLog = new CRDTOpLog()
+      opLog.applyOp({ type: 'edit', targetId: 'e1', newContent: 'v1', clock: { counter: 1, authorDID: 'did:key:A' } })
+      opLog.applyOp({ type: 'delete', targetId: 'e1', clock: { counter: 2, authorDID: 'did:key:A' } })
+      opLog.applyOp({ type: 'edit', targetId: 'e1', newContent: 'v2', clock: { counter: 3, authorDID: 'did:key:A' } })
+      expect(opLog.isDeleted('e1')).toBe(true)
+      expect(opLog.resolveLatestEdit('e1')?.newContent).toBe('v2')
+      expect(opLog.opsForEntry('e1').length).toBe(3)
+    })
+
+    it('opsSince MUST return empty when no ops after clock', () => {
+      const opLog = new CRDTOpLog()
+      opLog.applyOp({ type: 'edit', targetId: 'e1', newContent: 'v1', clock: { counter: 1, authorDID: 'did:key:A' } })
+      expect(opLog.opsSince({ counter: 5, authorDID: 'did:key:A' })).toEqual([])
     })
   })
 })

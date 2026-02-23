@@ -50,12 +50,24 @@ importers:
       '@harmony/client':
         specifier: workspace:*
         version: link:../client
+      '@harmony/crdt':
+        specifier: workspace:*
+        version: link:../crdt
       '@harmony/credentials':
         specifier: workspace:*
         version: link:../credentials
       '@harmony/crypto':
         specifier: workspace:*
         version: link:../crypto
+      '@harmony/did':
+        specifier: workspace:*
+        version: link:../did
+      '@harmony/e2ee':
+        specifier: workspace:*
+        version: link:../e2ee
+      '@harmony/federation':
+        specifier: workspace:*
+        version: link:../federation
       '@harmony/governance':
         specifier: workspace:*
         version: link:../governance
@@ -71,6 +83,12 @@ importers:
       '@harmony/migration-bot':
         specifier: workspace:*
         version: link:../migration-bot
+      '@harmony/moderation':
+        specifier: workspace:*
+        version: link:../moderation
+      '@harmony/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       '@harmony/quads':
         specifier: workspace:*
         version: link:../quads
@@ -89,6 +107,9 @@ importers:
       '@harmony/vc':
         specifier: workspace:*
         version: link:../vc
+      '@harmony/vocab':
+        specifier: workspace:*
+        version: link:../vocab
       '@harmony/voice':
         specifier: workspace:*
         version: link:../voice
@@ -96,12 +117,18 @@ importers:
         specifier: workspace:*
         version: link:../zcap
     devDependencies:
+      '@types/ws':
+        specifier: ^8.0.0
+        version: 8.18.1
       electron:
         specifier: ^36.3.2
         version: 36.9.5
       tslib:
         specifier: ^2.8.1
         version: 2.8.1
+      ws:
+        specifier: ^8.0.0
+        version: 8.18.3
 
   packages/bot-api:
     dependencies:

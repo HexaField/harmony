@@ -281,3 +281,98 @@ describe('Bot Commands', () => {
     expect(subNames).toContain('info')
   })
 })
+
+// ── Edge Cases ──
+describe('Edge Cases', () => {
+  it('T23: Adapter getGuild throws for wrong guild ID', async () => {
+    const guild = createTestGuild()
+    const adapter = new DiscordJSAdapter(guild)
+    await expect(adapter.getGuild('wrong-id')).rejects.toThrow('Guild not found')
+  })
+
+  it('T24: Adapter returns empty for wrong guild channels/roles/members', async () => {
+    const guild = createTestGuild()
+    const adapter = new DiscordJSAdapter(guild)
+    expect(await adapter.getGuildChannels('wrong')).toEqual([])
+    expect(await adapter.getGuildRoles('wrong')).toEqual([])
+    expect(await adapter.getGuildMembers('wrong')).toEqual([])
+  })
+
+  it('T25: Adapter returns empty for nonexistent channel messages', async () => {
+    const guild = createTestGuild()
+    const adapter = new DiscordJSAdapter(guild)
+    expect(await adapter.getChannelMessages('nonexistent')).toEqual([])
+  })
+
+  it('T26: Bot double stop throws', async () => {
+    const bot = new HarmonyDiscordBot({ token: 'test', portalUrl: 'https://portal.test' })
+    await bot.start()
+    await bot.stop()
+    await expect(bot.stop()).rejects.toThrow('not running')
+  })
+
+  it('T27: Bot double start throws', async () => {
+    const bot = new HarmonyDiscordBot({ token: 'test', portalUrl: 'https://portal.test' })
+    await bot.start()
+    await expect(bot.start()).rejects.toThrow('already running')
+  })
+
+  it('T28: handleLink with DID directly sets identity', async () => {
+    const bot = new HarmonyDiscordBot({ token: 'test', portalUrl: 'https://portal.test' })
+    await bot.start()
+    const result = await bot.handleLink('u99', 'did:key:z6MkDirect')
+    expect(result.success).toBe(true)
+    const identity = await bot.handleIdentity('u99')
+    expect(identity.message).toContain('did:key:z6MkDirect')
+  })
+
+  it('T29: HARMONY_COMMANDS has correct structure', () => {
+    expect(HARMONY_COMMANDS).toHaveLength(1)
+    expect(HARMONY_COMMANDS[0].name).toBe('harmony')
+    expect(HARMONY_COMMANDS[0].description).toBeTruthy()
+    for (const sub of HARMONY_COMMANDS[0].subcommands!) {
+      expect(sub.name).toBeTruthy()
+      expect(sub.description).toBeTruthy()
+    }
+  })
+
+  it('T30: String template function handles params correctly', async () => {
+    // Import t from the module
+    const { t: tFn } = await import('../src/strings.js')
+    const result = tFn('EXPORT_COMPLETE', { channels: 5, messages: 100 })
+    expect(result).toContain('5')
+    expect(result).toContain('100')
+  })
+
+  it('T31: reconnectCount starts at 0', () => {
+    const bot = new HarmonyDiscordBot({ token: 'test', portalUrl: 'https://portal.test' })
+    expect(bot.getReconnectCount()).toBe(0)
+  })
+
+  it('T32: Multiple reconnects increment count', async () => {
+    const bot = new HarmonyDiscordBot({ token: 'test', portalUrl: 'https://portal.test' })
+    await bot.start()
+    await bot.reconnect()
+    await bot.reconnect()
+    await bot.reconnect()
+    expect(bot.getReconnectCount()).toBe(3)
+  })
+
+  it('T33: Adapter pagination with before parameter', async () => {
+    const guild = createTestGuild()
+    const adapter = new DiscordJSAdapter(guild)
+    const msgs = await adapter.getChannelMessages('ch1', { before: 'm2' })
+    // Should return messages before m2
+    expect(msgs.length).toBeLessThanOrEqual(2)
+  })
+
+  it('T34: Setup configures guild config correctly', async () => {
+    const bot = new HarmonyDiscordBot({ token: 'test', portalUrl: 'https://portal.test' })
+    await bot.start()
+    const result = await bot.handleSetup('g1', 'admin1', true)
+    expect(result.success).toBe(true)
+    // Setup again should still succeed (overwrite)
+    const result2 = await bot.handleSetup('g1', 'admin2', true)
+    expect(result2.success).toBe(true)
+  })
+})

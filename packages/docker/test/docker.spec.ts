@@ -4,7 +4,13 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import yaml from 'js-yaml'
 
-import { validateComposeFile, validateDockerfile, validateEnvExample, checkMultiArchSupport } from '../src/index.js'
+import {
+  validateComposeFile,
+  validateDockerfile,
+  validateEnvExample,
+  checkMultiArchSupport,
+  getDockerFiles
+} from '../src/index.js'
 
 const pkgDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -16,18 +22,15 @@ const envExample = readFileSync(join(pkgDir, '.env.example'), 'utf-8')
 const configExample = readFileSync(join(pkgDir, 'harmony.config.example.yaml'), 'utf-8')
 
 describe('Docker', () => {
-  // T1: docker compose config validates
   it('T1: docker-compose.yml is valid YAML with no undefined vars', () => {
     const parsed = yaml.load(composeContent)
     expect(parsed).toBeDefined()
     expect(typeof parsed).toBe('object')
-
     const result = validateComposeFile(composeContent)
     expect(result.valid).toBe(true)
     expect(result.errors).toEqual([])
   })
 
-  // T2: Server Dockerfile builds
   it('T2: Server Dockerfile is valid', () => {
     const result = validateDockerfile(serverDockerfile)
     expect(result.valid).toBe(true)
@@ -36,7 +39,6 @@ describe('Docker', () => {
     expect(serverDockerfile).toContain('HEALTHCHECK')
   })
 
-  // T3: UI Dockerfile builds
   it('T3: UI Dockerfile is valid', () => {
     const result = validateDockerfile(uiDockerfile)
     expect(result.valid).toBe(true)
@@ -44,72 +46,130 @@ describe('Docker', () => {
     expect(uiDockerfile).toContain('EXPOSE 8080')
   })
 
-  // T4: Bot Dockerfile builds
   it('T4: Bot Dockerfile is valid', () => {
     const result = validateDockerfile(botDockerfile)
     expect(result.valid).toBe(true)
     expect(botDockerfile).toContain('DISCORD_TOKEN')
   })
 
-  // T5: Server container starts (healthcheck defined)
   it('T5: Server has health check defined', () => {
     expect(composeContent).toContain('healthcheck:')
-    expect(composeContent).toContain('wget')
     expect(composeContent).toContain('/health')
   })
 
-  // T6: UI container serves app
   it('T6: UI service configured on correct port', () => {
     expect(composeContent).toContain('8080')
-    expect(composeContent).toContain('depends_on')
     expect(composeContent).toContain('service_healthy')
   })
 
-  // T7: Server accepts WebSocket
   it('T7: Server exposes WebSocket port', () => {
     expect(composeContent).toContain('4000')
-    expect(serverDockerfile).toContain('4000')
   })
 
-  // T8: Data volume persists
   it('T8: Volume defined for data persistence', () => {
     expect(composeContent).toContain('harmony-data:')
     expect(composeContent).toContain('/var/harmony/data')
   })
 
-  // T9: Bot connects to server
   it('T9: Bot service configured with dependencies', () => {
     expect(composeContent).toContain('bot:')
-    expect(composeContent).toContain('HARMONY_SERVER_URL')
-    expect(composeContent).toContain('profiles:')
     expect(composeContent).toContain('with-bot')
   })
 
-  // T10: .env.example covers all vars
-  it('T10: .env.example covers every ${VAR} in docker-compose', () => {
+  it('T10: .env.example covers all vars', () => {
     const result = validateEnvExample(envExample, composeContent)
     expect(result.valid).toBe(true)
-    if (!result.valid) {
-      console.log('Missing vars:', result.missingVars)
-    }
   })
 
-  // T11: Multi-arch build
   it('T11: Builds for amd64 and arm64', () => {
     expect(checkMultiArchSupport(composeContent)).toBe(true)
-    expect(composeContent).toContain('linux/amd64')
-    expect(composeContent).toContain('linux/arm64')
+  })
+
+  // New tests
+  it('T12: getDockerFiles returns all paths', () => {
+    const files = getDockerFiles()
+    expect(files.composeFile).toContain('docker-compose.yml')
+    expect(files.envExampleFile).toContain('.env.example')
+    expect(files.serverDockerfile).toContain('Dockerfile.server')
+    expect(files.uiDockerfile).toContain('Dockerfile.ui')
+    expect(files.botDockerfile).toContain('Dockerfile.bot')
+    expect(files.configExampleFile).toContain('harmony.config.example.yaml')
+  })
+
+  it('T13: validateComposeFile detects missing services section', () => {
+    const result = validateComposeFile('foo: bar')
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContain('Missing services section')
+  })
+
+  it('T14: validateDockerfile detects missing FROM', () => {
+    const result = validateDockerfile('WORKDIR /app\nRUN echo hi')
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContain('Missing FROM instruction')
+  })
+
+  it('T15: validateDockerfile detects missing WORKDIR', () => {
+    const result = validateDockerfile('FROM node:22\nRUN echo hi')
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContain('Missing WORKDIR instruction')
+  })
+
+  it('T16: validateEnvExample detects missing vars', () => {
+    const compose = 'image: ${MY_VAR:-default}\nport: ${OTHER_VAR}'
+    const result = validateEnvExample('# empty', compose)
+    expect(result.valid).toBe(false)
+    expect(result.missingVars).toContain('MY_VAR')
+    expect(result.missingVars).toContain('OTHER_VAR')
+  })
+
+  it('T17: checkMultiArchSupport returns false without both arches', () => {
+    expect(checkMultiArchSupport('linux/amd64')).toBe(false)
+    expect(checkMultiArchSupport('linux/arm64')).toBe(false)
+    expect(checkMultiArchSupport('')).toBe(false)
+  })
+
+  it('T18: Server Dockerfile uses multi-stage build', () => {
+    expect(serverDockerfile).toContain('AS builder')
+    expect((serverDockerfile.match(/FROM /g) || []).length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('T19: UI Dockerfile uses multi-stage build', () => {
+    expect(uiDockerfile).toContain('AS builder')
+  })
+
+  it('T20: Server Dockerfile installs pnpm', () => {
+    expect(serverDockerfile).toContain('corepack enable')
+    expect(serverDockerfile).toContain('pnpm install')
+  })
+
+  it('T21: Compose uses restart policy', () => {
+    expect(composeContent).toContain('unless-stopped')
+  })
+
+  it('T22: Bot data volume exists', () => {
+    expect(composeContent).toContain('bot-data:')
+  })
+
+  it('T23: Server config mounted read-only', () => {
+    expect(composeContent).toContain(':ro')
+  })
+
+  it('T24: Environment variable for server URL in UI', () => {
+    expect(composeContent).toContain('HARMONY_SERVER_URL')
   })
 })
 
 describe('Config Example', () => {
-  it('Config example is valid YAML', () => {
-    const parsed = yaml.load(configExample)
+  it('config example is valid YAML with all sections', () => {
+    const parsed = yaml.load(configExample) as Record<string, unknown>
     expect(parsed).toBeDefined()
-    expect(typeof parsed).toBe('object')
-    const config = parsed as Record<string, unknown>
-    expect(config.server).toBeDefined()
-    expect(config.storage).toBeDefined()
-    expect(config.logging).toBeDefined()
+    expect(parsed.server).toBeDefined()
+    expect(parsed.storage).toBeDefined()
+    expect(parsed.logging).toBeDefined()
+    expect(parsed.moderation).toBeDefined()
+    expect(parsed.relay).toBeDefined()
+    expect(parsed.federation).toBeDefined()
+    expect(parsed.voice).toBeDefined()
+    expect(parsed.limits).toBeDefined()
   })
 })

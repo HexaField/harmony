@@ -1121,4 +1121,521 @@ describe('@harmony/server', () => {
       ws.close()
     })
   })
+
+  describe('Typing Indicators', () => {
+    it('MUST broadcast typing indicator to other community members', async () => {
+      const alice = await createIdentity()
+      const bob = await createIdentity()
+
+      const aliceWs = await connectAndAuth(alice.vp)
+      const bobWs = await connectAndAuth(bob.vp)
+
+      const conns = server.connections()
+      for (const conn of conns) server.subscribeToCommunity(conn.id, 'c1')
+
+      const bobMsgPromise = waitForMessage(bobWs)
+
+      aliceWs.send(
+        serialise({
+          id: 'typing-1',
+          type: 'channel.typing',
+          timestamp: new Date().toISOString(),
+          sender: alice.did,
+          payload: { communityId: 'c1', channelId: 'ch1' }
+        })
+      )
+
+      const received = await bobMsgPromise
+      expect(received.type).toBe('channel.typing.indicator')
+      expect(received.sender).toBe(alice.did)
+
+      aliceWs.close()
+      bobWs.close()
+    })
+
+    it('MUST NOT echo typing indicator back to sender', async () => {
+      const alice = await createIdentity()
+      const bob = await createIdentity()
+
+      const aliceWs = await connectAndAuth(alice.vp)
+      const bobWs = await connectAndAuth(bob.vp)
+
+      const conns = server.connections()
+      for (const conn of conns) server.subscribeToCommunity(conn.id, 'c1')
+
+      // Listen on alice for any response
+      let aliceReceived = false
+      aliceWs.on('message', () => {
+        aliceReceived = true
+      })
+
+      aliceWs.send(
+        serialise({
+          id: 'typing-echo',
+          type: 'channel.typing',
+          timestamp: new Date().toISOString(),
+          sender: alice.did,
+          payload: { communityId: 'c1', channelId: 'ch1' }
+        })
+      )
+
+      await new Promise((r) => setTimeout(r, 200))
+      expect(aliceReceived).toBe(false)
+
+      aliceWs.close()
+      bobWs.close()
+    })
+  })
+
+  describe('Channel Edit/Delete via WebSocket', () => {
+    it('MUST broadcast channel.message.updated on edit', async () => {
+      const alice = await createIdentity()
+      const bob = await createIdentity()
+
+      const aliceWs = await connectAndAuth(alice.vp)
+      const bobWs = await connectAndAuth(bob.vp)
+
+      const conns = server.connections()
+      for (const conn of conns) server.subscribeToCommunity(conn.id, 'c1')
+
+      const bobMsgPromise = waitForMessage(bobWs)
+
+      aliceWs.send(
+        serialise({
+          id: 'edit-1',
+          type: 'channel.edit',
+          timestamp: new Date().toISOString(),
+          sender: alice.did,
+          payload: {
+            communityId: 'c1',
+            channelId: 'ch1',
+            messageId: 'msg-orig',
+            content: { ciphertext: new Uint8Array([1, 2]), epoch: 0, senderIndex: 0 },
+            clock: { counter: 2, authorDID: alice.did }
+          }
+        })
+      )
+
+      const received = await bobMsgPromise
+      expect(received.type).toBe('channel.message.updated')
+
+      aliceWs.close()
+      bobWs.close()
+    })
+
+    it('MUST broadcast channel.message.deleted and remove from store', async () => {
+      const { vp, did } = await createIdentity()
+      const ws = await connectAndAuth(vp)
+      const conn = server.connections()[0]
+      server.subscribeToCommunity(conn.id, 'c1')
+
+      // Store a message first
+      ws.send(
+        serialise({
+          id: 'to-delete',
+          type: 'channel.send',
+          timestamp: new Date().toISOString(),
+          sender: did,
+          payload: {
+            communityId: 'c1',
+            channelId: 'ch1',
+            content: { ciphertext: new Uint8Array([1]), epoch: 0, senderIndex: 0 },
+            nonce: 'n-del',
+            clock: { counter: 1, authorDID: did }
+          }
+        })
+      )
+      await new Promise((r) => setTimeout(r, 200))
+
+      // Now delete it
+      ws.send(
+        serialise({
+          id: 'delete-cmd',
+          type: 'channel.delete',
+          timestamp: new Date().toISOString(),
+          sender: did,
+          payload: {
+            communityId: 'c1',
+            channelId: 'ch1',
+            messageId: 'to-delete',
+            clock: { counter: 2, authorDID: did }
+          }
+        })
+      )
+      await new Promise((r) => setTimeout(r, 200))
+
+      const stored = await server.messageStoreInstance.getMessage('to-delete')
+      expect(stored).toBeNull()
+
+      ws.close()
+    })
+  })
+
+  describe('Reaction Handlers', () => {
+    it('MUST broadcast reaction.added', async () => {
+      const alice = await createIdentity()
+      const bob = await createIdentity()
+
+      const aliceWs = await connectAndAuth(alice.vp)
+      const bobWs = await connectAndAuth(bob.vp)
+
+      const conns = server.connections()
+      for (const conn of conns) server.subscribeToCommunity(conn.id, 'c1')
+
+      const bobMsgPromise = waitForMessage(bobWs)
+
+      aliceWs.send(
+        serialise({
+          id: 'react-1',
+          type: 'channel.reaction.add',
+          timestamp: new Date().toISOString(),
+          sender: alice.did,
+          payload: { communityId: 'c1', channelId: 'ch1', messageId: 'msg-1', emoji: '👍' }
+        })
+      )
+
+      const received = await bobMsgPromise
+      expect(received.type).toBe('channel.reaction.added')
+
+      aliceWs.close()
+      bobWs.close()
+    })
+
+    it('MUST broadcast reaction.removed', async () => {
+      const alice = await createIdentity()
+      const bob = await createIdentity()
+
+      const aliceWs = await connectAndAuth(alice.vp)
+      const bobWs = await connectAndAuth(bob.vp)
+
+      const conns = server.connections()
+      for (const conn of conns) server.subscribeToCommunity(conn.id, 'c1')
+
+      const bobMsgPromise = waitForMessage(bobWs)
+
+      aliceWs.send(
+        serialise({
+          id: 'unreact-1',
+          type: 'channel.reaction.remove',
+          timestamp: new Date().toISOString(),
+          sender: alice.did,
+          payload: { communityId: 'c1', channelId: 'ch1', messageId: 'msg-1', emoji: '👍' }
+        })
+      )
+
+      const received = await bobMsgPromise
+      expect(received.type).toBe('channel.reaction.removed')
+
+      aliceWs.close()
+      bobWs.close()
+    })
+  })
+
+  describe('Community CRUD via WebSocket', () => {
+    it('MUST create community and return communityId', async () => {
+      const { vp, did } = await createIdentity()
+      const ws = await connectAndAuth(vp)
+
+      const response = await sendAndWait(ws, {
+        id: 'cc-ws',
+        type: 'community.create',
+        timestamp: new Date().toISOString(),
+        sender: did,
+        payload: { name: 'WS Community', defaultChannels: ['general', 'random'] }
+      })
+
+      expect(response.type).toBe('community.updated')
+      const payload = response.payload as { communityId: string; channels: unknown[] }
+      expect(payload.communityId).toBeTruthy()
+      expect(payload.channels.length).toBe(2)
+
+      ws.close()
+    })
+
+    it('MUST handle community join and broadcast member.joined', async () => {
+      const creator = await createIdentity()
+      const joiner = await createIdentity()
+
+      const creatorWs = await connectAndAuth(creator.vp)
+
+      // Creator creates community
+      const createResponse = await sendAndWait(creatorWs, {
+        id: 'cc-join',
+        type: 'community.create',
+        timestamp: new Date().toISOString(),
+        sender: creator.did,
+        payload: { name: 'Join Test' }
+      })
+      const communityId = (createResponse.payload as { communityId: string }).communityId
+
+      // Joiner connects
+      const joinerWs = await connectAndAuth(joiner.vp)
+
+      const creatorMsgPromise = waitForMessage(creatorWs)
+
+      joinerWs.send(
+        serialise({
+          id: 'join-msg',
+          type: 'community.join',
+          timestamp: new Date().toISOString(),
+          sender: joiner.did,
+          payload: { communityId, membershipVC: joiner.memberVC }
+        })
+      )
+
+      const joinNotif = await creatorMsgPromise
+      expect(joinNotif.type).toBe('community.member.joined')
+
+      creatorWs.close()
+      joinerWs.close()
+    })
+
+    it('MUST handle community leave and broadcast member.left', async () => {
+      const creator = await createIdentity()
+      const leaver = await createIdentity()
+
+      const creatorWs = await connectAndAuth(creator.vp)
+      const createResponse = await sendAndWait(creatorWs, {
+        id: 'cc-leave',
+        type: 'community.create',
+        timestamp: new Date().toISOString(),
+        sender: creator.did,
+        payload: { name: 'Leave Test' }
+      })
+      const communityId = (createResponse.payload as { communityId: string }).communityId
+
+      const leaverWs = await connectAndAuth(leaver.vp)
+
+      // Joiner joins
+      await sendAndWait(leaverWs, {
+        id: 'join-for-leave',
+        type: 'community.join',
+        timestamp: new Date().toISOString(),
+        sender: leaver.did,
+        payload: { communityId, membershipVC: leaver.memberVC }
+      })
+      // consume the member.joined notification on creator
+      await waitForMessage(creatorWs)
+
+      const creatorMsgPromise = waitForMessage(creatorWs)
+
+      leaverWs.send(
+        serialise({
+          id: 'leave-msg',
+          type: 'community.leave',
+          timestamp: new Date().toISOString(),
+          sender: leaver.did,
+          payload: { communityId }
+        })
+      )
+
+      const leaveNotif = await creatorMsgPromise
+      expect(leaveNotif.type).toBe('community.member.left')
+
+      creatorWs.close()
+      leaverWs.close()
+    })
+  })
+
+  describe('Channel CRUD via WebSocket', () => {
+    it('MUST broadcast channel.created', async () => {
+      const alice = await createIdentity()
+      const bob = await createIdentity()
+
+      const aliceWs = await connectAndAuth(alice.vp)
+      const createResponse = await sendAndWait(aliceWs, {
+        id: 'cc-ch',
+        type: 'community.create',
+        timestamp: new Date().toISOString(),
+        sender: alice.did,
+        payload: { name: 'Channel CRUD' }
+      })
+      const communityId = (createResponse.payload as { communityId: string }).communityId
+
+      const bobWs = await connectAndAuth(bob.vp)
+      await sendAndWait(bobWs, {
+        id: 'join-ch-crud',
+        type: 'community.join',
+        timestamp: new Date().toISOString(),
+        sender: bob.did,
+        payload: { communityId, membershipVC: bob.memberVC }
+      })
+      // consume member.joined on alice
+      await waitForMessage(aliceWs)
+
+      const bobMsgPromise = waitForMessage(bobWs)
+
+      aliceWs.send(
+        serialise({
+          id: 'create-ch',
+          type: 'channel.create',
+          timestamp: new Date().toISOString(),
+          sender: alice.did,
+          payload: { communityId, name: 'new-channel', type: 'text', topic: 'New topic' }
+        })
+      )
+
+      const received = await bobMsgPromise
+      expect(received.type).toBe('channel.created')
+
+      aliceWs.close()
+      bobWs.close()
+    })
+  })
+
+  describe('CommunityManager Additional', () => {
+    it('MUST return community info with getInfo', async () => {
+      const cm = new CommunityManager(store, crypto)
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const result = await cm.create({
+        name: 'Info Test',
+        description: 'A description',
+        creatorDID: doc.id,
+        creatorKeyPair: kp
+      })
+
+      const info = await cm.getInfo(result.communityId)
+      expect(info).not.toBeNull()
+      expect(info!.name).toBe('Info Test')
+      expect(info!.description).toBe('A description')
+      expect(info!.creatorDID).toBe(doc.id)
+      expect(info!.memberCount).toBe(1)
+    })
+
+    it('MUST return null for non-existent community', async () => {
+      const cm = new CommunityManager(store, crypto)
+      const info = await cm.getInfo('nonexistent')
+      expect(info).toBeNull()
+    })
+
+    it('MUST update channel topic', async () => {
+      const cm = new CommunityManager(store, crypto)
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const community = await cm.create({ name: 'Topic Test', creatorDID: doc.id, creatorKeyPair: kp })
+      const channel = community.defaultChannels[0]
+
+      const updated = await cm.updateChannel(community.communityId, channel.id, { topic: 'New topic' })
+      expect(updated?.topic).toBe('New topic')
+    })
+  })
+
+  describe('MessageStore Additional', () => {
+    it('MUST return null for non-existent message', async () => {
+      const ms = new MessageStore(store)
+      const msg = await ms.getMessage('nonexistent')
+      expect(msg).toBeNull()
+    })
+
+    it('MUST search by author', async () => {
+      const ms = new MessageStore(store)
+      for (let i = 1; i <= 3; i++) {
+        await ms.storeMessage('c1', 'ch1', {
+          id: `search-msg-${i}`,
+          type: 'channel.message',
+          timestamp: `2026-02-22T10:00:0${i}Z`,
+          sender: i <= 2 ? 'did:key:alice' : 'did:key:bob',
+          payload: { clock: { counter: i, authorDID: i <= 2 ? 'did:key:alice' : 'did:key:bob' } }
+        })
+      }
+
+      const results = await ms.search({ communityId: 'c1', channelId: 'ch1', authorDID: 'did:key:alice', limit: 10 })
+      expect(results.length).toBe(2)
+      expect(results.every((m) => m.sender === 'did:key:alice')).toBe(true)
+    })
+
+    it('MUST delete message and confirm gone', async () => {
+      const ms = new MessageStore(store)
+      await ms.storeMessage('c1', 'ch1', {
+        id: 'del-test',
+        type: 'channel.message',
+        timestamp: '2026-02-22T10:00:00Z',
+        sender: 'did:key:test',
+        payload: {}
+      })
+      await ms.deleteMessage('del-test')
+      expect(await ms.getMessage('del-test')).toBeNull()
+    })
+  })
+
+  describe('DM Typing via WebSocket', () => {
+    it('MUST route dm.typing.indicator to recipient', async () => {
+      const alice = await createIdentity()
+      const bob = await createIdentity()
+
+      const aliceWs = await connectAndAuth(alice.vp)
+      const bobWs = await connectAndAuth(bob.vp)
+
+      const bobMsgPromise = waitForMessage(bobWs)
+
+      aliceWs.send(
+        serialise({
+          id: 'dm-typing',
+          type: 'dm.typing',
+          timestamp: new Date().toISOString(),
+          sender: alice.did,
+          payload: { recipientDID: bob.did }
+        })
+      )
+
+      const received = await bobMsgPromise
+      expect(received.type).toBe('dm.typing.indicator')
+
+      aliceWs.close()
+      bobWs.close()
+    })
+  })
+
+  describe('Multiple Communities', () => {
+    it('MUST support connection subscribed to multiple communities', async () => {
+      const { vp, did } = await createIdentity()
+      const ws = await connectAndAuth(vp)
+      const conn = server.connections()[0]
+
+      server.subscribeToCommunity(conn.id, 'c1')
+      server.subscribeToCommunity(conn.id, 'c2')
+
+      // Send to c1
+      ws.send(
+        serialise({
+          id: 'multi-c1',
+          type: 'channel.send',
+          timestamp: new Date().toISOString(),
+          sender: did,
+          payload: {
+            communityId: 'c1',
+            channelId: 'ch1',
+            content: { ciphertext: new Uint8Array([1]), epoch: 0, senderIndex: 0 },
+            nonce: 'mc1',
+            clock: { counter: 1, authorDID: did }
+          }
+        })
+      )
+      // Send to c2
+      ws.send(
+        serialise({
+          id: 'multi-c2',
+          type: 'channel.send',
+          timestamp: new Date().toISOString(),
+          sender: did,
+          payload: {
+            communityId: 'c2',
+            channelId: 'ch2',
+            content: { ciphertext: new Uint8Array([2]), epoch: 0, senderIndex: 0 },
+            nonce: 'mc2',
+            clock: { counter: 2, authorDID: did }
+          }
+        })
+      )
+
+      await new Promise((r) => setTimeout(r, 200))
+      const msg1 = await server.messageStoreInstance.getMessage('multi-c1')
+      const msg2 = await server.messageStoreInstance.getMessage('multi-c2')
+      expect(msg1).not.toBeNull()
+      expect(msg2).not.toBeNull()
+
+      ws.close()
+    })
+  })
 })

@@ -1,0 +1,30 @@
+{
+  "name": "@harmony/integration-tests",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --testTimeout 30000"
+  },
+  "dependencies": {
+    "@harmony/client": "workspace:*",
+    "@harmony/crdt": "workspace:*",
+    "@harmony/crypto": "workspace:*",
+    "@harmony/did": "workspace:*",
+    "@harmony/e2ee": "workspace:*",
+    "@harmony/federation": "workspace:*",
+    "@harmony/identity": "workspace:*",
+    "@harmony/migration": "workspace:*",
+    "@harmony/moderation": "workspace:*",
+    "@harmony/protocol": "workspace:*",
+    "@harmony/quads": "workspace:*",
+    "@harmony/server": "workspace:*",
+    "@harmony/vc": "workspace:*",
+    "@harmony/vocab": "workspace:*",
+    "@harmony/zcap": "workspace:*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
+  }
+}

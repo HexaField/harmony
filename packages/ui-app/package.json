@@ -1,0 +1,38 @@
+{
+  "name": "@harmony/ui-app",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.tsx",
+  "types": "src/index.tsx",
+  "exports": {
+    ".": "./src/index.tsx"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@harmony/bot-api": "workspace:*",
+    "@harmony/client": "workspace:*",
+    "@harmony/credentials": "workspace:*",
+    "@harmony/crypto": "workspace:*",
+    "@harmony/governance": "workspace:*",
+    "@harmony/identity": "workspace:*",
+    "@harmony/media": "workspace:*",
+    "@harmony/protocol": "workspace:*",
+    "@harmony/search": "workspace:*",
+    "@harmony/ui": "workspace:*",
+    "@harmony/voice": "workspace:*",
+    "@solidjs/router": "^0.15.3"
+  },
+  "devDependencies": {
+    "jsdom": "^28.1.0",
+    "solid-js": "^1.9.5",
+    "typescript": "^5.9.3",
+    "vite": "^6.3.5",
+    "vite-plugin-solid": "^2.11.6"
+  }
+}

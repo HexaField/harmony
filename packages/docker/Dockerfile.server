@@ -1,0 +1,32 @@
+FROM node:22-slim AS builder
+WORKDIR /app
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/server-runtime/package.json packages/server-runtime/
+COPY packages/server/package.json packages/server/
+COPY packages/crypto/package.json packages/crypto/
+COPY packages/quads/package.json packages/quads/
+COPY packages/protocol/package.json packages/protocol/
+COPY packages/vocab/package.json packages/vocab/
+COPY packages/did/package.json packages/did/
+COPY packages/vc/package.json packages/vc/
+COPY packages/zcap/package.json packages/zcap/
+COPY packages/identity/package.json packages/identity/
+COPY packages/crdt/package.json packages/crdt/
+COPY packages/e2ee/package.json packages/e2ee/
+COPY packages/federation/package.json packages/federation/
+COPY packages/moderation/package.json packages/moderation/
+COPY packages/voice/package.json packages/voice/
+COPY packages/media/package.json packages/media/
+RUN corepack enable && pnpm install --frozen-lockfile
+COPY packages/ packages/
+
+FROM node:22-slim
+RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=builder /app .
+EXPOSE 4000 4001
+VOLUME ["/var/harmony/data"]
+ENV HARMONY_CONFIG=/etc/harmony/config.yaml
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD wget -q --spider http://localhost:4001/health || exit 1
+CMD ["node", "--import", "tsx", "packages/server-runtime/src/bin.ts"]

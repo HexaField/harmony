@@ -33,5 +33,10 @@
     "*.{json,css,md,html}": [
       "oxfmt --write"
     ]
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }

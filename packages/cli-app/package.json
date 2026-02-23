@@ -1,0 +1,35 @@
+{
+  "name": "@harmony/cli-app",
+  "version": "0.1.0",
+  "bin": {
+    "harmony": "src/bin.ts"
+  },
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@harmony/cli": "workspace:*",
+    "@harmony/client": "workspace:*",
+    "@harmony/cloud": "workspace:*",
+    "@harmony/crypto": "workspace:*",
+    "@harmony/did": "workspace:*",
+    "@harmony/identity": "workspace:*",
+    "@harmony/migration": "workspace:*",
+    "@harmony/quads": "workspace:*",
+    "@harmony/server-runtime": "workspace:*",
+    "@harmony/vc": "workspace:*",
+    "@harmony/zcap": "workspace:*",
+    "@inquirer/prompts": "^7.5.3",
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "tslib": "^2.8.1"
+  }
+}

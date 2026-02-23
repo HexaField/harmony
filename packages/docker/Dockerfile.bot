@@ -1,0 +1,11 @@
+FROM node:22-slim AS builder
+WORKDIR /app
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/ packages/
+RUN corepack enable && pnpm install --frozen-lockfile
+
+FROM node:22-slim
+WORKDIR /app
+COPY --from=builder /app .
+ENV DISCORD_TOKEN=""
+CMD ["node", "--import", "tsx", "packages/discord-bot/src/bin.ts"]

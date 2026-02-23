@@ -286,4 +286,61 @@ describe('@harmony/protocol', () => {
       expect(syncRt.limit).toBe(50)
     })
   })
+
+  describe('Phase 3 Message Types', () => {
+    it('MUST include voice message types', () => {
+      expect(CLIENT_TO_SERVER_TYPES).toContain('voice.join')
+      expect(CLIENT_TO_SERVER_TYPES).toContain('voice.leave')
+      expect(CLIENT_TO_SERVER_TYPES).toContain('voice.state')
+      expect(SERVER_TO_CLIENT_TYPES).toContain('voice.participant.joined')
+      expect(SERVER_TO_CLIENT_TYPES).toContain('voice.participant.left')
+      expect(SERVER_TO_CLIENT_TYPES).toContain('voice.speaking')
+    })
+
+    it('MUST include media message types', () => {
+      expect(CLIENT_TO_SERVER_TYPES).toContain('media.upload.request')
+      expect(CLIENT_TO_SERVER_TYPES).toContain('media.upload.complete')
+      expect(CLIENT_TO_SERVER_TYPES).toContain('media.delete')
+    })
+
+    it('MUST include search message types', () => {
+      expect(CLIENT_TO_SERVER_TYPES).toContain('search.metadata')
+      expect(SERVER_TO_CLIENT_TYPES).toContain('search.metadata.result')
+    })
+
+    it('MUST include bot message types', () => {
+      expect(CLIENT_TO_SERVER_TYPES).toContain('bot.install')
+      expect(CLIENT_TO_SERVER_TYPES).toContain('bot.uninstall')
+      expect(CLIENT_TO_SERVER_TYPES).toContain('bot.action')
+      expect(SERVER_TO_CLIENT_TYPES).toContain('bot.event')
+    })
+
+    it('MUST include governance message types', () => {
+      expect(CLIENT_TO_SERVER_TYPES).toContain('governance.propose')
+      expect(CLIENT_TO_SERVER_TYPES).toContain('governance.sign')
+      expect(CLIENT_TO_SERVER_TYPES).toContain('governance.execute')
+      expect(CLIENT_TO_SERVER_TYPES).toContain('governance.contest')
+      expect(CLIENT_TO_SERVER_TYPES).toContain('governance.cancel')
+    })
+
+    it('MUST include delegation message types', () => {
+      expect(CLIENT_TO_SERVER_TYPES).toContain('delegation.create')
+      expect(CLIENT_TO_SERVER_TYPES).toContain('delegation.revoke')
+    })
+
+    it('MUST include credential message types', () => {
+      expect(CLIENT_TO_SERVER_TYPES).toContain('credential.issue')
+      expect(CLIENT_TO_SERVER_TYPES).toContain('credential.present')
+      expect(CLIENT_TO_SERVER_TYPES).toContain('credential.verify')
+    })
+
+    it('MUST include all Phase 3 types in ALL_MESSAGE_TYPES', () => {
+      expect(ALL_MESSAGE_TYPES).toContain('voice.join')
+      expect(ALL_MESSAGE_TYPES).toContain('media.upload.request')
+      expect(ALL_MESSAGE_TYPES).toContain('bot.install')
+      expect(ALL_MESSAGE_TYPES).toContain('governance.propose')
+      expect(ALL_MESSAGE_TYPES).toContain('delegation.create')
+      expect(ALL_MESSAGE_TYPES).toContain('credential.issue')
+    })
+  })
 })

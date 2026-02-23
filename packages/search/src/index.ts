@@ -1,0 +1,7 @@
+export type { IndexableMessage, SearchQuery, SearchFilters, SearchResult } from './client-index.js'
+export { ClientSearchIndex } from './client-index.js'
+export type { MessageMetadata, MetadataQuery, MetadataFilters, MetadataResult } from './metadata-index.js'
+export { MetadataSearchIndex } from './metadata-index.js'
+export { tokenize } from './tokenizer.js'
+export { parseQuery } from './query-parser.js'
+export { extractSnippet } from './snippet.js'

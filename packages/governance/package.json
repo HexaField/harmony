@@ -1,0 +1,29 @@
+{
+  "name": "@harmony/governance",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@harmony/crypto": "workspace:*",
+    "@harmony/protocol": "workspace:*",
+    "@harmony/quads": "workspace:*",
+    "@harmony/vocab": "workspace:*",
+    "@harmony/zcap": "workspace:*"
+  },
+  "devDependencies": {
+    "@harmony/did": "workspace:*",
+    "@harmony/vc": "workspace:*",
+    "@rollup/plugin-typescript": "^12.3.0",
+    "rollup": "^4.54.0",
+    "tslib": "^2.8.1"
+  }
+}

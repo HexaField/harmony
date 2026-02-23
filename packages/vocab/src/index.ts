@@ -23,7 +23,24 @@ export const HarmonyType = {
   ThreadMessage: `${HARMONY}ThreadMessage`,
   Presence: `${HARMONY}Presence`,
   FederationPeer: `${HARMONY}FederationPeer`,
-  ModerationAction: `${HARMONY}ModerationAction`
+  ModerationAction: `${HARMONY}ModerationAction`,
+  // Phase 3 additions
+  VoiceRoom: `${HARMONY}VoiceRoom`,
+  VoiceParticipant: `${HARMONY}VoiceParticipant`,
+  MediaFile: `${HARMONY}MediaFile`,
+  LinkPreview: `${HARMONY}LinkPreview`,
+  Bot: `${HARMONY}Bot`,
+  Webhook: `${HARMONY}Webhook`,
+  InboundWebhook: `${HARMONY}InboundWebhook`,
+  Proposal: `${HARMONY}Proposal`,
+  Constitution: `${HARMONY}Constitution`,
+  UserDelegation: `${HARMONY}UserDelegation`,
+  AgentAuth: `${HARMONY}AgentAuth`,
+  CredentialType: `${HARMONY}CredentialType`,
+  Reputation: `${HARMONY}Reputation`,
+  SearchIndex: `${HARMONY}SearchIndex`,
+  MetadataIndex: `${HARMONY}MetadataIndex`,
+  PushSubscription: `${HARMONY}PushSubscription`
 } as const
 
 // Harmony predicates
@@ -59,7 +76,52 @@ export const HarmonyPredicate = {
   moderator: `${HARMONY}moderator`,
   moderationTarget: `${HARMONY}moderationTarget`,
   moderationReason: `${HARMONY}moderationReason`,
-  moderationExpiry: `${HARMONY}moderationExpiry`
+  moderationExpiry: `${HARMONY}moderationExpiry`,
+  // Phase 3 additions — Voice
+  maxParticipants: `${HARMONY}maxParticipants`,
+  quality: `${HARMONY}quality`,
+  speaking: `${HARMONY}speaking`,
+  screenSharing: `${HARMONY}screenSharing`,
+  e2eeEnabled: `${HARMONY}e2eeEnabled`,
+  channelId: `${HARMONY}channelId`,
+  // Phase 3 additions — Media
+  filename: `${HARMONY}filename`,
+  contentType: `${HARMONY}contentType`,
+  encryptedSize: `${HARMONY}encryptedSize`,
+  checksum: `${HARMONY}checksum`,
+  thumbnailId: `${HARMONY}thumbnailId`,
+  uploadedBy: `${HARMONY}uploadedBy`,
+  // Phase 3 additions — Bot
+  botDID: `${HARMONY}botDID`,
+  botStatus: `${HARMONY}botStatus`,
+  installedBy: `${HARMONY}installedBy`,
+  // Phase 3 additions — Governance
+  proposalStatus: `${HARMONY}proposalStatus`,
+  quorumKind: `${HARMONY}quorumKind`,
+  quorumThreshold: `${HARMONY}quorumThreshold`,
+  votingPeriod: `${HARMONY}votingPeriod`,
+  executionDelay: `${HARMONY}executionDelay`,
+  contestPeriod: `${HARMONY}contestPeriod`,
+  fromDID: `${HARMONY}fromDID`,
+  toDID: `${HARMONY}toDID`,
+  reason: `${HARMONY}reason`,
+  agentDID: `${HARMONY}agentDID`,
+  auditLevel: `${HARMONY}auditLevel`,
+  maxActionsPerHour: `${HARMONY}maxActionsPerHour`,
+  version: `${HARMONY}version`,
+  // Phase 3 additions — Credentials
+  issuerPolicy: `${HARMONY}issuerPolicy`,
+  transferable: `${HARMONY}transferable`,
+  badgeEmoji: `${HARMONY}badgeEmoji`,
+  badgeColor: `${HARMONY}badgeColor`,
+  aggregateScore: `${HARMONY}aggregateScore`,
+  contributionScore: `${HARMONY}contributionScore`,
+  messageCount: `${HARMONY}messageCount`,
+  subject: `${HARMONY}subject`,
+  score: `${HARMONY}score`,
+  // Phase 3 additions — Mobile
+  pushToken: `${HARMONY}pushToken`,
+  pushPlatform: `${HARMONY}pushPlatform`
 } as const
 
 // Harmony VC types
@@ -89,7 +151,19 @@ export const HarmonyAction = {
   ManageMembers: `${HARMONY}ManageMembers`,
   FederateRelay: `${HARMONY}FederateRelay`,
   FederateVerify: `${HARMONY}FederateVerify`,
-  ModerateContent: `${HARMONY}ModerateContent`
+  ModerateContent: `${HARMONY}ModerateContent`,
+  // Phase 3 additions
+  JoinVoice: `${HARMONY}JoinVoice`,
+  ManageVoice: `${HARMONY}ManageVoice`,
+  UploadMedia: `${HARMONY}UploadMedia`,
+  DeleteMedia: `${HARMONY}DeleteMedia`,
+  InstallBot: `${HARMONY}InstallBot`,
+  ManageWebhooks: `${HARMONY}ManageWebhooks`,
+  ProposeGovernance: `${HARMONY}ProposeGovernance`,
+  VoteGovernance: `${HARMONY}VoteGovernance`,
+  DelegateUser: `${HARMONY}DelegateUser`,
+  AuthorizeAgent: `${HARMONY}AuthorizeAgent`,
+  IssueCustomCredential: `${HARMONY}IssueCustomCredential`
 } as const
 
 // RDF predicates

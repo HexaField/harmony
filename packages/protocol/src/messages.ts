@@ -58,6 +58,38 @@ export type MessageType =
   | 'presence.changed'
   | 'sync.response'
   | 'error'
+  // Voice
+  | 'voice.join'
+  | 'voice.leave'
+  | 'voice.state'
+  | 'voice.participant.joined'
+  | 'voice.participant.left'
+  | 'voice.speaking'
+  // Files
+  | 'media.upload.request'
+  | 'media.upload.complete'
+  | 'media.delete'
+  // Search
+  | 'search.metadata'
+  | 'search.metadata.result'
+  // Bots
+  | 'bot.install'
+  | 'bot.uninstall'
+  | 'bot.event'
+  | 'bot.action'
+  // Governance
+  | 'governance.propose'
+  | 'governance.sign'
+  | 'governance.execute'
+  | 'governance.contest'
+  | 'governance.cancel'
+  // Delegation
+  | 'delegation.create'
+  | 'delegation.revoke'
+  // Credentials
+  | 'credential.issue'
+  | 'credential.present'
+  | 'credential.verify'
   // Federation
   | 'federation.relay'
   | 'federation.sync'
@@ -91,7 +123,28 @@ export const CLIENT_TO_SERVER_TYPES: MessageType[] = [
   'member.ban',
   'presence.update',
   'sync.request',
-  'sync.state'
+  'sync.state',
+  // Phase 3
+  'voice.join',
+  'voice.leave',
+  'voice.state',
+  'media.upload.request',
+  'media.upload.complete',
+  'media.delete',
+  'search.metadata',
+  'bot.install',
+  'bot.uninstall',
+  'bot.action',
+  'governance.propose',
+  'governance.sign',
+  'governance.execute',
+  'governance.contest',
+  'governance.cancel',
+  'delegation.create',
+  'delegation.revoke',
+  'credential.issue',
+  'credential.present',
+  'credential.verify'
 ]
 
 export const SERVER_TO_CLIENT_TYPES: MessageType[] = [
@@ -121,7 +174,13 @@ export const SERVER_TO_CLIENT_TYPES: MessageType[] = [
   'role.deleted',
   'presence.changed',
   'sync.response',
-  'error'
+  'error',
+  // Phase 3
+  'voice.participant.joined',
+  'voice.participant.left',
+  'voice.speaking',
+  'search.metadata.result',
+  'bot.event'
 ]
 
 export const FEDERATION_TYPES: MessageType[] = ['federation.relay', 'federation.sync', 'federation.presence']

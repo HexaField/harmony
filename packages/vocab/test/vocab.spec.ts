@@ -102,4 +102,64 @@ describe('@harmony/vocab', () => {
       expect(HARMONY_JSONLD_CONTEXT['@context'].author).toBeDefined()
     })
   })
+
+  describe('Phase 3 Types', () => {
+    it('MUST define voice types', () => {
+      expect(HarmonyType.VoiceRoom).toBe(`${HARMONY}VoiceRoom`)
+      expect(HarmonyType.VoiceParticipant).toBe(`${HARMONY}VoiceParticipant`)
+    })
+
+    it('MUST define media types', () => {
+      expect(HarmonyType.MediaFile).toBe(`${HARMONY}MediaFile`)
+      expect(HarmonyType.LinkPreview).toBe(`${HARMONY}LinkPreview`)
+    })
+
+    it('MUST define bot types', () => {
+      expect(HarmonyType.Bot).toBe(`${HARMONY}Bot`)
+      expect(HarmonyType.Webhook).toBe(`${HARMONY}Webhook`)
+    })
+
+    it('MUST define governance types', () => {
+      expect(HarmonyType.Proposal).toBe(`${HARMONY}Proposal`)
+      expect(HarmonyType.Constitution).toBe(`${HARMONY}Constitution`)
+      expect(HarmonyType.UserDelegation).toBe(`${HARMONY}UserDelegation`)
+      expect(HarmonyType.AgentAuth).toBe(`${HARMONY}AgentAuth`)
+    })
+
+    it('MUST define credential types', () => {
+      expect(HarmonyType.CredentialType).toBe(`${HARMONY}CredentialType`)
+      expect(HarmonyType.Reputation).toBe(`${HARMONY}Reputation`)
+    })
+  })
+
+  describe('Phase 3 Predicates', () => {
+    it('MUST define voice predicates', () => {
+      expect(HarmonyPredicate.maxParticipants).toBe(`${HARMONY}maxParticipants`)
+      expect(HarmonyPredicate.quality).toBe(`${HARMONY}quality`)
+      expect(HarmonyPredicate.speaking).toBe(`${HARMONY}speaking`)
+    })
+
+    it('MUST define media predicates', () => {
+      expect(HarmonyPredicate.filename).toBe(`${HARMONY}filename`)
+      expect(HarmonyPredicate.contentType).toBe(`${HARMONY}contentType`)
+      expect(HarmonyPredicate.encryptedSize).toBe(`${HARMONY}encryptedSize`)
+      expect(HarmonyPredicate.checksum).toBe(`${HARMONY}checksum`)
+    })
+
+    it('MUST define governance predicates', () => {
+      expect(HarmonyPredicate.proposalStatus).toBe(`${HARMONY}proposalStatus`)
+      expect(HarmonyPredicate.quorumKind).toBe(`${HARMONY}quorumKind`)
+      expect(HarmonyPredicate.votingPeriod).toBe(`${HARMONY}votingPeriod`)
+    })
+  })
+
+  describe('Phase 3 Actions', () => {
+    it('MUST define Phase 3 ZCAP actions', () => {
+      expect(HarmonyAction.JoinVoice).toBe(`${HARMONY}JoinVoice`)
+      expect(HarmonyAction.InstallBot).toBe(`${HARMONY}InstallBot`)
+      expect(HarmonyAction.ProposeGovernance).toBe(`${HARMONY}ProposeGovernance`)
+      expect(HarmonyAction.DelegateUser).toBe(`${HARMONY}DelegateUser`)
+      expect(HarmonyAction.IssueCustomCredential).toBe(`${HARMONY}IssueCustomCredential`)
+    })
+  })
 })

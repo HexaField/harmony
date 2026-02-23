@@ -323,4 +323,75 @@ describe('@harmony/voice', () => {
       // Without a key set, connection should not proceed
     })
   })
+
+  describe('Authorization (additional)', () => {
+    it.skip('MUST revoke participant on ZCAP/VC revocation', () => {
+      // Source does not implement a ZCAP revocation listener that auto-removes participants.
+      // VoiceRoomManager would need an onRevocation hook.
+    })
+  })
+
+  describe('Participant Tracking (additional)', () => {
+    it('MUST broadcast participant list changes', async () => {
+      const room = await manager.createRoom('comm1', 'ch1')
+      const token = await manager.generateJoinToken(room.id, 'did:key:alice', makeZCAPProof())
+      const voiceClient = new VoiceClient()
+      const conn = await voiceClient.joinRoom(token)
+
+      const joined: VoiceParticipant[] = []
+      conn.onParticipantJoined((p) => joined.push(p))
+
+      const bob: VoiceParticipant = {
+        did: 'did:key:bob',
+        joinedAt: new Date().toISOString(),
+        audioEnabled: true,
+        videoEnabled: false,
+        screenSharing: false,
+        speaking: false
+      }
+      ;(conn as any).simulateParticipantJoined(bob)
+      expect(conn.participants).toHaveLength(1)
+      expect(joined).toHaveLength(1)
+    })
+
+    it.skip('MUST update presence to show "in voice"', () => {
+      // Source does not implement presence integration.
+      // VoiceRoomManager would need to update a presence service on join/leave.
+    })
+  })
+
+  describe('LiveKit Integration (additional)', () => {
+    it.skip('MUST handle LiveKit webhook events (participant joined/left)', () => {
+      // Source does not expose a webhook handler for LiveKit server-side events.
+    })
+
+    it.skip('MUST reconnect on transient LiveKit failures', () => {
+      // Source VoiceClient does not implement reconnection logic.
+    })
+  })
+
+  describe('Client Connection (additional)', () => {
+    it('MUST start/stop screen sharing', async () => {
+      const room = await manager.createRoom('comm1', 'ch1')
+      const token = await manager.generateJoinToken(room.id, 'did:key:alice', makeZCAPProof())
+      const voiceClient = new VoiceClient()
+      const conn = await voiceClient.joinRoom(token)
+
+      const self: VoiceParticipant = {
+        did: 'did:key:alice',
+        joinedAt: new Date().toISOString(),
+        audioEnabled: true,
+        videoEnabled: false,
+        screenSharing: false,
+        speaking: false
+      }
+      ;(conn as any).simulateParticipantJoined(self)
+
+      await conn.startScreenShare()
+      expect(conn.participants.find((p) => p.did === 'did:key:alice')!.screenSharing).toBe(true)
+
+      await conn.stopScreenShare()
+      expect(conn.participants.find((p) => p.did === 'did:key:alice')!.screenSharing).toBe(false)
+    })
+  })
 })

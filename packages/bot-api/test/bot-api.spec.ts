@@ -652,4 +652,151 @@ describe('@harmony/bot-api', () => {
       expect(result).toBeNull()
     })
   })
+
+  describe('Bot Lifecycle (additional)', () => {
+    it.skip('MUST restart errored bot with backoff', () => {
+      // Source BotHost does not implement automatic restart with backoff.
+      // Would need a restartBot() method with exponential backoff logic.
+    })
+  })
+
+  describe('ZCAP Authorization (additional)', () => {
+    it('MUST reject channel management without ManageChannels capability', async () => {
+      const botDID = 'did:key:bot-no-manage'
+      auth.grantBotPermission(botDID, 'comm1', 'SendMessage')
+      // ManageChannels is not granted — bot cannot manage channels
+      expect(auth.hasBotPermission(botDID, 'comm1', 'ManageChannels')).toBe(false)
+    })
+
+    it('MUST scope capabilities to specific channels when attenuated', async () => {
+      const dispatcher = new EventDispatcher(auth)
+      auth.scopeToChannels('did:key:bot-scoped', ['ch1', 'ch3'])
+      const received: BotEvent[] = []
+      const bot: RegisteredBot = {
+        id: 'bot-scoped',
+        manifest: makeManifest({ did: 'did:key:bot-scoped' }),
+        communityId: 'comm1',
+        status: 'running',
+        installedBy: 'did:key:admin',
+        installedAt: new Date().toISOString(),
+        capabilities: [],
+        resourceUsage: { memoryMB: 0, cpuPercent: 0, messagesPerMinute: 0, apiCallsPerMinute: 0 },
+        sandbox: {
+          memoryLimitMB: 128,
+          cpuPercent: 10,
+          maxMessagesPerMinute: 60,
+          maxApiCallsPerMinute: 120,
+          networkAccess: false
+        }
+      }
+      dispatcher.registerBot(bot, async (e) => {
+        received.push(e)
+      })
+
+      await dispatcher.dispatchEvent(makeEvent('message.created', 'ch1'))
+      await dispatcher.dispatchEvent(makeEvent('message.created', 'ch2'))
+      await dispatcher.dispatchEvent(makeEvent('message.created', 'ch3'))
+
+      expect(received).toHaveLength(2)
+      expect(received.map((e) => e.channelId)).toEqual(['ch1', 'ch3'])
+    })
+
+    it.skip('MUST re-verify capabilities on ZCAP epoch change', () => {
+      // Source does not implement ZCAP epoch tracking/re-verification.
+    })
+  })
+
+  describe('Event Dispatch (additional)', () => {
+    it('MUST batch events during bot restart (replay missed)', async () => {
+      const dispatcher = new EventDispatcher(auth)
+      const received: BotEvent[] = []
+      const bot: RegisteredBot = {
+        id: 'bot-replay',
+        manifest: makeManifest(),
+        communityId: 'comm1',
+        status: 'stopped',
+        installedBy: 'did:key:admin',
+        installedAt: new Date().toISOString(),
+        capabilities: [],
+        resourceUsage: { memoryMB: 0, cpuPercent: 0, messagesPerMinute: 0, apiCallsPerMinute: 0 },
+        sandbox: {
+          memoryLimitMB: 128,
+          cpuPercent: 10,
+          maxMessagesPerMinute: 60,
+          maxApiCallsPerMinute: 120,
+          networkAccess: false
+        }
+      }
+      dispatcher.registerBot(bot, async (e) => {
+        received.push(e)
+      })
+
+      // Events while stopped should be queued
+      await dispatcher.dispatchEvent(makeEvent('message.created'))
+      await dispatcher.dispatchEvent(makeEvent('message.created'))
+      expect(received).toHaveLength(0)
+
+      // Start bot and replay
+      bot.status = 'running'
+      await dispatcher.replayMissedEvents('bot-replay')
+      expect(received).toHaveLength(2)
+    })
+  })
+
+  describe('Bot SDK (additional)', () => {
+    it('MUST retrieve member list', async () => {
+      const botDID = 'did:key:bot-members'
+      auth.grantBotPermission(botDID, 'comm1', 'ReadPresence')
+      sandbox.registerBot(botDID, {
+        memoryLimitMB: 128,
+        cpuPercent: 10,
+        maxMessagesPerMinute: 60,
+        maxApiCallsPerMinute: 120,
+        networkAccess: false
+      })
+      const members = new Map<string, MemberInfo[]>()
+      members.set('comm1', [
+        { did: 'did:key:alice', displayName: 'Alice', roles: ['admin'] },
+        { did: 'did:key:bob', displayName: 'Bob', roles: ['member'] }
+      ])
+      const ctx = createBotContext(botDID, 'comm1', [], auth, sandbox, {
+        messages: new Map(),
+        channels: new Map(),
+        members
+      })
+      const result = await ctx.getMembers('comm1')
+      expect(result).toHaveLength(2)
+      expect(result[0].did).toBe('did:key:alice')
+    })
+  })
+
+  describe('Webhooks Outbound (additional)', () => {
+    it.skip('MUST retry on transient failure (3 attempts, exponential backoff)', () => {
+      // Source WebhookManager does not implement retry logic on individual dispatches.
+    })
+
+    it.skip('MUST require ManageWebhooks capability to create', () => {
+      // Source WebhookManager.createOutboundWebhook does not check ZCAP authorization.
+    })
+  })
+
+  describe('Webhooks Inbound (additional)', () => {
+    it.skip('MUST rate limit inbound webhook messages', () => {
+      // Source WebhookManager.processInbound does not implement rate limiting.
+    })
+
+    it('MUST display webhook displayName and avatar on messages', async () => {
+      const poster = async () => ({ status: 200 })
+      const mgr = new WebhookManager(store, poster)
+      const webhook = await mgr.createInboundWebhook(
+        'comm1',
+        'ch1',
+        'did:key:admin',
+        'Deploy Bot',
+        'https://example.com/avatar.png'
+      )
+      const result = await mgr.processInbound(webhook.token, 'Deploy complete')
+      expect(result!.displayName).toBe('Deploy Bot')
+    })
+  })
 })

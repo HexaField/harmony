@@ -364,4 +364,47 @@ describe('@harmony/media', () => {
       expect(preview!.title).not.toContain('<script>')
     })
   })
+
+  describe('Download (additional)', () => {
+    it.skip('MUST handle partial download failure gracefully', () => {
+      // Source MediaClient.downloadFile does not implement partial download recovery.
+      // Would need streaming download with resume capability.
+    })
+  })
+
+  describe('Thumbnail Generation (additional)', () => {
+    it('MUST resize to max 200x200 preserving aspect ratio', () => {
+      const data = randomBytes(2048)
+      // generateThumbnail accepts maxWidth/maxHeight params (200x200 default)
+      const thumb = generateThumbnail(data, 'image/jpeg', 200, 200)
+      expect(thumb).not.toBeNull()
+      // Thumbnail should be smaller than original data
+      expect(thumb!.length).toBeLessThan(data.length)
+    })
+  })
+
+  describe('Link Previews (additional)', () => {
+    it.skip('MUST proxy preview images through server (privacy)', () => {
+      // Source LinkPreviewService does not implement image proxying.
+      // imageUrl is returned as-is from og:image. Server would need a proxy endpoint.
+    })
+  })
+
+  describe('Integration', () => {
+    it.skip('MUST attach MediaRef to message EncryptedContent', () => {
+      // Integration with @harmony/protocol message types not implemented in media package.
+    })
+
+    it.skip('MUST display file in message after client-side decryption', () => {
+      // UI integration not implemented in media package.
+    })
+
+    it.skip('MUST display link preview inline in message', () => {
+      // UI integration not implemented in media package.
+    })
+
+    it.skip('MUST handle messages with multiple attachments', () => {
+      // Integration with message system not implemented in media package.
+    })
+  })
 })

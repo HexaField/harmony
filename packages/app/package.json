@@ -14,13 +14,23 @@
     "electron:start": "electron --import tsx bin/harmony-app.js"
   },
   "dependencies": {
+    "@harmony/bot-api": "workspace:*",
     "@harmony/client": "workspace:*",
+    "@harmony/credentials": "workspace:*",
     "@harmony/crypto": "workspace:*",
+    "@harmony/governance": "workspace:*",
     "@harmony/identity": "workspace:*",
+    "@harmony/media": "workspace:*",
     "@harmony/migration": "workspace:*",
     "@harmony/migration-bot": "workspace:*",
+    "@harmony/quads": "workspace:*",
+    "@harmony/search": "workspace:*",
+    "@harmony/server": "workspace:*",
     "@harmony/server-runtime": "workspace:*",
-    "@harmony/ui-app": "workspace:*"
+    "@harmony/ui-app": "workspace:*",
+    "@harmony/vc": "workspace:*",
+    "@harmony/voice": "workspace:*",
+    "@harmony/zcap": "workspace:*"
   },
   "devDependencies": {
     "electron": "^36.3.2",

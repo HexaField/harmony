@@ -44,27 +44,57 @@ importers:
 
   packages/app:
     dependencies:
+      '@harmony/bot-api':
+        specifier: workspace:*
+        version: link:../bot-api
       '@harmony/client':
         specifier: workspace:*
         version: link:../client
+      '@harmony/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       '@harmony/crypto':
         specifier: workspace:*
         version: link:../crypto
+      '@harmony/governance':
+        specifier: workspace:*
+        version: link:../governance
       '@harmony/identity':
         specifier: workspace:*
         version: link:../identity
+      '@harmony/media':
+        specifier: workspace:*
+        version: link:../media
       '@harmony/migration':
         specifier: workspace:*
         version: link:../migration
       '@harmony/migration-bot':
         specifier: workspace:*
         version: link:../migration-bot
+      '@harmony/quads':
+        specifier: workspace:*
+        version: link:../quads
+      '@harmony/search':
+        specifier: workspace:*
+        version: link:../search
+      '@harmony/server':
+        specifier: workspace:*
+        version: link:../server
       '@harmony/server-runtime':
         specifier: workspace:*
         version: link:../server-runtime
       '@harmony/ui-app':
         specifier: workspace:*
         version: link:../ui-app
+      '@harmony/vc':
+        specifier: workspace:*
+        version: link:../vc
+      '@harmony/voice':
+        specifier: workspace:*
+        version: link:../voice
+      '@harmony/zcap':
+        specifier: workspace:*
+        version: link:../zcap
     devDependencies:
       electron:
         specifier: ^36.3.2
@@ -256,6 +286,46 @@ importers:
       ws:
         specifier: ^8.18.0
         version: 8.18.3
+
+  packages/cloud:
+    dependencies:
+      '@harmony/crypto':
+        specifier: workspace:*
+        version: link:../crypto
+      '@harmony/did':
+        specifier: workspace:*
+        version: link:../did
+      '@harmony/identity':
+        specifier: workspace:*
+        version: link:../identity
+      '@harmony/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@harmony/quads':
+        specifier: workspace:*
+        version: link:../quads
+      '@harmony/vc':
+        specifier: workspace:*
+        version: link:../vc
+      express:
+        specifier: ^5.2.1
+        version: 5.2.1
+      zod:
+        specifier: ^4.3.5
+        version: 4.3.5
+    devDependencies:
+      '@rollup/plugin-typescript':
+        specifier: ^12.3.0
+        version: 12.3.0(rollup@4.54.0)(tslib@2.8.1)(typescript@5.9.3)
+      '@types/express':
+        specifier: ^5.0.6
+        version: 5.0.6
+      rollup:
+        specifier: ^4.54.0
+        version: 4.54.0
+      tslib:
+        specifier: ^2.8.1
+        version: 2.8.1
 
   packages/crdt:
     devDependencies:
@@ -516,6 +586,61 @@ importers:
       tslib:
         specifier: ^2.8.1
         version: 2.8.1
+
+  packages/integration-tests:
+    dependencies:
+      '@harmony/client':
+        specifier: workspace:*
+        version: link:../client
+      '@harmony/crdt':
+        specifier: workspace:*
+        version: link:../crdt
+      '@harmony/crypto':
+        specifier: workspace:*
+        version: link:../crypto
+      '@harmony/did':
+        specifier: workspace:*
+        version: link:../did
+      '@harmony/e2ee':
+        specifier: workspace:*
+        version: link:../e2ee
+      '@harmony/federation':
+        specifier: workspace:*
+        version: link:../federation
+      '@harmony/identity':
+        specifier: workspace:*
+        version: link:../identity
+      '@harmony/migration':
+        specifier: workspace:*
+        version: link:../migration
+      '@harmony/moderation':
+        specifier: workspace:*
+        version: link:../moderation
+      '@harmony/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@harmony/quads':
+        specifier: workspace:*
+        version: link:../quads
+      '@harmony/server':
+        specifier: workspace:*
+        version: link:../server
+      '@harmony/vc':
+        specifier: workspace:*
+        version: link:../vc
+      '@harmony/vocab':
+        specifier: workspace:*
+        version: link:../vocab
+      '@harmony/zcap':
+        specifier: workspace:*
+        version: link:../zcap
+      ws:
+        specifier: ^8.18.0
+        version: 8.18.3
+    devDependencies:
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
 
   packages/media:
     dependencies:

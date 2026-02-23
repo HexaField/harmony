@@ -407,4 +407,55 @@ describe('@harmony/search', () => {
       expect(snippet).toBeTruthy()
     })
   })
+
+  describe('Server-side Metadata Index (additional)', () => {
+    it('MUST rebuild index from quad store', async () => {
+      const { MemoryQuadStore } = await import('@harmony/quads')
+      const quadStore = new MemoryQuadStore()
+
+      // Add some message quads to the store
+      await quadStore.addAll([
+        { subject: 'msg-1', predicate: 'harmony:author', object: 'did:key:alice', graph: 'community:comm1' },
+        { subject: 'msg-1', predicate: 'harmony:channelId', object: 'ch1', graph: 'community:comm1' },
+        {
+          subject: 'msg-1',
+          predicate: 'harmony:timestamp',
+          object: { value: '2026-02-01T00:00:00Z', datatype: 'xsd:dateTime' },
+          graph: 'community:comm1'
+        },
+        { subject: 'msg-2', predicate: 'harmony:author', object: 'did:key:bob', graph: 'community:comm1' },
+        { subject: 'msg-2', predicate: 'harmony:channelId', object: 'ch2', graph: 'community:comm1' },
+        {
+          subject: 'msg-2',
+          predicate: 'harmony:timestamp',
+          object: { value: '2026-02-02T00:00:00Z', datatype: 'xsd:dateTime' },
+          graph: 'community:comm1'
+        }
+      ])
+
+      const metaIndex = new MetadataSearchIndex(quadStore)
+      await metaIndex.rebuildIndex('comm1')
+
+      const results = metaIndex.searchMetadata({ communityId: 'comm1', filters: {} })
+      expect(results.length).toBe(2)
+    })
+  })
+
+  describe('Integration', () => {
+    it.skip('MUST index messages as they arrive (client-side, after decryption)', () => {
+      // Integration with @harmony/client message pipeline not implemented in search package.
+    })
+
+    it.skip('MUST merge client full-text results with server metadata results', () => {
+      // Cross-index merging not implemented in search package.
+    })
+
+    it.skip('MUST handle search across multiple communities', () => {
+      // Multi-community search orchestration not implemented.
+    })
+
+    it.skip('MUST persist client index to local storage (survive page reload)', () => {
+      // LocalStorage persistence not implemented in ClientSearchIndex.
+    })
+  })
 })

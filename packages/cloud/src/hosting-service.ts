@@ -104,22 +104,32 @@ export class HostingService {
     const instanceDataDir = resolve(this._dataDir, id)
     mkdirSync(instanceDataDir, { recursive: true })
 
-    const child = fork(this._serverRuntimePath, [], {
-      execArgv: ['--import', 'tsx'],
-      env: {
-        ...process.env,
-        HARMONY_PORT: String(port),
-        HARMONY_HOST: '0.0.0.0'
-      },
-      cwd: instanceDataDir,
-      stdio: 'pipe'
-    })
+    let child: ChildProcess
+    try {
+      child = fork(this._serverRuntimePath, [], {
+        execArgv: ['--import', 'tsx'],
+        env: {
+          ...process.env,
+          HARMONY_PORT: String(port),
+          HARMONY_HOST: '0.0.0.0'
+        },
+        cwd: instanceDataDir,
+        stdio: 'pipe'
+      })
+    } catch {
+      throw new Error('Failed to spawn server-runtime')
+    }
 
     const wsUrl = `ws://${this._host}:${port}`
     const httpUrl = `http://${this._host}:${healthPort}`
 
-    // Wait for health check (up to 10s)
-    await this._waitForHealth(httpUrl, 10000)
+    // Race health check against early process exit
+    const exitPromise = new Promise<never>((_, reject) => {
+      child.on('error', () => reject(new Error('Server process error')))
+      child.on('exit', () => reject(new Error('Server process exited early')))
+    })
+
+    await Promise.race([this._waitForHealth(httpUrl, 10000), exitPromise])
 
     this._runningServers.set(id, { process: child, port, wsUrl, httpUrl })
     instance.serverUrl = wsUrl

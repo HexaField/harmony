@@ -1,4 +1,4 @@
-import { createSignal, For, Show, onMount, type Component } from 'solid-js'
+import { createSignal, For, Show, onMount, onCleanup, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 import { createCryptoProvider } from '@harmony/crypto'
@@ -49,8 +49,8 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
 
   // Setup step state
   const [setupName, setSetupName] = createSignal('')
-  const [discordLinked, _setDiscordLinked] = createSignal(false)
-  const [discordUsername, _setDiscordUsername] = createSignal('')
+  const [discordLinked, setDiscordLinked] = createSignal(false)
+  const [discordUsername, setDiscordUsername] = createSignal('')
   const [showJoinInput, setShowJoinInput] = createSignal(false)
   const [inviteLink, setInviteLink] = createSignal('')
   const [showMigration, setShowMigration] = createSignal(false)
@@ -103,6 +103,39 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
       _setStep(savedStep)
     }
   })
+
+  // Listen for OAuth completion from popup window
+  function handleOAuthMessage(event: MessageEvent) {
+    const data = event.data
+    if (data?.type === 'harmony:oauth-complete' && data.provider === 'discord') {
+      setDiscordLinked(true)
+      if (data.discordUsername) setDiscordUsername(data.discordUsername)
+    }
+  }
+  onMount(() => {
+    window.addEventListener('message', handleOAuthMessage)
+    // Check if Discord is already linked (e.g. page refresh after linking)
+    checkDiscordLink()
+  })
+  onCleanup(() => window.removeEventListener('message', handleOAuthMessage))
+
+  async function checkDiscordLink() {
+    const did = store.did()
+    if (!did) return
+    try {
+      const portalUrl = (import.meta as any).env?.VITE_PORTAL_URL || 'http://localhost:3000'
+      const res = await fetch(`${portalUrl}/api/identity/${encodeURIComponent(did)}/discord-profile`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data?.username) {
+          setDiscordLinked(true)
+          setDiscordUsername(data.username)
+        }
+      }
+    } catch {
+      // Portal unavailable — no problem
+    }
+  }
 
   async function initClientFromStore() {
     const id = store.identity()

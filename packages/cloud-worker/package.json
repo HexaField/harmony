@@ -1,0 +1,21 @@
+{
+  "name": "@harmony/cloud-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "vitest run test/",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "dependencies": {
+    "@harmony/protocol": "workspace:*",
+    "@harmony/vocab": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250214.0",
+    "vitest": "^3.0.0",
+    "wrangler": "^4.0.0"
+  }
+}

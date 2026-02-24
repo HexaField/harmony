@@ -1,8 +1,6 @@
 import { createSignal, Show, For, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
-import type { ServerEntry } from '../store.tsx'
 import { t } from '../i18n/strings.js'
-import { HarmonyClient } from '@harmony/client'
 import { createAuthVP } from '../auth.js'
 import { createServerProvider, type HostingMode } from '../server-provider.js'
 import type { CommunityInfo, ChannelInfo, MemberData } from '../types.js'
@@ -40,7 +38,6 @@ export const CreateCommunityModal: Component = () => {
 
   const availableModes = provider.availableModes()
 
-  // If only one mode available, skip the choice step
   const skipHostingStep = availableModes.length === 1
 
   function init() {
@@ -69,47 +66,36 @@ export const CreateCommunityModal: Component = () => {
     setStep('details')
   }
 
-  async function connectToServer(url: string): Promise<HarmonyClient> {
+  async function ensureClientConnectedTo(url: string): Promise<void> {
     const identity = store.identity()
     const keyPair = store.keyPair()
     if (!identity || !keyPair) throw new Error(t('ERROR_GENERIC'))
 
-    const existing = store.servers().find((s) => s.url === url)
-    if (existing?.client?.isConnected()) {
-      return existing.client
+    // Ensure client is initialized
+    if (!store.client()) {
+      await store.initClient(identity, keyPair)
     }
 
-    const serverEntry: ServerEntry = {
-      url,
-      name: new URL(url.replace('ws://', 'http://').replace('wss://', 'https://')).hostname,
-      status: 'connecting',
-      client: null
+    const client = store.client()!
+
+    // Add server (no-op if already known)
+    store.addServer(url)
+
+    // If not yet connected, connect explicitly
+    if (!client.isConnectedTo(url)) {
+      setStatus(t('SERVER_AUTH_CREATING_VP'))
+      const vp = await createAuthVP(identity.did, keyPair)
+
+      setStatus(t('CONNECTION_CONNECTING'))
+
+      await Promise.race([
+        client.connect({ serverUrl: url, identity, keyPair, vp }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(t('ERROR_CONNECTION_FAILED', { url }))), 10000)
+        )
+      ])
+      store.refreshServers()
     }
-
-    if (existing) {
-      store.updateServer(url, { status: 'connecting', error: undefined })
-    } else {
-      store.setServers([...store.servers(), serverEntry])
-    }
-
-    setStatus(t('SERVER_AUTH_CREATING_VP'))
-    const vp = await createAuthVP(identity.did, keyPair)
-
-    const client = new HarmonyClient({
-      wsFactory: (wsUrl: string) => new WebSocket(wsUrl) as any
-    })
-
-    setStatus(t('CONNECTION_CONNECTING'))
-
-    await Promise.race([
-      client.connect({ serverUrl: url, identity, keyPair, vp }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(t('ERROR_CONNECTION_FAILED', { url }))), 10000)
-      )
-    ])
-
-    store.updateServer(url, { status: 'connected', client, error: undefined })
-    return client
   }
 
   async function handleCreate() {
@@ -138,7 +124,6 @@ export const CreateCommunityModal: Component = () => {
           setCreating(false)
           return
         }
-        // Normalize URL
         serverUrl =
           url.startsWith('ws://') || url.startsWith('wss://')
             ? url
@@ -148,7 +133,6 @@ export const CreateCommunityModal: Component = () => {
                 ? url.replace('https://', 'wss://')
                 : `ws://${url}`
 
-        // Health check
         setStatus(t('HOSTING_CHECKING_SERVER'))
         const healthy = await provider.checkHealth(serverUrl)
         if (!healthy) {
@@ -157,7 +141,6 @@ export const CreateCommunityModal: Component = () => {
           return
         }
       } else {
-        // Provision (local or cloud)
         setStatus(mode === 'local' ? t('HOSTING_STARTING_LOCAL') : t('HOSTING_PROVISIONING_CLOUD'))
         const result = await provider.provision({
           mode,
@@ -167,9 +150,10 @@ export const CreateCommunityModal: Component = () => {
         serverUrl = result.serverUrl
       }
 
-      // Connect and create
-      const client = await connectToServer(serverUrl)
+      // Connect via store's client
+      await ensureClientConnectedTo(serverUrl)
 
+      const client = store.client()!
       const communityState = await client.createCommunity({
         name: communityName,
         description: description().trim() || undefined,
@@ -207,8 +191,6 @@ export const CreateCommunityModal: Component = () => {
       const firstText = channelInfos.find((c) => c.type === 'text')
       if (firstText) store.setActiveChannelId(firstText.id)
 
-      setupClientListeners(client)
-      store.setClient(client)
       store.setConnectionState('connected')
       store.setConnectionError('')
 
@@ -218,52 +200,6 @@ export const CreateCommunityModal: Component = () => {
       setError(errMsg)
       setCreating(false)
     }
-  }
-
-  function setupClientListeners(client: HarmonyClient) {
-    client.on('message', (...args: unknown[]) => {
-      const msg = args[0] as {
-        id: string
-        channelId: string
-        authorDID: string
-        content: { text?: string }
-        timestamp: string
-      }
-      if (msg?.content?.text) {
-        const data = {
-          id: msg.id,
-          content: msg.content.text,
-          authorDid: msg.authorDID,
-          authorName: msg.authorDID.substring(0, 12),
-          timestamp: msg.timestamp,
-          reactions: [] as Array<{ emoji: string; count: number; userReacted: boolean }>
-        }
-        store.addMessage(data)
-        store.addChannelMessage(msg.channelId, data)
-      }
-    })
-
-    client.on('member.joined', (...args: unknown[]) => {
-      const event = args[0] as { communityId: string; memberDID: string }
-      if (event) {
-        store.setMembers([
-          ...store.members(),
-          {
-            did: event.memberDID,
-            displayName: event.memberDID.substring(0, 12),
-            roles: [],
-            status: 'online'
-          }
-        ])
-      }
-    })
-
-    client.on('member.left', (...args: unknown[]) => {
-      const event = args[0] as { memberDID: string }
-      if (event) {
-        store.setMembers(store.members().filter((m) => m.did !== event.memberDID))
-      }
-    })
   }
 
   return (
@@ -316,7 +252,6 @@ export const CreateCommunityModal: Component = () => {
         {/* Step 2: Community details */}
         <Show when={step() === 'details'}>
           <div class="space-y-4">
-            {/* Show selected hosting mode */}
             <Show when={!skipHostingStep}>
               <button
                 onClick={() => setStep('hosting')}
@@ -329,7 +264,6 @@ export const CreateCommunityModal: Component = () => {
               </button>
             </Show>
 
-            {/* Remote URL input (only for remote mode) */}
             <Show when={hostingMode() === 'remote'}>
               <div>
                 <label class="block text-sm font-medium text-[var(--text-secondary)] mb-1">

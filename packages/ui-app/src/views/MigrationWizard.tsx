@@ -3,7 +3,6 @@ import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 import { createServerProvider, type HostingMode } from '../server-provider.js'
 import { startExport, pollExport, importBundle, type ExportProgress } from '../migration-client.js'
-import { HarmonyClient } from '@harmony/client'
 
 type MigrationStep = 'intro' | 'hosting' | 'bot-setup' | 'bot-running' | 'importing' | 'linking' | 'complete'
 
@@ -189,26 +188,15 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
       }
       store.setActiveCommunityId(result.communityId)
 
-      // Connect to the server
+      // Add server to the store's client — it handles connection automatically
       try {
         const identity = store.identity()
         const keyPair = store.keyPair()
         if (identity && keyPair) {
-          const client =
-            store.client() ??
-            new HarmonyClient({
-              wsFactory: (u: string) => new WebSocket(u) as any
-            })
-          if (!client.isConnected()) {
-            store.setConnectionState('reconnecting')
-            await Promise.race([
-              client.connect({ serverUrl: url, identity, keyPair }),
-              new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 5000))
-            ])
-            store.setClient(client)
-            store.setConnectionState('connected')
-            store.setConnectionError('')
+          if (!store.client()) {
+            await store.initClient(identity, keyPair)
           }
+          store.addServer(url)
         }
       } catch {
         // Connection failed — community is still saved, user can reconnect later

@@ -1,16 +1,9 @@
 import { createSignal, createContext, useContext } from 'solid-js'
 import type { KeyPair } from '@harmony/crypto'
 import type { Identity } from '@harmony/identity'
-import { HarmonyClient } from '@harmony/client'
+import { HarmonyClient, LocalStoragePersistence } from '@harmony/client'
+import type { ServerConnection } from '@harmony/client'
 import type { CommunityInfo, ChannelInfo, MessageData, MemberData, DMConversationInfo } from './types.js'
-
-export interface ServerEntry {
-  url: string
-  name: string
-  status: 'connected' | 'connecting' | 'disconnected' | 'error'
-  client: HarmonyClient | null
-  error?: string
-}
 
 export interface AppStore {
   // Identity
@@ -26,15 +19,20 @@ export interface AppStore {
   keyPair: () => KeyPair | null
   setKeyPair: (k: KeyPair | null) => void
 
-  // Harmony client (legacy single-client accessor)
+  // Harmony client — single instance, delegates all connection management
   client: () => HarmonyClient | null
-  setClient: (c: HarmonyClient | null) => void
+  initClient: (identity: Identity, keyPair: KeyPair) => Promise<void>
+  addServer: (url: string) => void
 
-  // Multi-server
-  servers: () => ServerEntry[]
-  setServers: (s: ServerEntry[]) => void
-  updateServer: (url: string, patch: Partial<ServerEntry>) => void
-  getServerClient: (url: string) => HarmonyClient | null
+  // Connection state — derived from client
+  connectionState: () => 'connected' | 'disconnected' | 'reconnecting'
+  setConnectionState: (s: 'connected' | 'disconnected' | 'reconnecting') => void
+  connectionError: () => string
+  setConnectionError: (e: string) => void
+
+  // Multi-server — reactive mirror of client.servers()
+  servers: () => ServerConnection[]
+  refreshServers: () => void
 
   // Communities
   communities: () => CommunityInfo[]
@@ -64,12 +62,6 @@ export interface AppStore {
 
   // DMs
   dmConversations: () => DMConversationInfo[]
-
-  // Connection
-  connectionState: () => 'connected' | 'disconnected' | 'reconnecting'
-  setConnectionState: (s: 'connected' | 'disconnected' | 'reconnecting') => void
-  connectionError: () => string
-  setConnectionError: (e: string) => void
 
   // Theme
   theme: () => 'dark' | 'light'
@@ -119,8 +111,8 @@ export function createAppStore(): AppStore {
   const [mnemonic, _setMnemonic] = createSignal(savedMnemonic)
   const [identity, setIdentity] = createSignal<Identity | null>(null)
   const [keyPair, setKeyPair] = createSignal<KeyPair | null>(null)
-  const [client, setClient] = createSignal<HarmonyClient | null>(null)
-  const [servers, setServers] = createSignal<ServerEntry[]>([])
+  const [_client, _setClient] = createSignal<HarmonyClient | null>(null)
+  const [servers, setServers] = createSignal<ServerConnection[]>([])
   const [communities, setCommunities] = createSignal<CommunityInfo[]>([])
   const [activeCommunityId, setActiveCommunityId] = createSignal('')
   const [channels, setChannels] = createSignal<ChannelInfo[]>([])
@@ -170,7 +162,6 @@ export function createAppStore(): AppStore {
 
   const addChannelMessage = (channelId: string, m: MessageData) => {
     const existing = channelMessageCache.get(channelId) ?? []
-    // Avoid duplicates
     if (existing.some((e) => e.id === m.id)) return
     channelMessageCache.set(channelId, [...existing, m])
   }
@@ -179,13 +170,115 @@ export function createAppStore(): AppStore {
     channelMessageCache.set(channelId, msgs)
   }
 
-  const updateServer = (url: string, patch: Partial<ServerEntry>) => {
-    setServers((prev) => prev.map((s) => (s.url === url ? { ...s, ...patch } : s)))
+  const refreshServers = () => {
+    const c = _client()
+    if (c) {
+      setServers(c.servers())
+    }
   }
 
-  const getServerClient = (url: string): HarmonyClient | null => {
-    const server = servers().find((s) => s.url === url)
-    return server?.client ?? null
+  /** Subscribe to client events to keep store in sync */
+  function setupClientListeners(client: HarmonyClient) {
+    client.on('connected' as any, () => {
+      updateConnectionStateFromClient(client)
+      refreshServers()
+    })
+
+    client.on('disconnected' as any, () => {
+      updateConnectionStateFromClient(client)
+      refreshServers()
+    })
+
+    client.on('reconnecting' as any, () => {
+      setConnectionState('reconnecting')
+      refreshServers()
+    })
+
+    client.on('message', (...args: unknown[]) => {
+      const msg = args[0] as {
+        id: string
+        channelId: string
+        authorDID: string
+        content: { text?: string }
+        timestamp: string
+      }
+      if (msg?.content?.text) {
+        const data = {
+          id: msg.id,
+          content: msg.content.text,
+          authorDid: msg.authorDID,
+          authorName: msg.authorDID.substring(0, 12),
+          timestamp: msg.timestamp,
+          reactions: [] as Array<{ emoji: string; count: number; userReacted: boolean }>
+        }
+        addMessage(data)
+        addChannelMessage(msg.channelId, data)
+      }
+    })
+
+    client.on('member.joined', (...args: unknown[]) => {
+      const event = args[0] as { communityId: string; memberDID: string }
+      if (event) {
+        setMembers([
+          ...members(),
+          {
+            did: event.memberDID,
+            displayName: event.memberDID.substring(0, 12),
+            roles: [],
+            status: 'online'
+          }
+        ])
+      }
+    })
+
+    client.on('member.left', (...args: unknown[]) => {
+      const event = args[0] as { memberDID: string }
+      if (event) {
+        setMembers(members().filter((m) => m.did !== event.memberDID))
+      }
+    })
+
+    client.on('error', (...args: unknown[]) => {
+      const err = args[0] as { message?: string }
+      setConnectionError(err?.message ?? 'Unknown error')
+    })
+  }
+
+  function updateConnectionStateFromClient(client: HarmonyClient) {
+    const state = client.connectionState()
+    if (state === 'connected') {
+      setConnectionState('connected')
+      setConnectionError('')
+    } else if (state === 'partial') {
+      setConnectionState('reconnecting')
+    } else {
+      setConnectionState('disconnected')
+    }
+  }
+
+  /** Create & initialize the single HarmonyClient instance */
+  async function initClient(id: Identity, kp: KeyPair): Promise<void> {
+    // If client already exists, skip
+    if (_client()) return
+
+    const client = await HarmonyClient.create({
+      persistenceAdapter: new LocalStoragePersistence(),
+      wsFactory: (url: string) => new WebSocket(url) as any,
+      identity: id,
+      keyPair: kp
+    })
+
+    _setClient(client)
+    setupClientListeners(client)
+    updateConnectionStateFromClient(client)
+    refreshServers()
+  }
+
+  function addServer(url: string) {
+    const c = _client()
+    if (!c) return
+    c.addServer(url)
+    refreshServers()
   }
 
   return {
@@ -198,12 +291,11 @@ export function createAppStore(): AppStore {
     setIdentity,
     keyPair,
     setKeyPair,
-    client,
-    setClient,
+    client: _client,
+    initClient,
+    addServer,
     servers,
-    setServers,
-    updateServer,
-    getServerClient,
+    refreshServers,
     communities,
     setCommunities,
     activeCommunityId,

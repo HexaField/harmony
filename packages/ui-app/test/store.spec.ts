@@ -1,9 +1,6 @@
-import { describe, it, expect } from 'vitest'
-// We need to test createAppStore in a SolidJS reactive context
-// Since vitest doesn't have DOM by default, we test the store logic directly
-// by running inside createRoot
+import { describe, it, expect, vi } from 'vitest'
 import { createRoot } from 'solid-js'
-import { createAppStore, type ServerEntry } from '../src/store.js'
+import { createAppStore } from '../src/store.js'
 
 describe('AppStore', () => {
   it('initializes with default values', () => {
@@ -32,32 +29,84 @@ describe('AppStore', () => {
     })
   })
 
-  it('servers: add, update, getClient', () => {
+  it('client is null before initClient', () => {
     createRoot((dispose) => {
       const store = createAppStore()
-      const entry: ServerEntry = { url: 'ws://localhost:4000', name: 'local', status: 'connecting', client: null }
-      store.setServers([entry])
-      expect(store.servers()).toHaveLength(1)
-
-      store.updateServer('ws://localhost:4000', { status: 'connected' })
-      expect(store.servers()[0].status).toBe('connected')
-
-      expect(store.getServerClient('ws://localhost:4000')).toBeNull()
-      expect(store.getServerClient('ws://nonexistent')).toBeNull()
+      expect(store.client()).toBeNull()
       dispose()
     })
   })
 
-  it('updateServer does not affect unmatched entries', () => {
+  it('initClient creates a HarmonyClient instance', async () => {
+    await createRoot(async (dispose) => {
+      const store = createAppStore()
+      const mockIdentity = { did: 'did:key:z6MkTest', document: {} } as any
+      const mockKeyPair = { publicKey: new Uint8Array(32), secretKey: new Uint8Array(64) } as any
+
+      await store.initClient(mockIdentity, mockKeyPair)
+      expect(store.client()).not.toBeNull()
+      expect(store.client()!.myDID()).toBe('did:key:z6MkTest')
+      dispose()
+    })
+  })
+
+  it('initClient is idempotent — does not create a second client', async () => {
+    await createRoot(async (dispose) => {
+      const store = createAppStore()
+      const mockIdentity = { did: 'did:key:z6MkTest', document: {} } as any
+      const mockKeyPair = { publicKey: new Uint8Array(32), secretKey: new Uint8Array(64) } as any
+
+      await store.initClient(mockIdentity, mockKeyPair)
+      const firstClient = store.client()
+
+      await store.initClient(mockIdentity, mockKeyPair)
+      expect(store.client()).toBe(firstClient)
+      dispose()
+    })
+  })
+
+  it('addServer delegates to client.addServer', async () => {
+    await createRoot(async (dispose) => {
+      const store = createAppStore()
+      const mockIdentity = { did: 'did:key:z6MkTest', document: {} } as any
+      const mockKeyPair = { publicKey: new Uint8Array(32), secretKey: new Uint8Array(64) } as any
+
+      await store.initClient(mockIdentity, mockKeyPair)
+      store.addServer('ws://localhost:4000')
+
+      const client = store.client()!
+      const serverUrls = client.servers().map((s) => s.url)
+      expect(serverUrls).toContain('ws://localhost:4000')
+
+      // Store's reactive servers mirror should also be updated
+      expect(store.servers().map((s) => s.url)).toContain('ws://localhost:4000')
+      dispose()
+    })
+  })
+
+  it('addServer is a no-op when client is null', () => {
     createRoot((dispose) => {
       const store = createAppStore()
-      store.setServers([
-        { url: 'ws://a', name: 'a', status: 'connected', client: null },
-        { url: 'ws://b', name: 'b', status: 'disconnected', client: null }
-      ])
-      store.updateServer('ws://a', { status: 'error', error: 'fail' })
-      expect(store.servers()[0].status).toBe('error')
-      expect(store.servers()[1].status).toBe('disconnected')
+      // Should not throw
+      store.addServer('ws://localhost:4000')
+      expect(store.servers()).toEqual([])
+      dispose()
+    })
+  })
+
+  it('connectionState reflects client state', async () => {
+    await createRoot(async (dispose) => {
+      const store = createAppStore()
+      const mockIdentity = { did: 'did:key:z6MkTest', document: {} } as any
+      const mockKeyPair = { publicKey: new Uint8Array(32), secretKey: new Uint8Array(64) } as any
+
+      // Before init — disconnected
+      expect(store.connectionState()).toBe('disconnected')
+
+      await store.initClient(mockIdentity, mockKeyPair)
+
+      // After init with no servers — still disconnected
+      expect(store.connectionState()).toBe('disconnected')
       dispose()
     })
   })
@@ -80,14 +129,11 @@ describe('AppStore', () => {
       store.addChannelMessage('ch1', msg)
       expect(store.channelMessages('ch1')).toHaveLength(1)
 
-      // Duplicate should be ignored
       store.addChannelMessage('ch1', msg)
       expect(store.channelMessages('ch1')).toHaveLength(1)
 
-      // Different channel
       expect(store.channelMessages('ch2')).toHaveLength(0)
 
-      // setChannelMessages replaces
       store.setChannelMessages('ch1', [])
       expect(store.channelMessages('ch1')).toHaveLength(0)
       dispose()

@@ -33,6 +33,66 @@ export interface StoredBlob {
   sizeBytes: number
 }
 
+// ── Cloud Adapter Interface ──
+
+export interface CloudAdapter {
+  createInstance(name: string, ownerDID: string): Promise<{ serverUrl: string; instanceId: string }>
+  deleteInstance(id: string): Promise<void>
+  getHealth(id: string): Promise<{ healthy: boolean; connections: number }>
+}
+
+// ── Cloudflare Adapter ──
+
+export class CloudflareAdapter implements CloudAdapter {
+  constructor(
+    private workerUrl: string,
+    private apiToken: string
+  ) {}
+
+  async createInstance(name: string, ownerDID: string): Promise<{ serverUrl: string; instanceId: string }> {
+    const res = await fetch(`${this.workerUrl}/api/instances`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.apiToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, ownerDID })
+    })
+    if (!res.ok) throw new Error(`Failed to create instance: ${res.statusText}`)
+    const data = (await res.json()) as { id: string; serverUrl: string }
+    return { serverUrl: `${this.workerUrl}${data.serverUrl}`, instanceId: data.id }
+  }
+
+  async deleteInstance(id: string): Promise<void> {
+    const res = await fetch(`${this.workerUrl}/api/instances/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${this.apiToken}` }
+    })
+    if (!res.ok) throw new Error(`Failed to delete instance: ${res.statusText}`)
+  }
+
+  async getHealth(id: string): Promise<{ healthy: boolean; connections: number }> {
+    try {
+      const res = await fetch(`${this.workerUrl}/api/instances/${id}/health`, {
+        headers: { Authorization: `Bearer ${this.apiToken}` }
+      })
+      if (res.ok) {
+        const data = (await res.json()) as { status: string; connections: number }
+        return { healthy: data.status === 'ok', connections: data.connections }
+      }
+    } catch {
+      // not reachable
+    }
+    return { healthy: false, connections: 0 }
+  }
+}
+
+// ── Hosting Service ──
+
+export type HostingMode = 'local' | 'cloudflare'
+
+export interface CloudflareConfig {
+  workerUrl: string
+  apiToken: string
+}
+
 export class HostingService {
   private instances: Map<string, ManagedInstance> = new Map()
   private storage: Map<string, StoredBlob> = new Map() // blobId → blob
@@ -44,6 +104,8 @@ export class HostingService {
   private _dataDir: string
   private _serverRuntimePath: string
   private _host: string
+  private _mode: HostingMode
+  private _cloudAdapter: CloudflareAdapter | null = null
 
   constructor(
     _crypto: CryptoProvider,
@@ -53,6 +115,8 @@ export class HostingService {
       basePort?: number
       dataDir?: string
       host?: string
+      mode?: HostingMode
+      cloudflare?: CloudflareConfig
     }
   ) {
     this.maxInstancesPerUser = options?.maxInstancesPerUser ?? 5
@@ -60,6 +124,11 @@ export class HostingService {
     this._nextPort = options?.basePort ?? 5000
     this._dataDir = options?.dataDir ?? '/tmp/harmony-cloud/instances'
     this._host = options?.host ?? 'localhost'
+    this._mode = options?.mode ?? 'local'
+
+    if (this._mode === 'cloudflare' && options?.cloudflare) {
+      this._cloudAdapter = new CloudflareAdapter(options.cloudflare.workerUrl, options.cloudflare.apiToken)
+    }
 
     // Resolve path to server-runtime entry point
     const thisDir =
@@ -86,11 +155,21 @@ export class HostingService {
       maxStorageBytes: this.defaultMaxStorageBytes
     }
 
-    // Try to provision a real server-runtime process
-    try {
-      await this._spawnServer(id, instance)
-    } catch (_err) {
-      // server-runtime not available — instance created without server URL
+    if (this._mode === 'cloudflare' && this._cloudAdapter) {
+      // Provision via Cloudflare Workers
+      try {
+        const result = await this._cloudAdapter.createInstance(params.name, params.ownerDID)
+        instance.serverUrl = result.serverUrl
+      } catch (_err) {
+        // Cloudflare provisioning failed — instance created without server URL
+      }
+    } else {
+      // Try to provision a real server-runtime process (local mode)
+      try {
+        await this._spawnServer(id, instance)
+      } catch (_err) {
+        // server-runtime not available — instance created without server URL
+      }
     }
 
     this.instances.set(id, instance)

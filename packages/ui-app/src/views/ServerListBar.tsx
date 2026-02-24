@@ -1,67 +1,38 @@
 import { For, Show, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
-import { HarmonyClient } from '@harmony/client'
 import { t } from '../i18n/strings.js'
-import { createAuthVP } from '../auth.js'
 
 export const ServerListBar: Component = () => {
   const store = useAppStore()
 
-  function statusColor(status: string): string {
-    switch (status) {
-      case 'connected':
-        return 'bg-[var(--success)]'
-      case 'connecting':
-        return 'bg-[var(--warning)] animate-pulse'
-      case 'error':
-        return 'bg-[var(--error)]'
-      default:
-        return 'bg-[var(--text-muted)]'
-    }
+  function statusColor(connected: boolean): string {
+    if (connected) return 'bg-[var(--success)]'
+    return 'bg-[var(--text-muted)]'
   }
 
-  function statusTitle(status: string, error?: string): string {
-    switch (status) {
-      case 'connected':
-        return t('SERVER_CONNECTED')
-      case 'connecting':
-        return t('SERVER_CONNECTING')
-      case 'error':
-        return error ?? t('SERVER_ERROR')
-      default:
-        return t('SERVER_DISCONNECTED')
-    }
+  function statusTitle(connected: boolean): string {
+    return connected ? t('SERVER_CONNECTED') : t('SERVER_DISCONNECTED')
   }
 
   async function handleReconnect(url: string) {
-    const identity = store.identity()
-    const keyPair = store.keyPair()
-    if (!identity || !keyPair) return
-
-    const server = store.servers().find((s) => s.url === url)
-    if (!server) return
-
-    store.updateServer(url, { status: 'connecting', error: undefined })
+    const client = store.client()
+    if (!client) return
 
     try {
-      const vp = await createAuthVP(identity.did, keyPair)
-      const client = new HarmonyClient({
-        wsFactory: (wsUrl: string) => new WebSocket(wsUrl) as any
-      })
+      const identity = store.identity()
+      const keyPair = store.keyPair()
+      if (!identity || !keyPair) return
 
       await Promise.race([
-        client.connect({ serverUrl: url, identity, keyPair, vp }),
+        client.connect({ serverUrl: url, identity, keyPair }),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error(t('CONNECTION_FAILED'))), 10000))
       ])
-
-      store.updateServer(url, { status: 'connected', client, error: undefined })
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      store.updateServer(url, { status: 'error', error: msg })
+      store.refreshServers()
+    } catch {
+      store.refreshServers()
     }
   }
 
-  // Group communities by server
   return (
     <div class="w-[var(--server-bar-width)] bg-[var(--bg-primary)] flex flex-col items-center py-3 gap-2 shrink-0 overflow-y-auto">
       {/* Home / DMs button */}
@@ -78,14 +49,14 @@ export const ServerListBar: Component = () => {
       <For each={store.servers()}>
         {(server) => {
           const serverCommunities = () => store.communities().filter((c) => c.serverUrl === server.url)
-          const isDisconnected = () => server.status === 'disconnected' || server.status === 'error'
+          const isDisconnected = () => !server.connected
 
           return (
             <Show when={serverCommunities().length > 0 || isDisconnected()}>
               <div class="relative group mb-1">
                 <div
-                  class={`w-8 h-1 rounded-full mx-auto ${statusColor(server.status)}`}
-                  title={statusTitle(server.status, server.error)}
+                  class={`w-8 h-1 rounded-full mx-auto ${statusColor(server.connected)}`}
+                  title={statusTitle(server.connected)}
                 />
                 <Show when={isDisconnected()}>
                   <button
@@ -107,10 +78,10 @@ export const ServerListBar: Component = () => {
         {(community) => {
           const isActive = () => store.activeCommunityId() === community.id
           const initials = community.name.substring(0, 2).toUpperCase()
-          const serverStatus = () => {
-            if (!community.serverUrl) return 'disconnected'
-            const server = store.servers().find((s) => s.url === community.serverUrl)
-            return server?.status ?? 'disconnected'
+          const serverConnected = () => {
+            if (!community.serverUrl) return false
+            const client = store.client()
+            return client ? client.isConnectedTo(community.serverUrl) : false
           }
 
           return (
@@ -145,8 +116,8 @@ export const ServerListBar: Component = () => {
               </button>
               {/* Connection status dot */}
               <div
-                class={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[var(--bg-primary)] ${statusColor(serverStatus())}`}
-                title={statusTitle(serverStatus())}
+                class={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[var(--bg-primary)] ${statusColor(serverConnected())}`}
+                title={statusTitle(serverConnected())}
               />
             </div>
           )

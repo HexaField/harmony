@@ -5,7 +5,6 @@ import { MainLayout } from './views/MainLayout.tsx'
 import { SettingsView } from './views/SettingsView.tsx'
 import { createCryptoProvider } from '@harmony/crypto'
 import { IdentityManager } from '@harmony/identity'
-import { HarmonyClient } from '@harmony/client'
 
 export const App: Component = () => {
   const store = createAppStore()
@@ -20,26 +19,22 @@ export const App: Component = () => {
         const result = await idMgr.createFromMnemonic(m)
         store.setIdentity(result.identity)
         store.setKeyPair(result.keyPair)
-        // Init client
-        const client = new HarmonyClient({
-          wsFactory: (url: string) => new WebSocket(url) as any
-        })
-        store.setClient(client)
 
-        // Auto-connect to first community's server
-        const communities = store.communities()
-        const serverUrl = communities.find((c) => c.serverUrl)?.serverUrl
-        if (serverUrl) {
+        // Init the single HarmonyClient — it auto-connects to persisted servers
+        await store.initClient(result.identity, result.keyPair)
+
+        // Desktop mode: ensure local server is running and added
+        if (window.__HARMONY_DESKTOP__) {
           try {
-            store.setConnectionState('reconnecting')
-            await Promise.race([
-              client.connect({ serverUrl, identity: result.identity, keyPair: result.keyPair }),
-              new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 5000))
-            ])
-            store.setConnectionState('connected')
-            store.setConnectionError('')
+            const running = await window.__HARMONY_DESKTOP__.isServerRunning()
+            if (running) {
+              const serverUrl = await window.__HARMONY_DESKTOP__.getServerUrl()
+              if (serverUrl) {
+                store.addServer(serverUrl)
+              }
+            }
           } catch {
-            store.setConnectionState('disconnected')
+            // Desktop bridge not available or failed — continue without local server
           }
         }
       } catch {

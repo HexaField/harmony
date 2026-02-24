@@ -1,0 +1,22 @@
+name = "harmony-cloud"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[durable_objects]
+bindings = [
+  { name = "COMMUNITY", class_name = "CommunityDurableObject" }
+]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "harmony-instances"
+database_id = "placeholder"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "harmony-media"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["CommunityDurableObject"]

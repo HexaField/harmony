@@ -2,6 +2,7 @@ import { For, Show, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 import { RelativeTime } from '../components/Shared/index.js'
+import { pseudonymFromDid, initialsFromName } from '../utils/pseudonym.js'
 
 export const DMListView: Component = () => {
   const store = useAppStore()
@@ -96,14 +97,10 @@ export const DMListView: Component = () => {
       {/* User panel (same as ChannelSidebarView) */}
       <div class="h-14 flex items-center px-3 bg-[var(--bg-primary)]/50 border-t border-[var(--border)]">
         <div class="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center text-xs font-bold text-white">
-          {store
-            .did()
-            .substring(store.did().length - 2)
-            .toUpperCase()}
+          {initialsFromName(store.displayName() || pseudonymFromDid(store.did()))}
         </div>
         <div class="ml-2 flex-1 min-w-0">
-          <div class="text-sm font-semibold truncate">You</div>
-          <div class="text-xs text-[var(--text-muted)] truncate">{store.did().substring(0, 20)}...</div>
+          <div class="text-sm font-semibold truncate">{store.displayName() || pseudonymFromDid(store.did())}</div>
         </div>
       </div>
     </div>

@@ -117,6 +117,7 @@ export class HostingService {
       host?: string
       mode?: HostingMode
       cloudflare?: CloudflareConfig
+      serverRuntimePath?: string
     }
   ) {
     this.maxInstancesPerUser = options?.maxInstancesPerUser ?? 5
@@ -131,9 +132,13 @@ export class HostingService {
     }
 
     // Resolve path to server-runtime entry point
-    const thisDir =
-      typeof import.meta.dirname === 'string' ? import.meta.dirname : dirname(fileURLToPath(import.meta.url))
-    this._serverRuntimePath = resolve(thisDir, '../../server-runtime/bin/harmony-server.js')
+    if (options?.serverRuntimePath) {
+      this._serverRuntimePath = options.serverRuntimePath
+    } else {
+      const thisDir =
+        typeof import.meta.dirname === 'string' ? import.meta.dirname : dirname(fileURLToPath(import.meta.url))
+      this._serverRuntimePath = resolve(thisDir, '../../server-runtime/bin/harmony-server.js')
+    }
   }
 
   async createInstance(params: { name: string; ownerDID: string }): Promise<ManagedInstance> {

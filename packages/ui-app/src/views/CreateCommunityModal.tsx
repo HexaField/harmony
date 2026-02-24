@@ -3,6 +3,7 @@ import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 import { createAuthVP } from '../auth.js'
 import { createServerProvider, type HostingMode } from '../server-provider.js'
+import { pseudonymFromDid } from '../utils/pseudonym.js'
 import type { CommunityInfo, ChannelInfo, MemberData } from '../types.js'
 
 const provider = createServerProvider()
@@ -177,8 +178,8 @@ export const CreateCommunityModal: Component = () => {
         did: m.did,
         displayName:
           m.did === store.did()
-            ? store.displayName() || store.did().substring(0, 16)
-            : (m.displayName ?? m.did.substring(0, 16)),
+            ? store.displayName() || pseudonymFromDid(store.did())
+            : (m.displayName ?? pseudonymFromDid(m.did)),
         roles: m.roles,
         status: m.presence.status === 'online' ? ('online' as const) : ('offline' as const)
       }))

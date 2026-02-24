@@ -207,7 +207,11 @@ describe('@harmony/cloud', () => {
     let ownerDID: string
 
     beforeEach(async () => {
-      hosting = new HostingService(crypto, { maxInstancesPerUser: 3, defaultMaxStorageBytes: 1024 })
+      hosting = new HostingService(crypto, {
+        maxInstancesPerUser: 3,
+        defaultMaxStorageBytes: 1024,
+        serverRuntimePath: '/nonexistent/harmony-server.js'
+      })
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)
       ownerDID = doc.id

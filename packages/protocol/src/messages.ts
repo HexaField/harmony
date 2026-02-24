@@ -141,9 +141,6 @@ export const CLIENT_TO_SERVER_TYPES: MessageType[] = [
   'voice.join',
   'voice.leave',
   'voice.state',
-  'voice.offer',
-  'voice.answer',
-  'voice.ice',
   'media.upload.request',
   'media.upload.complete',
   'media.delete',
@@ -165,7 +162,6 @@ export const CLIENT_TO_SERVER_TYPES: MessageType[] = [
   'mls.keypackage.upload',
   'mls.keypackage.fetch',
   'mls.commit',
-  'mls.welcome',
   'mls.group.setup'
 ]
 
@@ -202,7 +198,6 @@ export const SERVER_TO_CLIENT_TYPES: MessageType[] = [
   'voice.participant.joined',
   'voice.participant.left',
   'voice.speaking',
-  'voice.state',
   'voice.offer',
   'voice.answer',
   'voice.ice',
@@ -210,8 +205,7 @@ export const SERVER_TO_CLIENT_TYPES: MessageType[] = [
   'bot.event',
   // E2EE / MLS
   'mls.keypackage.response',
-  'mls.welcome',
-  'mls.commit'
+  'mls.welcome'
 ]
 
 export const FEDERATION_TYPES: MessageType[] = ['federation.relay', 'federation.sync', 'federation.presence']

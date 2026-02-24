@@ -1,4 +1,5 @@
 import { createSignal, createContext, useContext } from 'solid-js'
+import { pseudonymFromDid } from './utils/pseudonym.js'
 import type { KeyPair } from '@harmony/crypto'
 import type { Identity } from '@harmony/identity'
 import { HarmonyClient, LocalStoragePersistence } from '@harmony/client'
@@ -274,7 +275,7 @@ export function createAppStore(): AppStore {
         {
           id: `dm:${recipientDid}`,
           participantDid: recipientDid,
-          participantName: recipientDid.substring(0, 16),
+          participantName: pseudonymFromDid(recipientDid),
           lastMessage: m.content,
           lastMessageAt: m.timestamp,
           unreadCount: m.authorDid !== did() ? 1 : 0
@@ -539,7 +540,7 @@ export function createAppStore(): AppStore {
           ...members(),
           {
             did: myDid,
-            displayName: displayName() || did().substring(0, 16),
+            displayName: displayName() || pseudonymFromDid(myDid),
             roles: ['admin'],
             status: 'online'
           }
@@ -583,7 +584,7 @@ export function createAppStore(): AppStore {
           id: msg.id,
           content: msg.content.text,
           authorDid: msg.authorDID,
-          authorName: msg.authorDID.substring(0, 12),
+          authorName: pseudonymFromDid(msg.authorDID),
           timestamp: msg.timestamp,
           reactions: [] as Array<{ emoji: string; count: number; userReacted: boolean }>
         }
@@ -611,7 +612,8 @@ export function createAppStore(): AppStore {
             id: m.id,
             content: m.content.text ?? '',
             authorDid: m.authorDID,
-            authorName: m.authorDID === did() ? displayName() || did().substring(0, 16) : m.authorDID.substring(0, 16),
+            authorName:
+              m.authorDID === did() ? displayName() || pseudonymFromDid(did()) : pseudonymFromDid(m.authorDID),
             timestamp: m.timestamp,
             reactions: [] as Array<{ emoji: string; count: number; userReacted: boolean }>
           }))
@@ -638,7 +640,7 @@ export function createAppStore(): AppStore {
           } else {
             updated.push({
               did: om.did,
-              displayName: om.did.substring(0, 12),
+              displayName: pseudonymFromDid(om.did),
               roles: [],
               status: om.status as 'online' | 'idle' | 'dnd' | 'offline'
             })
@@ -655,7 +657,7 @@ export function createAppStore(): AppStore {
           ...members(),
           {
             did: event.memberDID,
-            displayName: event.memberDID.substring(0, 12),
+            displayName: pseudonymFromDid(event.memberDID),
             roles: [],
             status: 'online'
           }
@@ -685,9 +687,9 @@ export function createAppStore(): AppStore {
       if (channelId && senderDID && senderDID !== did()) {
         // Check if this is a DM typing indicator (channelId starts with 'dm:')
         if (channelId.startsWith('dm:')) {
-          setDMTypingUser(senderDID, senderDID, senderDID.substring(0, 12))
+          setDMTypingUser(senderDID, senderDID, pseudonymFromDid(senderDID))
         } else {
-          setTypingUser(channelId, senderDID, senderDID.substring(0, 12))
+          setTypingUser(channelId, senderDID, pseudonymFromDid(senderDID))
         }
       }
     })
@@ -722,7 +724,7 @@ export function createAppStore(): AppStore {
           id: event.id,
           content: event.content?.text ?? '[encrypted]',
           authorDid: senderDid,
-          authorName: senderDid.substring(0, 16),
+          authorName: pseudonymFromDid(senderDid),
           timestamp: event.timestamp,
           reactions: []
         }
@@ -852,7 +854,7 @@ export function createAppStore(): AppStore {
           ...members(),
           {
             did: myDid,
-            displayName: displayName() || did().substring(0, 16),
+            displayName: displayName() || pseudonymFromDid(myDid),
             roles: ['admin'],
             status: 'online'
           }

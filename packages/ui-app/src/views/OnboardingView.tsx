@@ -255,7 +255,7 @@ export const OnboardingView: Component = () => {
               {copied() ? `✓ ${t('ONBOARDING_MNEMONIC_COPIED')}` : `📋 ${t('ONBOARDING_MNEMONIC_COPY')}`}
             </button>
             <p class="text-xs text-[var(--text-muted)] mb-6">
-              DID: <span class="font-mono">{store.did()}</span>
+              {t('IDENTITY_LABEL')}: <span class="font-semibold">{store.displayName() || t('IDENTITY_ANONYMOUS')}</span>
             </p>
             <button
               onClick={handleMnemonicSaved}

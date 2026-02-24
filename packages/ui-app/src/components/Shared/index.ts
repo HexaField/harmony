@@ -23,7 +23,7 @@ import type {
 import { t } from '../../i18n/strings.js'
 
 export function Avatar(props: AvatarProps) {
-  const initials = (props.name ?? props.did ?? '?').substring(0, 2).toUpperCase()
+  const initials = (props.name ?? '?').substring(0, 2).toUpperCase()
   return { initials, size: props.size ?? 'md', did: props.did }
 }
 

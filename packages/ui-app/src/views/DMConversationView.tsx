@@ -3,6 +3,7 @@ import { useAppStore } from '../store.tsx'
 import { MarkdownRenderer } from '../components/Shared/index.js'
 import { RelativeTime } from '../components/Shared/index.js'
 import { t } from '../i18n/strings.js'
+import { pseudonymFromDid } from '../utils/pseudonym.js'
 import type { MessageData } from '../types.js'
 
 export const DMConversationView: Component = () => {
@@ -18,7 +19,7 @@ export const DMConversationView: Component = () => {
     const did = recipientDid()
     if (!did) return ''
     const convo = store.dmConversations().find((c) => c.participantDid === did)
-    return convo?.participantName ?? did.substring(0, 16)
+    return convo?.participantName ?? pseudonymFromDid(did)
   }
 
   const currentMessages = () => {
@@ -48,7 +49,7 @@ export const DMConversationView: Component = () => {
           id: msgId,
           content: text,
           authorDid: store.did(),
-          authorName: store.displayName() || store.did().substring(0, 16),
+          authorName: store.displayName() || pseudonymFromDid(store.did()),
           timestamp: new Date().toISOString(),
           reactions: []
         }
@@ -71,7 +72,7 @@ export const DMConversationView: Component = () => {
       id: 'dm:' + Date.now().toString(36),
       content: text,
       authorDid: store.did(),
-      authorName: store.displayName() || store.did().substring(0, 16),
+      authorName: store.displayName() || pseudonymFromDid(store.did()),
       timestamp: new Date().toISOString(),
       reactions: []
     }
@@ -175,7 +176,8 @@ export const DMConversationView: Component = () => {
             }
             const md = MarkdownRenderer({ content: msg.content })
             const timeInfo = RelativeTime({ timestamp: msg.timestamp })
-            const initials = (msg.authorName ?? msg.authorDid).substring(0, 2).toUpperCase()
+            const displayAuthor = msg.authorName ?? pseudonymFromDid(msg.authorDid)
+            const initials = displayAuthor.substring(0, 2).toUpperCase()
             const isEditing = () => store.editingMessageId() === msg.id
 
             return (

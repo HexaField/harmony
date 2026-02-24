@@ -262,7 +262,7 @@ export const EmptyStateView: Component = () => {
 
         <div class="mt-6 pt-4 border-t border-[var(--border)]">
           <p class="text-xs text-[var(--text-muted)]">
-            DID: <span class="font-mono">{store.did().substring(0, 24)}...</span>
+            {t('IDENTITY_LABEL')}: <span class="font-semibold">{store.displayName() || t('IDENTITY_ANONYMOUS')}</span>
           </p>
         </div>
       </div>

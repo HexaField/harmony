@@ -2,6 +2,7 @@ import { For, Show, createSignal, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 import { VoiceControlBar } from './VoiceControlBar.tsx'
+import { pseudonymFromDid, initialsFromName } from '../utils/pseudonym.js'
 
 export const ChannelSidebarView: Component = () => {
   const store = useAppStore()
@@ -171,24 +172,29 @@ export const ChannelSidebarView: Component = () => {
                   <Show when={isInChannel() && store.voiceUsers().length > 0}>
                     <div class="ml-8 mr-2 mb-1">
                       <For each={store.voiceUsers()}>
-                        {(did) => (
-                          <div class="flex items-center gap-1.5 py-0.5 text-xs text-[var(--text-muted)]">
-                            <div
-                              class="w-4 h-4 rounded-full bg-[var(--accent)] flex items-center justify-center text-[8px] font-bold text-white transition-shadow"
-                              classList={{
-                                'ring-2 ring-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]': store
-                                  .speakingUsers()
-                                  .has(did)
-                              }}
-                            >
-                              {did.substring(did.length - 2).toUpperCase()}
+                        {(did) => {
+                          const member = store.members().find((m) => m.did === did)
+                          const name = member?.displayName || pseudonymFromDid(did)
+                          const initials = initialsFromName(name)
+                          return (
+                            <div class="flex items-center gap-1.5 py-0.5 text-xs text-[var(--text-muted)]">
+                              <div
+                                class="w-4 h-4 rounded-full bg-[var(--accent)] flex items-center justify-center text-[8px] font-bold text-white transition-shadow"
+                                classList={{
+                                  'ring-2 ring-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]': store
+                                    .speakingUsers()
+                                    .has(did)
+                                }}
+                              >
+                                {initials}
+                              </div>
+                              <span class="truncate">{name}</span>
+                              <Show when={store.isMuted() && did === store.did()}>
+                                <span title={t('VOICE_USER_MUTED')}>🔇</span>
+                              </Show>
                             </div>
-                            <span class="truncate">{did.substring(0, 16)}</span>
-                            <Show when={store.isMuted() && did === store.did()}>
-                              <span title={t('VOICE_USER_MUTED')}>🔇</span>
-                            </Show>
-                          </div>
-                        )}
+                          )
+                        }}
                       </For>
                     </div>
                   </Show>
@@ -205,14 +211,10 @@ export const ChannelSidebarView: Component = () => {
       {/* User panel */}
       <div class="h-14 flex items-center px-3 bg-[var(--bg-primary)]/50 border-t border-[var(--border)]">
         <div class="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center text-xs font-bold text-white">
-          {store
-            .did()
-            .substring(store.did().length - 2)
-            .toUpperCase()}
+          {initialsFromName(store.displayName() || pseudonymFromDid(store.did()))}
         </div>
         <div class="ml-2 flex-1 min-w-0">
-          <div class="text-sm font-semibold truncate">You</div>
-          <div class="text-xs text-[var(--text-muted)] truncate">{store.did().substring(0, 20)}...</div>
+          <div class="text-sm font-semibold truncate">{store.displayName() || pseudonymFromDid(store.did())}</div>
         </div>
         <button class="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)]" title={t('SETTINGS_USER')}>
           ⚙️

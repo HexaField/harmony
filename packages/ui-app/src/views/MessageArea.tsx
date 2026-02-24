@@ -5,6 +5,7 @@ import { RelativeTime } from '../components/Shared/index.js'
 import { addToast } from '../components/Shared/index.js'
 import { t } from '../i18n/strings.js'
 import type { MessageData, AttachmentData } from '../types.js'
+import { pseudonymFromDid } from '../utils/pseudonym.js'
 
 const COMMON_EMOJI = ['👍', '❤️', '😂', '🎉', '😮', '😢', '🔥', '👀']
 const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25MB
@@ -198,7 +199,7 @@ export const MessageArea: Component = () => {
           id: msgId,
           content: text,
           authorDid: store.did(),
-          authorName: store.displayName() || store.did().substring(0, 16),
+          authorName: store.displayName() || pseudonymFromDid(store.did()),
           timestamp: new Date().toISOString(),
           reactions: [],
           attachments: attachments.length > 0 ? attachments : undefined
@@ -223,7 +224,7 @@ export const MessageArea: Component = () => {
       id: 'msg:' + Date.now().toString(36),
       content: text,
       authorDid: store.did(),
-      authorName: store.displayName() || store.did().substring(0, 16),
+      authorName: store.displayName() || pseudonymFromDid(store.did()),
       timestamp: new Date().toISOString(),
       reactions: [],
       attachments: attachments && attachments.length > 0 ? attachments : undefined
@@ -388,7 +389,7 @@ export const MessageArea: Component = () => {
             }
             const md = MarkdownRenderer({ content: msg.content })
             const timeInfo = RelativeTime({ timestamp: msg.timestamp })
-            const initials = (msg.authorName ?? msg.authorDid).substring(0, 2).toUpperCase()
+            const initials = (msg.authorName ?? pseudonymFromDid(msg.authorDid)).substring(0, 2).toUpperCase()
             const isEditing = () => store.editingMessageId() === msg.id
 
             return (

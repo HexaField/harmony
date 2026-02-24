@@ -1,6 +1,7 @@
 import { Show, For, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
+import { pseudonymFromDid, initialsFromName } from '../utils/pseudonym.js'
 
 export const VoiceControlBar: Component = () => {
   const store = useAppStore()
@@ -47,17 +48,22 @@ export const VoiceControlBar: Component = () => {
         <Show when={store.voiceUsers().length > 0}>
           <div class="flex items-center gap-1 mb-2">
             <For each={store.voiceUsers()}>
-              {(did) => (
-                <div
-                  class="w-6 h-6 rounded-full bg-[var(--accent)] flex items-center justify-center text-[10px] font-bold text-white transition-shadow"
-                  classList={{
-                    'ring-2 ring-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]': store.speakingUsers().has(did)
-                  }}
-                  title={did + (store.speakingUsers().has(did) ? ` — ${t('VOICE_SPEAKING')}` : '')}
-                >
-                  {did.substring(did.length - 2).toUpperCase()}
-                </div>
-              )}
+              {(did) => {
+                const member = store.members().find((m) => m.did === did)
+                const name = member?.displayName || pseudonymFromDid(did)
+                const initials = initialsFromName(name)
+                return (
+                  <div
+                    class="w-6 h-6 rounded-full bg-[var(--accent)] flex items-center justify-center text-[10px] font-bold text-white transition-shadow"
+                    classList={{
+                      'ring-2 ring-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]': store.speakingUsers().has(did)
+                    }}
+                    title={name + (store.speakingUsers().has(did) ? ` — ${t('VOICE_SPEAKING')}` : '')}
+                  >
+                    {initials}
+                  </div>
+                )
+              }}
             </For>
           </div>
         </Show>

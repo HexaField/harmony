@@ -2,6 +2,7 @@ import { createSignal, For, Show, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 import type { DelegationInfo } from '../types.js'
+import { pseudonymFromDid } from '../utils/pseudonym.js'
 
 const EXPIRY_OPTIONS = [
   { key: 'none', label: () => t('DELEGATION_EXPIRY_NONE'), ms: 0 },
@@ -108,9 +109,9 @@ export const DelegationView: Component = () => {
                     <div class="flex items-center justify-between">
                       <div class="text-sm">
                         <span class="text-[var(--text-muted)]">{t('DELEGATION_FROM')}: </span>
-                        <span>{delegation.fromDID.substring(0, 16)}...</span>
+                        <span>{pseudonymFromDid(delegation.fromDID)}</span>
                         <span class="text-[var(--text-muted)]"> → {t('DELEGATION_TO')}: </span>
-                        <span>{delegation.toDID.substring(0, 16)}...</span>
+                        <span>{pseudonymFromDid(delegation.toDID)}</span>
                       </div>
                       <div class="flex items-center gap-2">
                         <span
@@ -153,9 +154,7 @@ export const DelegationView: Component = () => {
                   <option value="">{t('DELEGATION_MEMBER_PLACEHOLDER')}</option>
                   <For each={otherMembers()}>
                     {(member) => (
-                      <option value={member.did}>
-                        {member.displayName} ({member.did.substring(0, 16)}...)
-                      </option>
+                      <option value={member.did}>{member.displayName || pseudonymFromDid(member.did)}</option>
                     )}
                   </For>
                 </select>

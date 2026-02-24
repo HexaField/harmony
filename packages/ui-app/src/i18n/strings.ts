@@ -59,11 +59,11 @@ export const en = {
   DM_SECTION_TITLE: 'Direct Messages',
   DM_SEND_PLACEHOLDER: 'Message {recipient}',
   DM_NEW_TITLE: 'New Direct Message',
-  DM_NEW_RECIPIENT_LABEL: 'Recipient DID',
-  DM_NEW_RECIPIENT_PLACEHOLDER: 'Enter a DID or select a member',
+  DM_NEW_RECIPIENT_LABEL: 'Search members',
+  DM_NEW_RECIPIENT_PLACEHOLDER: 'Type a name to search...',
   DM_NEW_START: 'Start conversation',
   DM_NEW_CANCEL: 'Cancel',
-  DM_NEW_INVALID_DID: 'Please enter a valid DID',
+  DM_NEW_INVALID_DID: 'Please select a member to message',
   DM_CONVERSATION_EMPTY: 'No messages yet. Say hello!',
   DM_TYPING_SINGLE: '{user} is typing...',
   DM_TYPING_MULTIPLE: '{count} people are typing...',
@@ -245,6 +245,10 @@ export const en = {
   DELEGATION_EXPIRES: 'Expires {time}',
   DELEGATION_ACTIVE: 'Active',
   DELEGATION_EXPIRED: 'Expired',
+
+  // Identity display
+  IDENTITY_LABEL: 'Your identity',
+  IDENTITY_ANONYMOUS: 'Anonymous',
 
   // Shared
   OFFLINE_BANNER: 'You are offline',

@@ -2,6 +2,7 @@ import { createSignal, For, Show, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { MemberList } from '../components/Members/index.js'
 import { t } from '../i18n/strings.js'
+import { pseudonymFromDid, initialsFromName } from '../utils/pseudonym.js'
 
 export const MemberSidebarView: Component = () => {
   const store = useAppStore()
@@ -63,7 +64,8 @@ export const MemberSidebarView: Component = () => {
     member: { did: string; displayName?: string; roles: string[]; status: string },
     isOnline: boolean
   ) => {
-    const initials = (member.displayName ?? member.did).substring(0, 2).toUpperCase()
+    const displayName = member.displayName ?? pseudonymFromDid(member.did)
+    const initials = initialsFromName(displayName)
     return (
       <div
         class="flex items-center px-2 py-1.5 rounded hover:bg-[var(--bg-input)] cursor-pointer transition-colors group"
@@ -96,7 +98,7 @@ export const MemberSidebarView: Component = () => {
         </div>
         <div class="ml-2 min-w-0">
           <div class="text-sm truncate" classList={{ 'text-[var(--text-muted)]': !isOnline }}>
-            {member.displayName ?? member.did.substring(0, 16)}
+            {displayName}
           </div>
           <div class="flex flex-wrap gap-0.5">
             <For each={member.roles}>
@@ -160,7 +162,7 @@ export const MemberSidebarView: Component = () => {
                 onClick={(e) => e.stopPropagation()}
               >
                 <p class="text-xs text-[var(--text-muted)] mb-2">
-                  {t('ROLE_MEMBER_MENU_TITLE', { name: member?.displayName ?? memberDid() })}
+                  {t('ROLE_MEMBER_MENU_TITLE', { name: member?.displayName ?? pseudonymFromDid(memberDid()) })}
                 </p>
                 <Show when={store.roles().length === 0}>
                   <p class="text-xs text-[var(--text-muted)]">{t('ROLE_NO_ROLES')}</p>

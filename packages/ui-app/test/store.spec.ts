@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createRoot } from 'solid-js'
 import { createAppStore } from '../src/store.js'
+import { pseudonymFromDid } from '../src/utils/pseudonym.js'
 
 // Mock WebSocket for tests that init the client
 class MockWebSocket {
@@ -396,15 +397,17 @@ describe('Self-Presence', () => {
     })
   })
 
-  it('MUST use displayName for self member, falling back to "You"', () => {
+  it('MUST use displayName for self member, falling back to pseudonym', () => {
     createRoot((dispose) => {
       const store = createAppStore()
       store.setDid('did:key:z6MkSelf')
 
-      // No displayName set — should fall back to truncated DID
+      // No displayName set — should fall back to pseudonym (not DID)
       store.setMembers([])
-      const fallback = store.displayName() || store.did().substring(0, 16)
-      expect(fallback).toBe('did:key:z6MkSelf')
+
+      const fallback = store.displayName() || pseudonymFromDid(store.did())
+      expect(fallback).not.toContain('did:')
+      expect(fallback.length).toBeGreaterThan(0)
 
       // With displayName set
       store.setDisplayName('Alice')
@@ -435,25 +438,25 @@ describe('Display Name Resolution', () => {
     })
   })
 
-  it('MUST truncate DID for other users messages', () => {
+  it('MUST use pseudonym for other users messages instead of DID', () => {
     createRoot((dispose) => {
       const store = createAppStore()
       store.setDid('did:key:z6MkOwn')
 
       const otherDid = 'did:key:z6MkOtherUserLongDID'
-      const truncated = otherDid.substring(0, 16)
+      const pseudonym = pseudonymFromDid(otherDid)
 
       const msg = {
         id: 'm2',
         content: 'hello',
         authorDid: otherDid,
-        authorName: truncated,
+        authorName: pseudonym,
         timestamp: new Date().toISOString(),
         reactions: []
       }
       store.addMessage(msg)
-      expect(store.messages()[0].authorName).toBe(truncated)
-      expect(store.messages()[0].authorName.length).toBeLessThanOrEqual(16)
+      expect(store.messages()[0].authorName).toBe(pseudonym)
+      expect(store.messages()[0].authorName).not.toContain('did:')
       dispose()
     })
   })

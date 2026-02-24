@@ -454,8 +454,8 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
             <p class="text-sm text-[var(--text-secondary)]">{t('MIGRATION_LINK_DESC')}</p>
 
             <div class="p-4 rounded-lg bg-[var(--bg-input)] border border-[var(--border)]">
-              <p class="text-sm font-medium mb-2">{t('MIGRATION_LINK_YOUR_DID')}</p>
-              <p class="font-mono text-xs text-[var(--text-muted)] break-all">{store.did()}</p>
+              <p class="text-sm font-medium mb-2">{t('IDENTITY_LABEL')}</p>
+              <p class="text-sm text-[var(--text-muted)]">{store.displayName() || t('IDENTITY_ANONYMOUS')}</p>
             </div>
 
             <Show

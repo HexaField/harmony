@@ -11,6 +11,19 @@ export async function createApp(portal?: PortalService): Promise<Application> {
   const app = express()
   app.use(express.json({ limit: '50mb' }))
 
+  // CORS — allow UI dev server and desktop app
+  app.use((_req, res, next) => {
+    const origin = _req.headers.origin
+    if (origin) res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    if (_req.method === 'OPTIONS') {
+      res.sendStatus(204)
+      return
+    }
+    next()
+  })
+
   if (!portal) {
     const crypto = createCryptoProvider()
     portal = new PortalService(crypto)

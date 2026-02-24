@@ -129,11 +129,54 @@ interface WSLike {
   onerror: ((event: unknown) => void) | null
 }
 
+// ── Multi-Server ──
+
+export interface ServerConnection {
+  url: string
+  ws: WSLike | null
+  connected: boolean
+  reconnectTimer: ReturnType<typeof setTimeout> | null
+  reconnectAttempts: number
+  communities: Set<string>
+}
+
+// ── Persistence ──
+
+export interface PersistenceAdapter {
+  load(): Promise<PersistedState>
+  save(state: PersistedState): Promise<void>
+}
+
+export interface PersistedState {
+  servers: Array<{ url: string; communityIds: string[] }>
+  did?: string
+}
+
+export class LocalStoragePersistence implements PersistenceAdapter {
+  private key = 'harmony:client:state'
+
+  async load(): Promise<PersistedState> {
+    try {
+      const raw = localStorage.getItem(this.key)
+      if (raw) return JSON.parse(raw) as PersistedState
+    } catch {
+      /* ignore */
+    }
+    return { servers: [] }
+  }
+
+  async save(state: PersistedState): Promise<void> {
+    try {
+      localStorage.setItem(this.key, JSON.stringify(state))
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 // ── Client ──
 
 export class HarmonyClient {
-  private ws: WSLike | null = null
-  private _connected = false
   private _did = ''
   private _keyPair: KeyPair | null = null
   private _identity: Identity | null = null
@@ -144,12 +187,16 @@ export class HarmonyClient {
   private _channelLogs: Map<string, CRDTLog<DecryptedMessage>> = new Map()
   private _channelSubscriptions: Map<string, ChannelSubscription> = new Map()
   private _messageQueue: ProtocolMessage[] = []
-  private _reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  private _reconnectAttempts = 0
   private _maxReconnectAttempts = 5
   private _presenceState: PresenceUpdatePayload = { status: 'online' }
   private _idCounter = 0
   private _clock: LamportClock = { counter: 0, authorDID: '' }
+
+  // Multi-server connection map
+  private _servers: Map<string, ServerConnection> = new Map()
+
+  // Community → server URL mapping
+  private _communityServerMap: Map<string, string> = new Map()
 
   // Dependencies (injected or created)
   private mlsGroups: Map<string, MLSGroup> = new Map()
@@ -160,6 +207,9 @@ export class HarmonyClient {
 
   // WebSocket factory for testing
   private _wsFactory: ((url: string) => WSLike) | null = null
+
+  // Persistence
+  private _persistenceAdapter: PersistenceAdapter | null = null
 
   // Phase 3 integrations
   private voiceClient: VoiceClient | null = null
@@ -184,6 +234,7 @@ export class HarmonyClient {
     delegationManager?: DelegationManager
     reputationEngine?: ReputationEngine
     pushService?: PushNotificationService
+    persistenceAdapter?: PersistenceAdapter
   }) {
     if (options) {
       this._wsFactory = options.wsFactory ?? null
@@ -194,7 +245,57 @@ export class HarmonyClient {
       this.delegationManager = options.delegationManager ?? null
       this.reputationEngine = options.reputationEngine ?? null
       this.pushService = options.pushService ?? null
+      this._persistenceAdapter = options.persistenceAdapter ?? null
     }
+  }
+
+  // ── Static factory with persistence ──
+
+  static async create(options: {
+    vcService?: VCService
+    zcapService?: ZCAPService
+    mlsProvider?: MLSProvider
+    dmProvider?: DMProvider
+    cryptoProvider?: CryptoProvider
+    wsFactory?: (url: string) => WSLike
+    voiceClient?: VoiceClient
+    mediaClient?: MediaClient
+    searchIndex?: ClientSearchIndex
+    governanceEngine?: GovernanceEngine
+    delegationManager?: DelegationManager
+    reputationEngine?: ReputationEngine
+    pushService?: PushNotificationService
+    persistenceAdapter?: PersistenceAdapter
+    identity?: Identity
+    keyPair?: KeyPair
+    vp?: VerifiablePresentation
+  }): Promise<HarmonyClient> {
+    const client = new HarmonyClient(options)
+    if (client._persistenceAdapter) {
+      const state = await client._persistenceAdapter.load()
+      if (options?.identity && options?.keyPair) {
+        client._identity = options.identity
+        client._keyPair = options.keyPair
+        client._did = options.identity.did
+        client._clock = { counter: 0, authorDID: client._did }
+        client._vp = options.vp ?? null
+        for (const s of state.servers) {
+          await client.connect({
+            serverUrl: s.url,
+            identity: options.identity,
+            keyPair: options.keyPair,
+            vp: options.vp
+          })
+          // Restore community mappings
+          for (const cid of s.communityIds) {
+            client._communityServerMap.set(cid, s.url)
+            const sc = client._servers.get(s.url)
+            if (sc) sc.communities.add(cid)
+          }
+        }
+      }
+    }
+    return client
   }
 
   async connect(params: {
@@ -210,6 +311,19 @@ export class HarmonyClient {
     this._clock = { counter: 0, authorDID: this._did }
     this._vp = params.vp ?? null
 
+    // Ensure server entry exists in map
+    if (!this._servers.has(params.serverUrl)) {
+      this._servers.set(params.serverUrl, {
+        url: params.serverUrl,
+        ws: null,
+        connected: false,
+        reconnectTimer: null,
+        reconnectAttempts: 0,
+        communities: new Set()
+      })
+    }
+    const sc = this._servers.get(params.serverUrl)!
+
     return new Promise<void>((resolve, reject) => {
       const ws = this._wsFactory
         ? this._wsFactory(params.serverUrl)
@@ -217,7 +331,7 @@ export class HarmonyClient {
             throw new Error('WebSocket factory required')
           })()
 
-      this.ws = ws
+      sc.ws = ws
 
       ws.onopen = () => {
         // Send auth
@@ -236,11 +350,12 @@ export class HarmonyClient {
       ws.onmessage = (event: { data: string }) => {
         try {
           const msg = deserialise<ProtocolMessage>(event.data)
-          if (!this._connected && msg.type === 'sync.response') {
-            this._connected = true
-            this._reconnectAttempts = 0
+          if (!sc.connected && msg.type === 'sync.response') {
+            sc.connected = true
+            sc.reconnectAttempts = 0
             this.emitter.emit('connected')
-            this.flushQueue()
+            this.flushQueueForServer(params.serverUrl)
+            this.persistState()
             resolve()
             // Set up normal handler
             ws.onmessage = (ev: { data: string }) => {
@@ -259,47 +374,137 @@ export class HarmonyClient {
       }
 
       ws.onclose = () => {
-        const wasConnected = this._connected
-        this._connected = false
+        const wasConnected = sc.connected
+        sc.connected = false
         if (wasConnected) {
           this.emitter.emit('disconnected')
-          this.attemptReconnect()
+          this.attemptReconnectServer(params.serverUrl)
         }
       }
 
       ws.onerror = (err: unknown) => {
-        if (!this._connected) reject(err instanceof Error ? err : new Error('Connection failed'))
+        if (!sc.connected) reject(err instanceof Error ? err : new Error('Connection failed'))
       }
     })
   }
 
   async disconnect(): Promise<void> {
-    if (this._reconnectTimer) {
-      clearTimeout(this._reconnectTimer)
-      this._reconnectTimer = null
+    for (const [, sc] of this._servers) {
+      if (sc.reconnectTimer) {
+        clearTimeout(sc.reconnectTimer)
+        sc.reconnectTimer = null
+      }
+      sc.reconnectAttempts = this._maxReconnectAttempts // prevent reconnect
+      if (sc.ws) {
+        sc.ws.close()
+        sc.ws = null
+      }
+      sc.connected = false
     }
-    this._maxReconnectAttempts = 0 // prevent reconnect
-    if (this.ws) {
-      this.ws.close()
-      this.ws = null
-    }
-    this._connected = false
   }
 
   async reconnect(): Promise<void> {
     if (!this._identity || !this._keyPair) throw new Error('No identity')
-    this._maxReconnectAttempts = 5
-    return this.connect({
-      serverUrl: this._serverUrl,
-      identity: this._identity,
-      keyPair: this._keyPair,
-      vp: this._vp ?? undefined
+    const urls = Array.from(this._servers.keys())
+    if (urls.length === 0 && this._serverUrl) {
+      urls.push(this._serverUrl)
+    }
+    for (const url of urls) {
+      const sc = this._servers.get(url)
+      if (sc) {
+        sc.reconnectAttempts = 0
+      }
+      await this.connect({
+        serverUrl: url,
+        identity: this._identity,
+        keyPair: this._keyPair,
+        vp: this._vp ?? undefined
+      })
+    }
+  }
+
+  // ── Multi-Server Methods ──
+
+  addServer(url: string): void {
+    if (this._servers.has(url)) return
+    this._servers.set(url, {
+      url,
+      ws: null,
+      connected: false,
+      reconnectTimer: null,
+      reconnectAttempts: 0,
+      communities: new Set()
     })
+    if (this._identity && this._keyPair) {
+      this.connect({
+        serverUrl: url,
+        identity: this._identity,
+        keyPair: this._keyPair,
+        vp: this._vp ?? undefined
+      }).catch(() => {
+        /* reconnect will handle */
+      })
+    }
+    this.persistState()
+  }
+
+  removeServer(url: string): void {
+    const sc = this._servers.get(url)
+    if (!sc) return
+    if (sc.reconnectTimer) {
+      clearTimeout(sc.reconnectTimer)
+      sc.reconnectTimer = null
+    }
+    sc.reconnectAttempts = this._maxReconnectAttempts
+    if (sc.ws) {
+      sc.ws.close()
+      sc.ws = null
+    }
+    sc.connected = false
+    // Remove community mappings for this server
+    for (const cid of sc.communities) {
+      this._communityServerMap.delete(cid)
+    }
+    this._servers.delete(url)
+    this.persistState()
+  }
+
+  servers(): ServerConnection[] {
+    return Array.from(this._servers.values())
+  }
+
+  serverForCommunity(communityId: string): string | null {
+    return this._communityServerMap.get(communityId) ?? null
+  }
+
+  isConnectedTo(url: string): boolean {
+    return this._servers.get(url)?.connected ?? false
+  }
+
+  isConnectedToAny(): boolean {
+    for (const sc of this._servers.values()) {
+      if (sc.connected) return true
+    }
+    return false
+  }
+
+  connectionState(): 'connected' | 'disconnected' | 'partial' {
+    if (this._servers.size === 0) return 'disconnected'
+    let anyConnected = false
+    let anyDisconnected = false
+    for (const sc of this._servers.values()) {
+      if (sc.connected) anyConnected = true
+      else anyDisconnected = true
+    }
+    if (anyConnected && anyDisconnected) return 'partial'
+    if (anyConnected) return 'connected'
+    return 'disconnected'
   }
 
   isConnected(): boolean {
-    return this._connected
+    return this.isConnectedToAny()
   }
+
   myDID(): string {
     return this._did
   }
@@ -346,6 +551,13 @@ export class HarmonyClient {
           myCapabilities: []
         }
         this._communities.set(event.communityId, state)
+        // Map community to the server that created it
+        if (this._serverUrl) {
+          this._communityServerMap.set(event.communityId, this._serverUrl)
+          const sc = this._servers.get(this._serverUrl)
+          if (sc) sc.communities.add(event.communityId)
+        }
+        this.persistState()
         unsub()
         resolve(state)
       })
@@ -373,6 +585,12 @@ export class HarmonyClient {
             myCapabilities: []
           }
           this._communities.set(communityId, state)
+          if (this._serverUrl) {
+            this._communityServerMap.set(communityId, this._serverUrl)
+            const sc = this._servers.get(this._serverUrl)
+            if (sc) sc.communities.add(communityId)
+          }
+          this.persistState()
           unsub()
           resolve(state)
         }
@@ -383,6 +601,13 @@ export class HarmonyClient {
   async leaveCommunity(communityId: string): Promise<void> {
     this.send(this.createMessage('community.leave', { communityId }))
     this._communities.delete(communityId)
+    const serverUrl = this._communityServerMap.get(communityId)
+    if (serverUrl) {
+      const sc = this._servers.get(serverUrl)
+      if (sc) sc.communities.delete(communityId)
+    }
+    this._communityServerMap.delete(communityId)
+    this.persistState()
   }
 
   // ── Channels ──
@@ -584,7 +809,7 @@ export class HarmonyClient {
       this._dmChannels.set(recipientDID, { recipientDID, messages: [], unreadCount: 0 })
     }
     const dmState = this._dmChannels.get(recipientDID)!
-    const msg: DecryptedMessage = {
+    const dmMsg: DecryptedMessage = {
       id,
       channelId: `dm:${recipientDID}`,
       authorDID: this._did,
@@ -594,8 +819,8 @@ export class HarmonyClient {
       reactions: new Map(),
       edited: false
     }
-    dmState.messages.push(msg)
-    dmState.lastMessage = msg
+    dmState.messages.push(dmMsg)
+    dmState.lastMessage = dmMsg
 
     return id
   }
@@ -729,7 +954,7 @@ export class HarmonyClient {
 
   async joinVoice(channelId: string): Promise<VoiceConnection> {
     if (!this.voiceClient) throw new Error('Voice client not configured')
-    if (!this._connected) throw new Error('Not connected')
+    if (!this.isConnected()) throw new Error('Not connected')
     // Request join token from server
     this.send(this.createMessage('voice.join', { channelId }))
     // Generate a client-side token with room info
@@ -1064,40 +1289,89 @@ export class HarmonyClient {
   }
 
   private send(msg: ProtocolMessage): void {
-    if (this._connected && this.ws) {
-      this.ws.send(serialise(msg))
-    } else {
+    // Try to send to the appropriate server based on community context
+    const payload = msg.payload as { communityId?: string } | null
+    const communityId = payload?.communityId
+    let sent = false
+
+    if (communityId) {
+      const serverUrl = this._communityServerMap.get(communityId)
+      if (serverUrl) {
+        const sc = this._servers.get(serverUrl)
+        if (sc?.connected && sc.ws) {
+          sc.ws.send(serialise(msg))
+          sent = true
+        }
+      }
+    }
+
+    if (!sent) {
+      // Send to any connected server (backward compat / non-community messages)
+      for (const sc of this._servers.values()) {
+        if (sc.connected && sc.ws) {
+          sc.ws.send(serialise(msg))
+          sent = true
+          break
+        }
+      }
+    }
+
+    if (!sent) {
       this._messageQueue.push(msg)
     }
   }
 
-  private flushQueue(): void {
-    const queue = [...this._messageQueue]
-    this._messageQueue = []
-    for (const msg of queue) {
-      this.send(msg)
+  private flushQueueForServer(serverUrl: string): void {
+    const sc = this._servers.get(serverUrl)
+    if (!sc?.connected || !sc.ws) return
+    const remaining: ProtocolMessage[] = []
+    for (const msg of this._messageQueue) {
+      const payload = msg.payload as { communityId?: string } | null
+      const communityId = payload?.communityId
+      const targetServer = communityId ? this._communityServerMap.get(communityId) : undefined
+      if (!targetServer || targetServer === serverUrl) {
+        sc.ws.send(serialise(msg))
+      } else {
+        remaining.push(msg)
+      }
     }
+    this._messageQueue = remaining
   }
 
-  private attemptReconnect(): void {
-    if (this._reconnectAttempts >= this._maxReconnectAttempts) return
-    this._reconnectAttempts++
+  private attemptReconnectServer(serverUrl: string): void {
+    const sc = this._servers.get(serverUrl)
+    if (!sc || sc.reconnectAttempts >= this._maxReconnectAttempts) return
+    sc.reconnectAttempts++
     this.emitter.emit('reconnecting')
-    const delay = Math.min(1000 * Math.pow(2, this._reconnectAttempts), 30000)
-    this._reconnectTimer = setTimeout(async () => {
+    const delay = Math.min(1000 * Math.pow(2, sc.reconnectAttempts), 30000)
+    sc.reconnectTimer = setTimeout(async () => {
       try {
         if (this._identity && this._keyPair) {
           await this.connect({
-            serverUrl: this._serverUrl,
+            serverUrl,
             identity: this._identity,
             keyPair: this._keyPair,
             vp: this._vp ?? undefined
           })
         }
       } catch {
-        this.attemptReconnect()
+        this.attemptReconnectServer(serverUrl)
       }
     }, delay)
+  }
+
+  private persistState(): void {
+    if (!this._persistenceAdapter) return
+    const state: PersistedState = {
+      servers: Array.from(this._servers.values()).map((sc) => ({
+        url: sc.url,
+        communityIds: Array.from(sc.communities)
+      })),
+      did: this._did || undefined
+    }
+    this._persistenceAdapter.save(state).catch(() => {
+      /* ignore */
+    })
   }
 
   private createMessage(type: string, payload: unknown, id?: string): ProtocolMessage {

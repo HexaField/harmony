@@ -265,6 +265,40 @@ describe('@harmony/cloud', () => {
       expect(hosting.getInstance(inst.id)!.status).toBe('suspended')
     })
 
+    it('MUST return null serverUrl when server-runtime is unavailable', async () => {
+      const inst = await hosting.createInstance({ name: 'No Server', ownerDID })
+      // In test env, server-runtime won't be running, so serverUrl should be undefined
+      expect(inst.serverUrl).toBeUndefined()
+    })
+
+    it('MUST return null from getServerUrl for non-running instance', () => {
+      expect(hosting.getServerUrl('nonexistent')).toBeNull()
+    })
+
+    it('MUST return unhealthy from getInstanceHealth for non-running instance', async () => {
+      const inst = await hosting.createInstance({ name: 'Health Test', ownerDID })
+      const health = await hosting.getInstanceHealth(inst.id)
+      expect(health.healthy).toBe(false)
+      expect(health.connections).toBe(0)
+      expect(health.uptime).toBe(0)
+    })
+
+    it('MUST clear serverUrl on delete', async () => {
+      const inst = await hosting.createInstance({ name: 'Delete URL', ownerDID })
+      await hosting.deleteInstance(inst.id, ownerDID)
+      const deleted = hosting.getInstance(inst.id)!
+      expect(deleted.serverUrl).toBeUndefined()
+      expect(deleted.httpUrl).toBeUndefined()
+    })
+
+    it('MUST clear serverUrl on suspend', async () => {
+      const inst = await hosting.createInstance({ name: 'Suspend URL', ownerDID })
+      await hosting.suspendInstance(inst.id)
+      const suspended = hosting.getInstance(inst.id)!
+      expect(suspended.serverUrl).toBeUndefined()
+      expect(suspended.httpUrl).toBeUndefined()
+    })
+
     describe('Encrypted Storage', () => {
       let instanceId: string
 

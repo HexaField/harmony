@@ -5,7 +5,7 @@ import type { AuthenticatedRequest } from '../middleware/auth.js'
 export function hostingRoutes(hostingService: HostingService): Router {
   const router = Router()
 
-  router.post('/instances', async (req: Request, res: Response) => {
+  router.post('/hosting/instances', async (req: Request, res: Response) => {
     try {
       const authReq = req as AuthenticatedRequest
       const ownerDID = authReq.holderDID || req.body.ownerDID
@@ -14,14 +14,14 @@ export function hostingRoutes(hostingService: HostingService): Router {
         return
       }
       const instance = await hostingService.createInstance({ name: req.body.name, ownerDID })
-      res.status(201).json(instance)
+      res.status(201).json({ instance, serverUrl: instance.serverUrl ?? null })
     } catch (err: any) {
       const status = err.message.includes('quota') ? 409 : 500
       res.status(status).json({ error: err.message })
     }
   })
 
-  router.get('/instances', async (req: Request, res: Response) => {
+  router.get('/hosting/instances', async (req: Request, res: Response) => {
     try {
       const ownerDID = req.query.ownerDID as string
       if (!ownerDID) {
@@ -35,20 +35,21 @@ export function hostingRoutes(hostingService: HostingService): Router {
     }
   })
 
-  router.get('/instances/:id', async (req: Request, res: Response) => {
+  router.get('/hosting/instances/:id', async (req: Request, res: Response) => {
     try {
       const instance = hostingService.getInstance(req.params.id as string)
       if (!instance) {
         res.status(404).json({ error: 'Instance not found' })
         return
       }
-      res.json(instance)
+      const health = await hostingService.getInstanceHealth(req.params.id as string)
+      res.json({ ...instance, health })
     } catch (err: any) {
       res.status(500).json({ error: err.message })
     }
   })
 
-  router.delete('/instances/:id', async (req: Request, res: Response) => {
+  router.delete('/hosting/instances/:id', async (req: Request, res: Response) => {
     try {
       const authReq = req as AuthenticatedRequest
       const requesterDID = authReq.holderDID || req.body.requesterDID
@@ -56,6 +57,17 @@ export function hostingRoutes(hostingService: HostingService): Router {
       res.status(204).end()
     } catch (err: any) {
       const status = err.message === 'Unauthorized' ? 403 : err.message === 'Instance not found' ? 404 : 500
+      res.status(status).json({ error: err.message })
+    }
+  })
+
+  router.post('/hosting/instances/:id/restart', async (req: Request, res: Response) => {
+    try {
+      await hostingService.restartInstance(req.params.id as string)
+      const instance = hostingService.getInstance(req.params.id as string)
+      res.json({ instance, serverUrl: instance?.serverUrl ?? null })
+    } catch (err: any) {
+      const status = err.message === 'Instance not found' ? 404 : 500
       res.status(status).json({ error: err.message })
     }
   })

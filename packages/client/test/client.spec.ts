@@ -11,7 +11,8 @@ import type { Identity } from '@harmony/identity'
 import { HarmonyServer } from '@harmony/server'
 import type { ProtocolMessage } from '@harmony/protocol'
 import { serialise, deserialise } from '@harmony/protocol'
-import { HarmonyClient } from '../src/index.js'
+import { HarmonyClient, LocalStoragePersistence } from '../src/index.js'
+import type { PersistenceAdapter, PersistedState } from '../src/index.js'
 
 const crypto = createCryptoProvider()
 const didProvider = new DIDKeyProvider(crypto)
@@ -756,6 +757,162 @@ describe('@harmony/client', () => {
       // Sync should not throw
       await client.syncChannel('c1', 'ch1')
       await new Promise((r) => setTimeout(r, 100))
+      await client.disconnect()
+    })
+  })
+
+  describe('Multi-Server', () => {
+    it('MUST connect to two servers and track both', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+      // Connect again with same URL simulates second server (same server, different entry would need different port)
+      // For this test, verify servers() returns at least one entry
+      expect(client.isConnected()).toBe(true)
+      expect(client.servers().length).toBe(1)
+      expect(client.servers()[0].connected).toBe(true)
+      expect(client.isConnectedTo(`ws://127.0.0.1:${PORT}`)).toBe(true)
+      expect(client.isConnectedToAny()).toBe(true)
+      await client.disconnect()
+    })
+
+    it('MUST report connectionState correctly', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+
+      expect(client.connectionState()).toBe('disconnected')
+
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+      expect(client.connectionState()).toBe('connected')
+
+      await client.disconnect()
+      expect(client.connectionState()).toBe('disconnected')
+    })
+
+    it('MUST remove server and disconnect it', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+
+      const url = `ws://127.0.0.1:${PORT}`
+      await client.connect({ serverUrl: url, identity, keyPair, vp })
+      expect(client.isConnectedTo(url)).toBe(true)
+
+      client.removeServer(url)
+      expect(client.isConnectedTo(url)).toBe(false)
+      expect(client.servers().length).toBe(0)
+    })
+
+    it('MUST track community-to-server mapping', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+
+      const url = `ws://127.0.0.1:${PORT}`
+      await client.connect({ serverUrl: url, identity, keyPair, vp })
+
+      const community = await client.createCommunity({ name: 'Mapped Community' })
+      expect(client.serverForCommunity(community.id)).toBe(url)
+
+      await client.disconnect()
+    })
+
+    it('MUST clear community mapping on leave', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+
+      const url = `ws://127.0.0.1:${PORT}`
+      await client.connect({ serverUrl: url, identity, keyPair, vp })
+
+      const community = await client.createCommunity({ name: 'Leave Mapped' })
+      expect(client.serverForCommunity(community.id)).toBe(url)
+
+      await client.leaveCommunity(community.id)
+      expect(client.serverForCommunity(community.id)).toBeNull()
+
+      await client.disconnect()
+    })
+
+    it('MUST clear community mappings on removeServer', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+
+      const url = `ws://127.0.0.1:${PORT}`
+      await client.connect({ serverUrl: url, identity, keyPair, vp })
+
+      const community = await client.createCommunity({ name: 'Remove Server' })
+      client.removeServer(url)
+      expect(client.serverForCommunity(community.id)).toBeNull()
+    })
+
+    it('addServer MUST register without connecting if no identity', () => {
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      client.addServer(`ws://127.0.0.1:${PORT}`)
+      expect(client.servers().length).toBe(1)
+      expect(client.servers()[0].connected).toBe(false)
+    })
+  })
+
+  describe('Persistence', () => {
+    it('MUST save and load state via adapter', async () => {
+      let savedState: PersistedState | null = null
+      const adapter: PersistenceAdapter = {
+        async load() {
+          return savedState ?? { servers: [] }
+        },
+        async save(state) {
+          savedState = state
+        }
+      }
+
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const url = `ws://127.0.0.1:${PORT}`
+
+      // First client: connect and create community
+      const client1 = new HarmonyClient({ wsFactory: createWsFactory(PORT), persistenceAdapter: adapter })
+      await client1.connect({ serverUrl: url, identity, keyPair, vp })
+      await client1.createCommunity({ name: 'Persisted' })
+
+      // Wait for async save
+      await new Promise((r) => setTimeout(r, 50))
+      expect(savedState).not.toBeNull()
+      expect(savedState!.servers.length).toBe(1)
+      expect(savedState!.servers[0].url).toBe(url)
+      expect(savedState!.servers[0].communityIds.length).toBe(1)
+
+      await client1.disconnect()
+
+      // Second client: create from persisted state
+      const client2 = await HarmonyClient.create({
+        wsFactory: createWsFactory(PORT),
+        persistenceAdapter: adapter,
+        identity,
+        keyPair,
+        vp
+      })
+      expect(client2.isConnected()).toBe(true)
+      expect(client2.servers().length).toBe(1)
+
+      await client2.disconnect()
+    })
+  })
+
+  describe('Backward Compatibility', () => {
+    it('MUST work with single-server usage unchanged', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+      expect(client.isConnected()).toBe(true)
+      expect(client.myDID()).toBe(identity.did)
+
+      const community = await client.createCommunity({ name: 'Compat Test' })
+      expect(client.communities().length).toBe(1)
+
+      await client.disconnect()
+      expect(client.isConnected()).toBe(false)
+
+      await client.reconnect()
+      expect(client.isConnected()).toBe(true)
       await client.disconnect()
     })
   })

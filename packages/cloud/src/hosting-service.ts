@@ -85,9 +85,97 @@ export class HostingService {
       storageUsedBytes: 0,
       maxStorageBytes: this.defaultMaxStorageBytes
     }
+
+    // Try to provision a real server-runtime process
+    try {
+      await this._spawnServer(id, instance)
+    } catch (_err) {
+      // server-runtime not available — instance created without server URL
+    }
+
     this.instances.set(id, instance)
     this.instanceBlobs.set(id, new Set())
     return instance
+  }
+
+  private async _spawnServer(id: string, instance: ManagedInstance): Promise<void> {
+    const port = this._nextPort++
+    const healthPort = port + 1
+    const instanceDataDir = resolve(this._dataDir, id)
+    mkdirSync(instanceDataDir, { recursive: true })
+
+    const child = fork(this._serverRuntimePath, [], {
+      execArgv: ['--import', 'tsx'],
+      env: {
+        ...process.env,
+        HARMONY_PORT: String(port),
+        HARMONY_HOST: '0.0.0.0'
+      },
+      cwd: instanceDataDir,
+      stdio: 'pipe'
+    })
+
+    const wsUrl = `ws://${this._host}:${port}`
+    const httpUrl = `http://${this._host}:${healthPort}`
+
+    // Wait for health check (up to 10s)
+    await this._waitForHealth(httpUrl, 10000)
+
+    this._runningServers.set(id, { process: child, port, wsUrl, httpUrl })
+    instance.serverUrl = wsUrl
+    instance.httpUrl = httpUrl
+  }
+
+  private async _waitForHealth(httpUrl: string, timeoutMs: number): Promise<void> {
+    const start = Date.now()
+    while (Date.now() - start < timeoutMs) {
+      try {
+        const res = await fetch(`${httpUrl}/health`)
+        if (res.ok) return
+      } catch {
+        // not ready yet
+      }
+      await new Promise((r) => setTimeout(r, 250))
+    }
+    throw new Error('Server health check timed out')
+  }
+
+  getServerUrl(id: string): string | null {
+    return this._runningServers.get(id)?.wsUrl ?? null
+  }
+
+  async restartInstance(id: string): Promise<void> {
+    const inst = this.instances.get(id)
+    if (!inst) throw new Error('Instance not found')
+    this._killServer(id)
+    await this._spawnServer(id, inst)
+  }
+
+  async getInstanceHealth(id: string): Promise<{ healthy: boolean; connections: number; uptime: number }> {
+    const server = this._runningServers.get(id)
+    if (!server) return { healthy: false, connections: 0, uptime: 0 }
+    try {
+      const res = await fetch(`${server.httpUrl}/health`)
+      if (res.ok) {
+        const data = (await res.json()) as any
+        return {
+          healthy: true,
+          connections: data.connections ?? 0,
+          uptime: data.uptime ?? 0
+        }
+      }
+    } catch {
+      // not reachable
+    }
+    return { healthy: false, connections: 0, uptime: 0 }
+  }
+
+  private _killServer(id: string): void {
+    const server = this._runningServers.get(id)
+    if (server) {
+      server.process.kill()
+      this._runningServers.delete(id)
+    }
   }
 
   getInstance(id: string): ManagedInstance | null {
@@ -103,6 +191,9 @@ export class HostingService {
     if (!inst) throw new Error('Instance not found')
     if (inst.ownerDID !== requesterDID) throw new Error('Unauthorized')
     inst.status = 'deleted'
+    inst.serverUrl = undefined
+    inst.httpUrl = undefined
+    this._killServer(id)
 
     // Clean up blobs
     const blobIds = this.instanceBlobs.get(id)
@@ -116,6 +207,9 @@ export class HostingService {
     const inst = this.instances.get(id)
     if (!inst) throw new Error('Instance not found')
     inst.status = 'suspended'
+    inst.serverUrl = undefined
+    inst.httpUrl = undefined
+    this._killServer(id)
   }
 
   async uploadBlob(params: { instanceId: string; uploaderDID: string; data: EncryptedPayload }): Promise<StoredBlob> {

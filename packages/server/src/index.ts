@@ -772,6 +772,13 @@ export class HarmonyServer {
     return Array.from(this.communitySubscriptions.keys())
   }
 
+  /** Register a community so it appears in the communities list (e.g. after import) */
+  registerCommunity(communityId: string): void {
+    if (!this.communitySubscriptions.has(communityId)) {
+      this.communitySubscriptions.set(communityId, new Set())
+    }
+  }
+
   private async authenticateConnection(
     vp: VerifiablePresentation
   ): Promise<{ authenticated: boolean; did?: string; error?: string }> {

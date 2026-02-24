@@ -157,6 +157,7 @@ export class ServerRuntime {
 
     // Init migration endpoint
     this.migrationEndpoint = new MigrationEndpoint(this.logger, this.store)
+    this.migrationEndpoint.setHarmonyServer(this.server)
 
     // Set up health endpoint HTTP server
     if (this.config.server.tls?.cert && this.config.server.tls?.key) {

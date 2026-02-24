@@ -3,6 +3,9 @@ import { createCryptoProvider, type KeyPair } from '@harmony/crypto'
 import { MigrationBot, DiscordRESTAPI } from '@harmony/migration-bot'
 import { MigrationService, type EncryptedExportBundle } from '@harmony/migration'
 import type { ExportProgress } from '@harmony/migration-bot'
+import { HarmonyType, HarmonyPredicate, RDFPredicate } from '@harmony/vocab'
+import type { Quad } from '@harmony/quads'
+import type { HarmonyServer } from '@harmony/server'
 import type { SQLiteQuadStore } from './sqlite-quad-store.js'
 import type { Logger } from './logger.js'
 
@@ -16,14 +19,82 @@ interface ExportJob {
   createdAt: number
 }
 
+export interface ImportChannel {
+  id: string
+  name: string
+  type: string
+}
+
+export interface ImportMember {
+  did: string
+  displayName: string
+}
+
+export interface ImportResult {
+  communityId: string
+  channels: ImportChannel[]
+  members: ImportMember[]
+}
+
 export class MigrationEndpoint {
   private exports: Map<string, ExportJob> = new Map()
   private logger: Logger
   private store: SQLiteQuadStore | null
+  private harmonyServer: HarmonyServer | null = null
 
   constructor(logger: Logger, store: SQLiteQuadStore | null) {
     this.logger = logger
     this.store = store
+  }
+
+  /** Wire up the live HarmonyServer so imported communities can be registered */
+  setHarmonyServer(server: HarmonyServer): void {
+    this.harmonyServer = server
+  }
+
+  /**
+   * Parse imported quads to extract community, channels, and members.
+   */
+  extractImportData(quads: Quad[]): ImportResult {
+    // Find community
+    let communityId = ''
+    const communityQuad = quads.find((q) => q.predicate === RDFPredicate.type && q.object === HarmonyType.Community)
+    if (communityQuad) {
+      communityId = communityQuad.subject
+    }
+
+    // Find channels (Channel, Thread types — not Category)
+    const channels: ImportChannel[] = []
+    const channelQuads = quads.filter(
+      (q) => q.predicate === RDFPredicate.type && (q.object === HarmonyType.Channel || q.object === HarmonyType.Thread)
+    )
+    for (const cq of channelQuads) {
+      const nameQuad = quads.find((q) => q.subject === cq.subject && q.predicate === HarmonyPredicate.name)
+      const name =
+        nameQuad && typeof nameQuad.object === 'object'
+          ? nameQuad.object.value
+          : nameQuad && typeof nameQuad.object === 'string'
+            ? nameQuad.object
+            : 'unknown'
+      const type = cq.object === HarmonyType.Thread ? 'thread' : 'text'
+      channels.push({ id: cq.subject, name, type })
+    }
+
+    // Find members
+    const members: ImportMember[] = []
+    const memberQuads = quads.filter((q) => q.predicate === RDFPredicate.type && q.object === HarmonyType.Member)
+    for (const mq of memberQuads) {
+      const nameQuad = quads.find((q) => q.subject === mq.subject && q.predicate === HarmonyPredicate.name)
+      const displayName =
+        nameQuad && typeof nameQuad.object === 'object'
+          ? nameQuad.object.value
+          : nameQuad && typeof nameQuad.object === 'string'
+            ? nameQuad.object
+            : 'unknown'
+      members.push({ did: mq.subject, displayName })
+    }
+
+    return { communityId, channels, members }
   }
 
   async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
@@ -223,18 +294,24 @@ export class MigrationEndpoint {
       // Load quads into store
       await this.store.addAll(quads)
 
+      // Extract structured data from quads
+      const importData = this.extractImportData(quads)
+
+      // Register community with live server so it's immediately accessible
+      if (this.harmonyServer && importData.communityId) {
+        this.harmonyServer.registerCommunity(importData.communityId)
+      }
+
       this.logger.info('Migration import complete', {
         adminDID: body.adminDID,
         communityName: body.communityName,
-        quadCount: quads.length
+        communityId: importData.communityId,
+        quadCount: quads.length,
+        channelCount: importData.channels.length,
+        memberCount: importData.members.length
       })
 
-      this.json(res, 200, {
-        success: true,
-        communityName: body.communityName,
-        quadCount: quads.length,
-        metadata: body.bundle.metadata
-      })
+      this.json(res, 200, importData)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       this.logger.error('Migration import failed', { error: message })

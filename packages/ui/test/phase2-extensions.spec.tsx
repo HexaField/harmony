@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
 import { createDMStore } from '../src/stores/dm.js'
 import { createPresenceStore } from '../src/stores/presence.js'

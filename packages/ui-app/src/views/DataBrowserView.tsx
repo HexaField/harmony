@@ -1,7 +1,7 @@
 import { createSignal, Show, For, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
-import { decryptUserData, deriveStorageKey } from '@harmony/migration/src/user-data-encryption.js'
+import { decryptUserData, deriveStorageKey } from '@harmony/migration'
 import { createCryptoProvider } from '@harmony/crypto'
 
 interface BrowseMessage {

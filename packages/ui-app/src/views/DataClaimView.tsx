@@ -4,10 +4,12 @@ import { t } from '../i18n/strings.js'
 import {
   parseDiscordExport,
   type DiscordDataPackage,
-  type ParseProgress
-} from '@harmony/migration/src/discord-export-parser.js'
-import { transformDiscordExportToQuads, computeDataMeta } from '@harmony/migration/src/user-data-transform.js'
-import { deriveStorageKey, encryptUserData } from '@harmony/migration/src/user-data-encryption.js'
+  type ParseProgress,
+  transformDiscordExportToQuads,
+  computeDataMeta,
+  deriveStorageKey,
+  encryptUserData
+} from '@harmony/migration'
 import { createCryptoProvider } from '@harmony/crypto'
 import { MemoryQuadStore } from '@harmony/quads'
 

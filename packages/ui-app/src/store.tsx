@@ -445,20 +445,26 @@ export function createAppStore(): AppStore {
   }
 
   // Data Claim state
-  const [hasClaimedData, setHasClaimedData] = createSignal(restore('hasClaimedData') === 'true')
-  const [claimedDataMeta, setClaimedDataMeta] = createSignal<{
+  const _savedClaimedMeta: {
     messageCount: number
     channelCount: number
     serverCount: number
     dateRange: { earliest: string; latest: string } | null
-  } | null>(() => {
+  } | null = (() => {
     try {
       const raw = restore('claimedDataMeta')
       return raw ? JSON.parse(raw) : null
     } catch {
       return null
     }
-  })
+  })()
+  const [hasClaimedData, setHasClaimedData] = createSignal(restore('hasClaimedData') === 'true')
+  const [claimedDataMeta, setClaimedDataMeta] = createSignal<{
+    messageCount: number
+    channelCount: number
+    serverCount: number
+    dateRange: { earliest: string; latest: string } | null
+  } | null>(_savedClaimedMeta)
   const [showDataClaim, setShowDataClaim] = createSignal(false)
   const [showDataBrowser, setShowDataBrowser] = createSignal(false)
 
@@ -467,8 +473,15 @@ export function createAppStore(): AppStore {
     setHasClaimedData(v)
     persist('hasClaimedData', String(v))
   }
-  const _setClaimedDataMeta = (m: typeof claimedDataMeta extends () => infer R ? R : never) => {
-    setClaimedDataMeta(m as any)
+  const _setClaimedDataMeta = (
+    m: {
+      messageCount: number
+      channelCount: number
+      serverCount: number
+      dateRange: { earliest: string; latest: string } | null
+    } | null
+  ) => {
+    setClaimedDataMeta(m)
     persist('claimedDataMeta', m ? JSON.stringify(m) : null)
   }
 

@@ -421,3 +421,13 @@ export class MigrationService {
     }
   }
 }
+
+// Data claim exports
+export {
+  parseDiscordExport,
+  type DiscordDataPackage,
+  type ParsedMessage,
+  type ParseProgress
+} from './discord-export-parser.js'
+export { deriveStorageKey, encryptUserData, decryptUserData, type UserDataPayload } from './user-data-encryption.js'
+export { transformDiscordExportToQuads, computeDataMeta } from './user-data-transform.js'

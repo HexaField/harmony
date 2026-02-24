@@ -3,9 +3,11 @@ import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 import { createCryptoProvider } from '@harmony/crypto'
 import { IdentityManager } from '@harmony/identity'
+import { MigrationWizard } from './MigrationWizard.tsx'
+import { FriendFinderView } from './FriendFinderView.tsx'
 // HarmonyClient is now managed by the store
 
-type OnboardingStep = 'welcome' | 'mnemonic-display' | 'mnemonic-confirm' | 'recover'
+type OnboardingStep = 'welcome' | 'mnemonic-display' | 'mnemonic-confirm' | 'recover' | 'setup'
 
 const STORAGE_PREFIX = 'harmony:'
 
@@ -36,14 +38,22 @@ function clearOnboardingState() {
   }
 }
 
-export const OnboardingView: Component = () => {
+export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => {
   const store = useAppStore()
-  const [step, _setStep] = createSignal<OnboardingStep>('welcome')
+  const [step, _setStep] = createSignal<OnboardingStep>(props.startAtSetup ? 'setup' : 'welcome')
   const [generatedMnemonic, setGeneratedMnemonic] = createSignal('')
   const [recoverInput, setRecoverInput] = createSignal('')
   const [error, setError] = createSignal('')
   const [loading, setLoading] = createSignal(false)
   const [copied, setCopied] = createSignal(false)
+
+  // Setup step state
+  const [setupName, setSetupName] = createSignal('')
+  const [discordLinked, _setDiscordLinked] = createSignal(false)
+  const [discordUsername, _setDiscordUsername] = createSignal('')
+  const [showJoinInput, setShowJoinInput] = createSignal(false)
+  const [inviteLink, setInviteLink] = createSignal('')
+  const [showMigration, setShowMigration] = createSignal(false)
 
   // Confirmation quiz state
   const [quizIndices, setQuizIndices] = createSignal<number[]>([])
@@ -160,7 +170,22 @@ export const OnboardingView: Component = () => {
     }
     clearOnboardingState()
     initClientFromStore()
-    // Identity is now set in store — App.tsx will show MainLayout
+    // Transition to setup step instead of ending onboarding
+    setStep('setup')
+  }
+
+  function finishSetup() {
+    const name = setupName().trim()
+    if (name) {
+      store.setDisplayName(name)
+    }
+    // needsSetup() will now be false → App.tsx will show MainLayout
+  }
+
+  function skipSetup() {
+    // Set a display name to mark setup as complete
+    store.setDisplayName(setupName().trim() || store.displayName() || 'Anonymous')
+    // needsSetup() will now be false → App.tsx will show MainLayout
   }
 
   async function handleCopy() {
@@ -192,6 +217,8 @@ export const OnboardingView: Component = () => {
       store.setKeyPair(result.keyPair)
       clearOnboardingState()
       initClientFromStore()
+      // Transition to setup step
+      setStep('setup')
     } catch (err) {
       setError(String(err))
     } finally {
@@ -341,6 +368,132 @@ export const OnboardingView: Component = () => {
               </button>
             </div>
           </div>
+        </Show>
+        {/* Setup — post-identity profile & community setup */}
+        <Show when={step() === 'setup'}>
+          <div>
+            <h2 class="text-2xl font-bold mb-2 text-center">{t('SETUP_TITLE')}</h2>
+
+            {/* Display name (required) */}
+            <div class="mb-6">
+              <label class="text-sm text-[var(--text-secondary)] mb-1 block">{t('SETUP_DISPLAY_NAME_LABEL')}</label>
+              <input
+                type="text"
+                value={setupName()}
+                onInput={(e) => setSetupName(e.currentTarget.value)}
+                class="w-full p-3 rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm"
+                placeholder={t('SETUP_DISPLAY_NAME_PLACEHOLDER')}
+                autofocus
+              />
+            </div>
+
+            {/* Discord linking (optional) */}
+            <div class="mb-6">
+              <Show
+                when={discordLinked()}
+                fallback={
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm text-[var(--text-muted)]">{t('SETUP_DISCORD_NOT_LINKED')}</span>
+                    <button
+                      onClick={() => {
+                        const portalUrl = (import.meta as any).env?.VITE_PORTAL_URL || ''
+                        if (portalUrl) window.open(`${portalUrl}/api/identity/link`, '_blank')
+                      }}
+                      class="py-2 px-4 rounded-lg bg-[#5865F2]/20 hover:bg-[#5865F2]/30 border border-[#5865F2]/30 text-[var(--text-primary)] text-sm font-semibold transition-colors"
+                    >
+                      {t('SETUP_LINK_DISCORD')}
+                    </button>
+                  </div>
+                }
+              >
+                <p class="text-sm text-green-400">✓ {t('SETUP_DISCORD_LINKED', { username: discordUsername() })}</p>
+              </Show>
+            </div>
+
+            {/* Continue button (requires display name) */}
+            <button
+              onClick={finishSetup}
+              disabled={!setupName().trim()}
+              class="w-full py-3 px-6 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-semibold transition-colors disabled:opacity-50 mb-4"
+            >
+              {t('SETUP_CONTINUE')}
+            </button>
+
+            {/* Community actions */}
+            <div class="border-t border-[var(--border)] pt-4 mt-2">
+              <p class="text-sm text-[var(--text-secondary)] mb-3 text-center">{t('SETUP_WHATS_NEXT')}</p>
+              <div class="space-y-2">
+                <button
+                  onClick={() => {
+                    if (setupName().trim()) {
+                      store.setDisplayName(setupName().trim())
+                    }
+                    store.setShowCreateCommunity(true)
+                  }}
+                  class="w-full py-2 px-4 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)] text-sm font-semibold transition-colors"
+                >
+                  {t('COMMUNITY_CREATE')}
+                </button>
+
+                <Show
+                  when={showJoinInput()}
+                  fallback={
+                    <button
+                      onClick={() => setShowJoinInput(true)}
+                      class="w-full py-2 px-4 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)] text-sm font-semibold transition-colors"
+                    >
+                      {t('EMPTY_JOIN_COMMUNITY')}
+                    </button>
+                  }
+                >
+                  <div class="flex gap-2">
+                    <input
+                      value={inviteLink()}
+                      onInput={(e) => setInviteLink(e.currentTarget.value)}
+                      class="flex-1 py-2 px-3 rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm"
+                      placeholder={t('JOIN_COMMUNITY_URL_PLACEHOLDER')}
+                    />
+                    <button
+                      onClick={() => setShowJoinInput(false)}
+                      class="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    >
+                      {t('JOIN_COMMUNITY_CANCEL')}
+                    </button>
+                  </div>
+                </Show>
+
+                <button
+                  onClick={() => setShowMigration(true)}
+                  class="w-full py-2 px-4 rounded-lg bg-[#5865F2]/20 hover:bg-[#5865F2]/30 border border-[#5865F2]/30 text-[var(--text-primary)] text-sm font-semibold transition-colors"
+                >
+                  {t('ONBOARDING_IMPORT_DISCORD')}
+                </button>
+
+                <button
+                  onClick={() => store.setShowFriendFinder(true)}
+                  class="w-full py-2 px-4 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)] text-sm font-semibold transition-colors"
+                >
+                  {t('FRIENDS_TITLE')}
+                </button>
+              </div>
+            </div>
+
+            {/* Skip link */}
+            <button
+              onClick={skipSetup}
+              class="w-full text-center text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors mt-4"
+            >
+              {t('SETUP_SKIP')}
+            </button>
+          </div>
+
+          <Show when={showMigration()}>
+            <MigrationWizard onClose={() => setShowMigration(false)} />
+          </Show>
+
+          <Show when={store.showFriendFinder()}>
+            <FriendFinderView />
+          </Show>
         </Show>
       </div>
     </div>

@@ -51,6 +51,18 @@ describe('AppStore', () => {
     })
   })
 
+  it('needsSetup is true when DID set but no displayName', () => {
+    createRoot((dispose) => {
+      const store = createAppStore()
+      expect(store.needsSetup()).toBe(false) // no DID
+      store.setDid('did:key:z6MkTest')
+      expect(store.needsSetup()).toBe(true) // DID but no name
+      store.setDisplayName('Alice')
+      expect(store.needsSetup()).toBe(false) // both set
+      dispose()
+    })
+  })
+
   it('isOnboarded becomes true when DID is set', () => {
     createRoot((dispose) => {
       const store = createAppStore()

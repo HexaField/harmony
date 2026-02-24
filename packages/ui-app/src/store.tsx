@@ -28,6 +28,7 @@ export interface AppStore {
   mnemonic: () => string
   setMnemonic: (m: string) => void
   isOnboarded: () => boolean
+  needsSetup: () => boolean
 
   // Identity objects (for client connection)
   identity: () => Identity | null
@@ -1009,6 +1010,7 @@ export function createAppStore(): AppStore {
     mnemonic,
     setMnemonic,
     isOnboarded: () => did().length > 0,
+    needsSetup: () => did().length > 0 && displayName().length === 0,
     identity,
     setIdentity,
     keyPair,

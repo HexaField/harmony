@@ -266,6 +266,17 @@ export const en = {
   IDENTITY_LABEL: 'Your identity',
   IDENTITY_ANONYMOUS: 'Anonymous',
 
+  // Setup (post-identity onboarding)
+  SETUP_TITLE: 'Set up your profile',
+  SETUP_DISPLAY_NAME_LABEL: 'What should people call you?',
+  SETUP_DISPLAY_NAME_PLACEHOLDER: 'Enter your name',
+  SETUP_LINK_DISCORD: 'Link Discord Account',
+  SETUP_DISCORD_LINKED: 'Linked as {username}',
+  SETUP_DISCORD_NOT_LINKED: 'Not linked',
+  SETUP_CONTINUE: 'Continue',
+  SETUP_SKIP: "Skip — I'll do this later",
+  SETUP_WHATS_NEXT: 'What would you like to do?',
+
   // Shared
   OFFLINE_BANNER: 'You are offline',
   RECONNECTING: 'Reconnecting...',

@@ -49,8 +49,10 @@ export const App: Component = () => {
     <AppContext.Provider value={store}>
       <div class="h-screen flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
         <Show when={store.isOnboarded()} fallback={<OnboardingView />}>
-          <Show when={store.showSettings()} fallback={<MainLayout />}>
-            <SettingsView />
+          <Show when={!store.needsSetup()} fallback={<OnboardingView startAtSetup={true} />}>
+            <Show when={store.showSettings()} fallback={<MainLayout />}>
+              <SettingsView />
+            </Show>
           </Show>
         </Show>
       </div>

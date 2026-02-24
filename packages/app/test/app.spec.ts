@@ -226,4 +226,37 @@ describe('Electron App', () => {
     const joined = await app.joinVoice('vc1')
     expect(joined).toBe(true)
   })
+
+  // T26: Server lifecycle — start and stop
+  it('T26: Server lifecycle start/stop', async () => {
+    await app.createIdentity()
+    await app.startServer()
+    expect(app.getState().running).toBe(true)
+    expect(app.getState().serverPort).toBeGreaterThan(0)
+    await app.stopServer()
+    expect(app.getState().running).toBe(false)
+  })
+
+  // T27: Server port returned correctly
+  it('T27: Server port is in expected range', async () => {
+    const port = app.getState().serverPort
+    expect(port).toBeGreaterThanOrEqual(4000)
+    expect(port).toBeLessThan(5000)
+  })
+
+  // T28: Identity create returns DID and mnemonic
+  it('T28: createIdentity returns DID and 12-word mnemonic', async () => {
+    const result = await app.createIdentity()
+    expect(result.did).toMatch(/^did:key:/)
+    expect(result.mnemonic.split(' ')).toHaveLength(12)
+  })
+
+  // T29: Identity recovery from mnemonic returns same DID
+  it('T29: recoverIdentity from mnemonic returns same DID', async () => {
+    const created = await app.createIdentity()
+    // Create a fresh app instance to recover into
+    const app2 = new HarmonyApp(dataDir + '-recover')
+    const recovered = await app2.recoverIdentity(created.mnemonic)
+    expect(recovered.did).toBe(created.did)
+  })
 })

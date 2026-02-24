@@ -1,4 +1,8 @@
 import type { CryptoProvider, EncryptedPayload } from '@harmony/crypto'
+import { fork, type ChildProcess } from 'node:child_process'
+import { resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { mkdirSync } from 'node:fs'
 
 export interface ManagedInstance {
   id: string
@@ -9,6 +13,15 @@ export interface ManagedInstance {
   memberCount: number
   storageUsedBytes: number
   maxStorageBytes: number
+  serverUrl?: string
+  httpUrl?: string
+}
+
+interface RunningServer {
+  process: ChildProcess
+  port: number
+  wsUrl: string
+  httpUrl: string
 }
 
 export interface StoredBlob {
@@ -26,10 +39,32 @@ export class HostingService {
   private instanceBlobs: Map<string, Set<string>> = new Map() // instanceId → blobIds
   private maxInstancesPerUser: number
   private defaultMaxStorageBytes: number
+  private _runningServers: Map<string, RunningServer> = new Map()
+  private _nextPort: number
+  private _dataDir: string
+  private _serverRuntimePath: string
+  private _host: string
 
-  constructor(_crypto: CryptoProvider, options?: { maxInstancesPerUser?: number; defaultMaxStorageBytes?: number }) {
+  constructor(
+    _crypto: CryptoProvider,
+    options?: {
+      maxInstancesPerUser?: number
+      defaultMaxStorageBytes?: number
+      basePort?: number
+      dataDir?: string
+      host?: string
+    }
+  ) {
     this.maxInstancesPerUser = options?.maxInstancesPerUser ?? 5
     this.defaultMaxStorageBytes = options?.defaultMaxStorageBytes ?? 100 * 1024 * 1024 // 100MB
+    this._nextPort = options?.basePort ?? 5000
+    this._dataDir = options?.dataDir ?? '/tmp/harmony-cloud/instances'
+    this._host = options?.host ?? 'localhost'
+
+    // Resolve path to server-runtime entry point
+    const thisDir =
+      typeof import.meta.dirname === 'string' ? import.meta.dirname : dirname(fileURLToPath(import.meta.url))
+    this._serverRuntimePath = resolve(thisDir, '../../server-runtime/bin/harmony-server.js')
   }
 
   async createInstance(params: { name: string; ownerDID: string }): Promise<ManagedInstance> {

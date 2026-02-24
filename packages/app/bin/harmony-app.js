@@ -110,6 +110,25 @@ function registerIPC() {
   ipcMain.handle('harmony:start-migration', () => harmonyApp.startMigration())
   ipcMain.handle('harmony:set-migration-token', (_e, token) => harmonyApp.setMigrationToken(token))
   ipcMain.handle('harmony:cancel-migration', () => harmonyApp.cancelMigration())
+
+  // Server lifecycle IPC
+  ipcMain.handle('harmony:start-server', async () => {
+    await harmonyApp.startServer()
+    return { serverUrl: `ws://127.0.0.1:${harmonyApp.getState().serverPort}` }
+  })
+
+  ipcMain.handle('harmony:stop-server', async () => {
+    await harmonyApp.stopServer()
+    return { stopped: true }
+  })
+
+  ipcMain.handle('harmony:server-url', () => {
+    const state = harmonyApp.getState()
+    if (!state.running) return null
+    return `ws://127.0.0.1:${state.serverPort}`
+  })
+
+  ipcMain.handle('harmony:server-running', () => harmonyApp.getState().running)
 }
 
 app.whenReady().then(async () => {
@@ -125,6 +144,15 @@ app.whenReady().then(async () => {
   registerIPC()
   await createWindow()
   createTray()
+
+  // Notify renderer when server is already running
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (harmonyApp.getState().running) {
+      mainWindow.webContents.send('harmony:server-started', {
+        serverUrl: `ws://127.0.0.1:${harmonyApp.getState().serverPort}`
+      })
+    }
+  })
 })
 
 app.on('window-all-closed', () => {

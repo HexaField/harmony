@@ -111,6 +111,7 @@ export class HarmonyApp {
       relay: { enabled: false },
       moderation: {},
       voice: { enabled: false },
+      portal: { enabled: false },
       logging: { level: 'info', format: 'json' },
       limits: {
         maxConnections: 100,

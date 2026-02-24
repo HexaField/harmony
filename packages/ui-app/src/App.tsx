@@ -25,6 +25,23 @@ export const App: Component = () => {
           wsFactory: (url: string) => new WebSocket(url) as any
         })
         store.setClient(client)
+
+        // Auto-connect to first community's server
+        const communities = store.communities()
+        const serverUrl = communities.find((c) => c.serverUrl)?.serverUrl
+        if (serverUrl) {
+          try {
+            store.setConnectionState('reconnecting')
+            await Promise.race([
+              client.connect({ serverUrl, identity: result.identity, keyPair: result.keyPair }),
+              new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 5000))
+            ])
+            store.setConnectionState('connected')
+            store.setConnectionError('')
+          } catch {
+            store.setConnectionState('disconnected')
+          }
+        }
       } catch {
         // Corrupted mnemonic — reset to onboarding
         store.setDid('')

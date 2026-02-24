@@ -219,6 +219,20 @@ export function createAppStore(): AppStore {
       updateConnectionStateFromClient(client)
       refreshServers()
 
+      // Ensure current user appears in member list
+      const myDid = did()
+      if (myDid && !members().some((m) => m.did === myDid)) {
+        setMembers([
+          ...members(),
+          {
+            did: myDid,
+            displayName: displayName() || 'You',
+            roles: ['admin'],
+            status: 'online'
+          }
+        ])
+      }
+
       // After reconnect, sync the active channel to load message history
       const communityId = activeCommunityId()
       const channelId = activeChannelId()
@@ -377,6 +391,22 @@ export function createAppStore(): AppStore {
     setupClientListeners(client)
     updateConnectionStateFromClient(client)
     refreshServers()
+
+    // Ensure current user appears in member list when connected
+    if (client.isConnected()) {
+      const myDid = did()
+      if (myDid && !members().some((m) => m.did === myDid)) {
+        setMembers([
+          ...members(),
+          {
+            did: myDid,
+            displayName: displayName() || 'You',
+            roles: ['admin'],
+            status: 'online'
+          }
+        ])
+      }
+    }
 
     // If already connected and we have an active channel, sync immediately
     const communityId = activeCommunityId()

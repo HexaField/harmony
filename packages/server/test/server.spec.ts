@@ -1596,6 +1596,122 @@ describe('@harmony/server', () => {
     })
   })
 
+  describe('Community Info', () => {
+    it('MUST return community info and online members for community.info request', async () => {
+      const { vp, did } = await createIdentity()
+      const ws = await connectAndAuth(vp)
+
+      // Create community
+      const createResponse = await sendAndWait(ws, {
+        id: 'ci-create',
+        type: 'community.create',
+        timestamp: new Date().toISOString(),
+        sender: did,
+        payload: { name: 'Info Test Community', defaultChannels: ['general'] }
+      })
+      const communityId = (createResponse.payload as { communityId: string }).communityId
+
+      // Request community info
+      const infoResponse = await sendAndWait(ws, {
+        id: 'ci-info',
+        type: 'community.info',
+        timestamp: new Date().toISOString(),
+        sender: did,
+        payload: { communityId }
+      })
+
+      expect(infoResponse.type).toBe('community.info.response')
+      const payload = infoResponse.payload as {
+        communityId: string
+        info: { name: string } | null
+        onlineMembers: Array<{ did: string; status: string }>
+      }
+      expect(payload.communityId).toBe(communityId)
+      expect(payload.info).not.toBeNull()
+      expect(payload.info!.name).toBe('Info Test Community')
+      expect(payload.onlineMembers.length).toBeGreaterThanOrEqual(1)
+      expect(payload.onlineMembers.some((m) => m.did === did && m.status === 'online')).toBe(true)
+
+      ws.close()
+    })
+
+    it('MUST return null info for non-existent community', async () => {
+      const { vp, did } = await createIdentity()
+      const ws = await connectAndAuth(vp)
+
+      const infoResponse = await sendAndWait(ws, {
+        id: 'ci-nonexistent',
+        type: 'community.info',
+        timestamp: new Date().toISOString(),
+        sender: did,
+        payload: { communityId: 'nonexistent-community-id' }
+      })
+
+      expect(infoResponse.type).toBe('community.info.response')
+      const payload = infoResponse.payload as {
+        communityId: string
+        info: unknown
+        onlineMembers: Array<{ did: string; status: string }>
+      }
+      expect(payload.info).toBeNull()
+      expect(payload.onlineMembers.length).toBe(0)
+
+      ws.close()
+    })
+
+    it('MUST include all connected members in onlineMembers', async () => {
+      const alice = await createIdentity()
+      const bob = await createIdentity()
+
+      const aliceWs = await connectAndAuth(alice.vp)
+
+      // Alice creates community
+      const createResponse = await sendAndWait(aliceWs, {
+        id: 'ci-multi-create',
+        type: 'community.create',
+        timestamp: new Date().toISOString(),
+        sender: alice.did,
+        payload: { name: 'Multi Member', defaultChannels: ['general'] }
+      })
+      const communityId = (createResponse.payload as { communityId: string }).communityId
+
+      // Bob connects and joins
+      const bobWs = await connectAndAuth(bob.vp)
+      bobWs.send(
+        serialise({
+          id: 'ci-bob-join',
+          type: 'community.join',
+          timestamp: new Date().toISOString(),
+          sender: bob.did,
+          payload: { communityId, membershipVC: bob.memberVC }
+        })
+      )
+      // Wait for join to process
+      await waitForMessage(aliceWs)
+
+      // Alice requests community info
+      const infoResponse = await sendAndWait(aliceWs, {
+        id: 'ci-multi-info',
+        type: 'community.info',
+        timestamp: new Date().toISOString(),
+        sender: alice.did,
+        payload: { communityId }
+      })
+
+      const payload = infoResponse.payload as {
+        communityId: string
+        info: unknown
+        onlineMembers: Array<{ did: string; status: string }>
+      }
+      expect(payload.onlineMembers.length).toBeGreaterThanOrEqual(2)
+      expect(payload.onlineMembers.some((m) => m.did === alice.did)).toBe(true)
+      expect(payload.onlineMembers.some((m) => m.did === bob.did)).toBe(true)
+
+      aliceWs.close()
+      bobWs.close()
+    })
+  })
+
   describe('CommunityManager Additional', () => {
     it('MUST return community info with getInfo', async () => {
       const cm = new CommunityManager(store, crypto)

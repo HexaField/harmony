@@ -1125,6 +1125,183 @@ describe('@harmony/client', () => {
     })
   })
 
+  describe('Multi-Client Messaging', () => {
+    it('MUST receive messages from another client in same community', async () => {
+      const id1 = await createTestIdentity()
+      const id2 = await createTestIdentity()
+
+      const client1 = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      const client2 = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+
+      await client1.connect({
+        serverUrl: `ws://127.0.0.1:${PORT}`,
+        identity: id1.identity,
+        keyPair: id1.keyPair,
+        vp: id1.vp
+      })
+      await client2.connect({
+        serverUrl: `ws://127.0.0.1:${PORT}`,
+        identity: id2.identity,
+        keyPair: id2.keyPair,
+        vp: id2.vp
+      })
+
+      const community = await client1.createCommunity({ name: 'Multi-Client Test', defaultChannels: ['general'] })
+      await client2.joinCommunity(community.id)
+
+      const channelId = community.channels[0].id
+
+      const received = await new Promise<any>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Timeout waiting for message')), 3000)
+        client2.on('message', (...args: unknown[]) => {
+          clearTimeout(timeout)
+          resolve(args[0])
+        })
+        client1.sendMessage(community.id, channelId, 'hello from client1')
+      })
+
+      // Remote messages arrive as '[encrypted]' (no shared key yet); verify the message was received
+      expect(received).toBeDefined()
+      expect(received.channelId).toBe(channelId)
+      expect(received.authorDID).toBe(id1.identity.did)
+
+      await client1.disconnect()
+      await client2.disconnect()
+    })
+
+    it('MUST show correct sender DID on received messages', async () => {
+      const id1 = await createTestIdentity()
+      const id2 = await createTestIdentity()
+
+      const client1 = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      const client2 = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+
+      await client1.connect({
+        serverUrl: `ws://127.0.0.1:${PORT}`,
+        identity: id1.identity,
+        keyPair: id1.keyPair,
+        vp: id1.vp
+      })
+      await client2.connect({
+        serverUrl: `ws://127.0.0.1:${PORT}`,
+        identity: id2.identity,
+        keyPair: id2.keyPair,
+        vp: id2.vp
+      })
+
+      const community = await client1.createCommunity({ name: 'DID Test', defaultChannels: ['general'] })
+      await client2.joinCommunity(community.id)
+
+      const channelId = community.channels[0].id
+
+      const received = await new Promise<any>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Timeout waiting for message')), 3000)
+        client2.on('message', (...args: unknown[]) => {
+          clearTimeout(timeout)
+          resolve(args[0])
+        })
+        client1.sendMessage(community.id, channelId, 'did check')
+      })
+
+      expect(received.authorDID).toBe(id1.identity.did)
+
+      await client1.disconnect()
+      await client2.disconnect()
+    })
+
+    it('MUST broadcast to all community members', async () => {
+      const id1 = await createTestIdentity()
+      const id2 = await createTestIdentity()
+
+      const client1 = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      const client2 = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+
+      await client1.connect({
+        serverUrl: `ws://127.0.0.1:${PORT}`,
+        identity: id1.identity,
+        keyPair: id1.keyPair,
+        vp: id1.vp
+      })
+      await client2.connect({
+        serverUrl: `ws://127.0.0.1:${PORT}`,
+        identity: id2.identity,
+        keyPair: id2.keyPair,
+        vp: id2.vp
+      })
+
+      const community = await client1.createCommunity({ name: 'Broadcast Test', defaultChannels: ['general'] })
+      await client2.joinCommunity(community.id)
+
+      const channelId = community.channels[0].id
+
+      const client1Messages: unknown[] = []
+      const client2Messages: unknown[] = []
+      client1.on('message', (...args: unknown[]) => {
+        client1Messages.push(args[0])
+      })
+      client2.on('message', (...args: unknown[]) => {
+        client2Messages.push(args[0])
+      })
+
+      await client1.sendMessage(community.id, channelId, 'broadcast test')
+
+      // Wait for messages to propagate
+      await new Promise((r) => setTimeout(r, 1000))
+
+      // Client 2 must receive the broadcast
+      expect(client2Messages.length).toBeGreaterThan(0)
+      // Server broadcasts to all members including sender; both should receive
+      expect(client1Messages.length).toBeGreaterThan(0)
+
+      await client1.disconnect()
+      await client2.disconnect()
+    })
+  })
+
+  describe('Community Info', () => {
+    it('MUST request and receive community info', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      const community = await client.createCommunity({ name: 'Info Request Test' })
+
+      const infoPromise = new Promise<Record<string, unknown>>((resolve) => {
+        client.on('community.info', (payload: Record<string, unknown>) => resolve(payload))
+      })
+
+      client.requestCommunityInfo(community.id)
+
+      const payload = await infoPromise
+      expect(payload.communityId).toBe(community.id)
+      expect((payload.onlineMembers as unknown[]).length).toBeGreaterThanOrEqual(1)
+
+      await client.disconnect()
+    })
+
+    it('MUST update community member list from info response', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      const community = await client.createCommunity({ name: 'Member Update Test' })
+
+      const infoPromise = new Promise<void>((resolve) => {
+        client.on('community.info', () => resolve())
+      })
+
+      client.requestCommunityInfo(community.id)
+      await infoPromise
+
+      const state = client.community(community.id)
+      expect(state).toBeTruthy()
+      expect(state!.members.length).toBeGreaterThanOrEqual(1)
+      expect(state!.members.some((m: { did: string }) => m.did === identity.did)).toBe(true)
+
+      await client.disconnect()
+    })
+  })
+
   describe('Backward Compatibility', () => {
     it('MUST work with single-server usage unchanged', async () => {
       const { identity, keyPair, vp } = await createTestIdentity()

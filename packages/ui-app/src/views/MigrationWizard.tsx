@@ -176,19 +176,29 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
         ...existing,
         {
           id: result.communityId,
-          name: bundle?.guild?.name || 'Imported Community',
+          name: bundle?.metadata?.guild?.name || bundle?.guild?.name || 'Imported Community',
           description: '',
           iconUrl: undefined,
           serverUrl: url,
           memberCount: result.members?.length || 0
         }
       ])
-      if (result.channels) {
-        store.setChannels([...store.channels(), ...result.channels])
+      if (result.channels?.length) {
+        const mappedChannels = result.channels.map((ch: any) => ({
+          id: ch.id,
+          name: ch.name,
+          type: ch.type === 'thread' ? 'text' : ch.type || 'text',
+          communityId: result.communityId
+        }))
+        store.setChannels([...store.channels(), ...mappedChannels])
+
+        // Select first text channel
+        const firstText = mappedChannels.find((c: any) => c.type === 'text')
+        if (firstText) store.setActiveChannelId(firstText.id)
       }
       store.setActiveCommunityId(result.communityId)
 
-      // Add server to the store's client — it handles connection automatically
+      // Connect to the server
       try {
         const identity = store.identity()
         const keyPair = store.keyPair()
@@ -197,6 +207,8 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
             await store.initClient(identity, keyPair)
           }
           store.addServer(url)
+          // Wait briefly for connection to establish
+          await new Promise((resolve) => setTimeout(resolve, 1000))
         }
       } catch {
         // Connection failed — community is still saved, user can reconnect later

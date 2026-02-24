@@ -2,6 +2,7 @@
 // @harmony/server-runtime — Production server entrypoint
 // Usage: node --import tsx bin/harmony-server.js [options]
 
+import 'dotenv/config'
 import { parseArgs } from 'node:util'
 import { resolve } from 'node:path'
 import { existsSync } from 'node:fs'
@@ -40,9 +41,11 @@ let config
 if (existsSync(configPath)) {
   config = loadConfig(configPath)
 } else {
-  // Use defaults if no config file
+  // Use defaults if no config file — env vars override
+  const envPort = process.env.HARMONY_PORT ? parseInt(process.env.HARMONY_PORT, 10) : 4000
+  const envHost = process.env.HARMONY_HOST || '0.0.0.0'
   config = {
-    server: { host: '0.0.0.0', port: 4000 },
+    server: { host: envHost, port: envPort },
     storage: { database: './harmony.db', media: './media' },
     identity: {},
     federation: { enabled: false },

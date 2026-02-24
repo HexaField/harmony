@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import express, { type Application, type Request, type Response } from 'express'
 import { createCryptoProvider } from '@harmony/crypto'
 import { PortalService } from './index.js'

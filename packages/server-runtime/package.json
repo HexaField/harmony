@@ -33,6 +33,7 @@
     "@harmony/voice": "workspace:*",
     "@harmony/zcap": "workspace:*",
     "better-sqlite3": "^11.9.1",
+    "dotenv": "^17.2.3",
     "js-yaml": "^4.1.0",
     "ws": "^8.18.0"
   },

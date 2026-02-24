@@ -1,4 +1,7 @@
-import 'dotenv/config'
+import { config as loadEnv } from 'dotenv'
+import { resolve } from 'node:path'
+// Load .env from monorepo root (pnpm runs from package dir)
+loadEnv({ path: resolve(import.meta.dirname, '../../../.env') })
 import express, { type Application, type Request, type Response } from 'express'
 import { createCryptoProvider } from '@harmony/crypto'
 import { PortalService } from './index.js'

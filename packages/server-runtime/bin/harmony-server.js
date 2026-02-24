@@ -2,9 +2,12 @@
 // @harmony/server-runtime — Production server entrypoint
 // Usage: node --import tsx bin/harmony-server.js [options]
 
-import 'dotenv/config'
+import { config as loadEnv } from 'dotenv'
+import { resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+// Load .env from monorepo root
+loadEnv({ path: resolve(dirname(fileURLToPath(import.meta.url)), '../../../.env') })
 import { parseArgs } from 'node:util'
-import { resolve } from 'node:path'
 import { existsSync } from 'node:fs'
 import { ServerRuntime, loadConfig } from '../src/index.ts'
 

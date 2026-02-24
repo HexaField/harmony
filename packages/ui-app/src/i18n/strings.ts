@@ -145,6 +145,22 @@ export const en = {
   SERVER_AUTH_FAILED: 'Authentication failed',
   SERVER_AUTH_CREATING_VP: 'Authenticating...',
 
+  // Hosting
+  HOSTING_CHOOSE: 'Where should your community live?',
+  HOSTING_LOCAL_TITLE: 'This device',
+  HOSTING_LOCAL_DESC: 'Run a server on your computer. Free, private, and under your control.',
+  HOSTING_CLOUD_TITLE: 'Harmony Cloud',
+  HOSTING_CLOUD_DESC: 'Hosted for you. Always online, no setup required.',
+  HOSTING_REMOTE_TITLE: 'Existing server',
+  HOSTING_REMOTE_DESC: 'Connect to a server you or someone else is already running.',
+  HOSTING_REMOTE_URL_REQUIRED: 'Please enter a server URL.',
+  HOSTING_CHECKING_SERVER: 'Checking server...',
+  HOSTING_STARTING_LOCAL: 'Starting local server...',
+  HOSTING_PROVISIONING_CLOUD: 'Setting up your cloud server...',
+
+  // Migration — hosting
+  MIGRATION_HOSTING_DESC: 'Your migrated Discord community needs a Harmony server. Choose where to host it.',
+
   // Shared
   OFFLINE_BANNER: 'You are offline',
   RECONNECTING: 'Reconnecting...',
@@ -214,7 +230,6 @@ export const en = {
   MIGRATION_BOT_TOKEN_PLACEHOLDER: 'Paste your bot token here',
   MIGRATION_DISCORD_SERVER_ID: 'Discord server ID',
   MIGRATION_DISCORD_SERVER_ID_PLACEHOLDER: 'Right-click server → Copy Server ID',
-  MIGRATION_SERVER_URL: 'Harmony server URL',
   MIGRATION_FIELDS_REQUIRED: 'Bot token and server ID are required.',
   MIGRATION_START_EXPORT: 'Start export',
   MIGRATION_EXPORTING: 'Exporting your Discord server...',
@@ -228,7 +243,6 @@ export const en = {
   MIGRATION_LINK_DESC:
     'Connect your Discord identity to your Harmony DID through the portal. This creates a verifiable credential proving the link.',
   MIGRATION_LINK_YOUR_DID: 'Your Harmony DID',
-  MIGRATION_PORTAL_URL: 'Portal URL',
   MIGRATION_LINK_DISCORD_BUTTON: 'Link with Discord',
   MIGRATION_SKIP_LINKING: 'Skip for now',
   MIGRATION_COMPLETE_TITLE: 'Migration complete',

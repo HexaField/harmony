@@ -1,12 +1,23 @@
 import { createSignal, Show, For, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
+import { createServerProvider, type HostingMode } from '../server-provider.js'
 
-type MigrationStep = 'intro' | 'bot-setup' | 'bot-running' | 'importing' | 'linking' | 'complete'
+type MigrationStep = 'intro' | 'hosting' | 'bot-setup' | 'bot-running' | 'importing' | 'linking' | 'complete'
+
+const provider = createServerProvider()
+
+const HOSTING_OPTIONS: Record<HostingMode, { icon: string; titleKey: string; descKey: string }> = {
+  local: { icon: '💻', titleKey: 'HOSTING_LOCAL_TITLE', descKey: 'HOSTING_LOCAL_DESC' },
+  cloud: { icon: '☁️', titleKey: 'HOSTING_CLOUD_TITLE', descKey: 'HOSTING_CLOUD_DESC' },
+  remote: { icon: '🔗', titleKey: 'HOSTING_REMOTE_TITLE', descKey: 'HOSTING_REMOTE_DESC' }
+}
 
 export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
   const store = useAppStore()
   const [step, setStep] = createSignal<MigrationStep>('intro')
+  const [hostingMode, setHostingMode] = createSignal<HostingMode | null>(null)
+  const [remoteUrl, setRemoteUrl] = createSignal('')
   const portalUrl = () => import.meta.env.VITE_PORTAL_URL || 'http://localhost:3001'
   const [botToken, setBotToken] = createSignal('')
   const [discordServerId, setDiscordServerId] = createSignal('')
@@ -14,15 +25,23 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
   const [error, setError] = createSignal('')
   const [_exportId, _setExportId] = createSignal('')
 
-  const steps: MigrationStep[] = ['intro', 'bot-setup', 'bot-running', 'importing', 'linking', 'complete']
-  const stepIndex = () => steps.indexOf(step())
+  const availableModes = provider.availableModes()
+
+  const allSteps: MigrationStep[] = ['intro', 'hosting', 'bot-setup', 'bot-running', 'importing', 'linking', 'complete']
+  const stepIndex = () => allSteps.indexOf(step())
+
+  function selectHosting(mode: HostingMode) {
+    setHostingMode(mode)
+    setError('')
+    setStep('bot-setup')
+  }
 
   return (
     <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
       <div class="max-w-lg w-full mx-4 p-8 rounded-2xl bg-[var(--bg-surface)] shadow-2xl max-h-[90vh] overflow-y-auto">
         {/* Progress bar */}
         <div class="flex gap-1 mb-6">
-          <For each={steps.slice(0, -1)}>
+          <For each={allSteps.slice(0, -1)}>
             {(_, i) => (
               <div class={`h-1 flex-1 rounded ${i() <= stepIndex() ? 'bg-[var(--accent)]' : 'bg-[var(--bg-input)]'}`} />
             )}
@@ -53,7 +72,7 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
                 <h3 class="font-semibold mb-1">{t('MIGRATION_OPTION_COMMUNITY')}</h3>
                 <p class="text-sm text-[var(--text-secondary)]">{t('MIGRATION_OPTION_COMMUNITY_DESC')}</p>
                 <button
-                  onClick={() => setStep('bot-setup')}
+                  onClick={() => setStep('hosting')}
                   class="mt-3 py-2 px-4 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-sm font-semibold transition-colors"
                 >
                   {t('MIGRATION_START_COMMUNITY')}
@@ -70,6 +89,58 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
                   {t('MIGRATION_START_LINK')}
                 </button>
               </div>
+            </div>
+          </div>
+        </Show>
+
+        {/* Step: Choose hosting */}
+        <Show when={step() === 'hosting'}>
+          <div class="space-y-4">
+            <h3 class="text-lg font-semibold">{t('HOSTING_CHOOSE')}</h3>
+            <p class="text-sm text-[var(--text-secondary)]">{t('MIGRATION_HOSTING_DESC')}</p>
+
+            <div class="space-y-3">
+              <For each={availableModes}>
+                {(mode) => {
+                  const opt = HOSTING_OPTIONS[mode]
+                  return (
+                    <button
+                      onClick={() => selectHosting(mode)}
+                      class="w-full p-4 rounded-lg bg-[var(--bg-input)] border border-[var(--border)] hover:border-[var(--accent)] text-left transition-colors"
+                    >
+                      <div class="flex items-center gap-3">
+                        <span class="text-2xl">{opt.icon}</span>
+                        <div>
+                          <h3 class="font-semibold">{t(opt.titleKey as any)}</h3>
+                          <p class="text-sm text-[var(--text-secondary)]">{t(opt.descKey as any)}</p>
+                        </div>
+                      </div>
+                    </button>
+                  )
+                }}
+              </For>
+            </div>
+
+            {/* Remote URL input */}
+            <Show when={hostingMode() === 'remote'}>
+              <div>
+                <label class="block text-sm font-medium mb-1">{t('SERVER_URL_LABEL')}</label>
+                <input
+                  value={remoteUrl()}
+                  onInput={(e) => setRemoteUrl(e.currentTarget.value)}
+                  class="w-full p-3 rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm font-mono"
+                  placeholder={t('SERVER_URL_PLACEHOLDER')}
+                />
+              </div>
+            </Show>
+
+            <div class="flex gap-3 mt-4">
+              <button
+                onClick={() => setStep('intro')}
+                class="flex-1 py-3 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)] font-semibold transition-colors"
+              >
+                {t('ONBOARDING_BACK')}
+              </button>
             </div>
           </div>
         </Show>
@@ -120,7 +191,7 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
 
             <div class="flex gap-3 mt-6">
               <button
-                onClick={() => setStep('intro')}
+                onClick={() => setStep('hosting')}
                 class="flex-1 py-3 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)] font-semibold transition-colors"
               >
                 {t('ONBOARDING_BACK')}
@@ -200,7 +271,6 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
                   if (!res.ok) throw new Error(`Portal returned ${res.status}`)
                   const data = await res.json()
                   if (data.redirectUrl) {
-                    // Open OAuth flow in new window
                     window.open(data.redirectUrl, '_blank', 'width=500,height=700')
                   }
                 } catch (err) {

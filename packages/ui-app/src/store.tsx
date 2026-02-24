@@ -226,7 +226,7 @@ export function createAppStore(): AppStore {
           ...members(),
           {
             did: myDid,
-            displayName: displayName() || 'You',
+            displayName: displayName() || did().substring(0, 16),
             roles: ['admin'],
             status: 'online'
           }
@@ -298,7 +298,7 @@ export function createAppStore(): AppStore {
             id: m.id,
             content: m.content.text ?? '',
             authorDid: m.authorDID,
-            authorName: m.authorDID === did() ? displayName() || 'You' : m.authorDID.substring(0, 16),
+            authorName: m.authorDID === did() ? displayName() || did().substring(0, 16) : m.authorDID.substring(0, 16),
             timestamp: m.timestamp,
             reactions: [] as Array<{ emoji: string; count: number; userReacted: boolean }>
           }))
@@ -400,7 +400,7 @@ export function createAppStore(): AppStore {
           ...members(),
           {
             did: myDid,
-            displayName: displayName() || 'You',
+            displayName: displayName() || did().substring(0, 16),
             roles: ['admin'],
             status: 'online'
           }

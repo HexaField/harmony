@@ -401,13 +401,14 @@ describe('Self-Presence', () => {
       const store = createAppStore()
       store.setDid('did:key:z6MkSelf')
 
-      // No displayName set — should use "You"
+      // No displayName set — should fall back to truncated DID
       store.setMembers([])
-      expect(store.displayName() || 'You').toBe('You')
+      const fallback = store.displayName() || store.did().substring(0, 16)
+      expect(fallback).toBe('did:key:z6MkSelf')
 
       // With displayName set
       store.setDisplayName('Alice')
-      expect(store.displayName() || 'You').toBe('Alice')
+      expect(store.displayName()).toBe('Alice')
       dispose()
     })
   })

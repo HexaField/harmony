@@ -78,7 +78,7 @@ export const MessageArea: Component = () => {
           id: msgId,
           content: text,
           authorDid: store.did(),
-          authorName: 'You',
+          authorName: store.displayName() || store.did().substring(0, 16),
           timestamp: new Date().toISOString(),
           reactions: []
         }
@@ -104,7 +104,7 @@ export const MessageArea: Component = () => {
       id: 'msg:' + Date.now().toString(36),
       content: text,
       authorDid: store.did(),
-      authorName: 'You',
+      authorName: store.displayName() || store.did().substring(0, 16),
       timestamp: new Date().toISOString(),
       reactions: []
     }

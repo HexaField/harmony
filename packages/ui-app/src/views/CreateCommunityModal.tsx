@@ -175,7 +175,10 @@ export const CreateCommunityModal: Component = () => {
 
       const memberInfos: MemberData[] = communityState.members.map((m) => ({
         did: m.did,
-        displayName: m.did === store.did() ? store.displayName() || 'You' : (m.displayName ?? m.did.substring(0, 16)),
+        displayName:
+          m.did === store.did()
+            ? store.displayName() || store.did().substring(0, 16)
+            : (m.displayName ?? m.did.substring(0, 16)),
         roles: m.roles,
         status: m.presence.status === 'online' ? ('online' as const) : ('offline' as const)
       }))

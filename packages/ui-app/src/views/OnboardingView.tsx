@@ -395,9 +395,23 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
                   <div class="flex items-center justify-between">
                     <span class="text-sm text-[var(--text-muted)]">{t('SETUP_DISCORD_NOT_LINKED')}</span>
                     <button
-                      onClick={() => {
-                        const portalUrl = (import.meta as any).env?.VITE_PORTAL_URL || ''
-                        if (portalUrl) window.open(`${portalUrl}/api/identity/link`, '_blank')
+                      onClick={async () => {
+                        const portalUrl = (import.meta as any).env?.VITE_PORTAL_URL || 'http://localhost:3000'
+                        const did = store.did()
+                        if (!portalUrl || !did) return
+                        try {
+                          const res = await fetch(`${portalUrl}/api/identity/link`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ provider: 'discord', userDID: did })
+                          })
+                          const data = await res.json()
+                          if (data.redirectUrl) {
+                            window.open(data.redirectUrl, '_blank')
+                          }
+                        } catch {
+                          // OAuth not configured — silently fail
+                        }
                       }}
                       class="py-2 px-4 rounded-lg bg-[#5865F2]/20 hover:bg-[#5865F2]/30 border border-[#5865F2]/30 text-[var(--text-primary)] text-sm font-semibold transition-colors"
                     >
@@ -488,7 +502,7 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
           </div>
 
           <Show when={showMigration()}>
-            <MigrationWizard onClose={() => setShowMigration(false)} />
+            <MigrationWizard initialStep="hosting" onClose={() => setShowMigration(false)} />
           </Show>
 
           <Show when={store.showFriendFinder()}>

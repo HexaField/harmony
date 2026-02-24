@@ -22,9 +22,9 @@ const PHASE_STRINGS: Record<string, string> = {
   encrypting: 'MIGRATION_PHASE_ENCRYPTING'
 }
 
-export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
+export const MigrationWizard: Component<{ onClose: () => void; initialStep?: MigrationStep }> = (props) => {
   const store = useAppStore()
-  const [step, setStep] = createSignal<MigrationStep>('intro')
+  const [step, setStep] = createSignal<MigrationStep>(props.initialStep || 'intro')
   const [hostingMode, setHostingMode] = createSignal<HostingMode | null>(null)
   const [remoteUrl, setRemoteUrl] = createSignal('')
   const portalUrl = () => import.meta.env.VITE_PORTAL_URL || 'http://localhost:3000'

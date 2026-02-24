@@ -4,7 +4,7 @@ export const en = {
   ONBOARDING_WELCOME: 'Welcome to Harmony',
   ONBOARDING_CREATE_IDENTITY: 'Create your identity',
   ONBOARDING_RECOVER_IDENTITY: 'Recover existing identity',
-  ONBOARDING_IMPORT_DISCORD: 'Import from Discord',
+  ONBOARDING_IMPORT_DISCORD: 'Migrate a Community',
   ONBOARDING_MNEMONIC_BACKUP: 'Save your recovery phrase',
   ONBOARDING_MNEMONIC_CONFIRM: 'Confirm your recovery phrase',
   ONBOARDING_LINK_DISCORD: 'Link your Discord account',

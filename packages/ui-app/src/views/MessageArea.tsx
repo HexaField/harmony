@@ -2,10 +2,31 @@ import { For, Show, createSignal, createEffect, on, type Component } from 'solid
 import { useAppStore } from '../store.tsx'
 import { MarkdownRenderer } from '../components/Shared/index.js'
 import { RelativeTime } from '../components/Shared/index.js'
+import { addToast } from '../components/Shared/index.js'
 import { t } from '../i18n/strings.js'
-import type { MessageData } from '../types.js'
+import type { MessageData, AttachmentData } from '../types.js'
 
 const COMMON_EMOJI = ['👍', '❤️', '😂', '🎉', '😮', '😢', '🔥', '👀']
+const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25MB
+const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+export function isImageMimeType(mimeType: string): boolean {
+  return IMAGE_MIME_TYPES.includes(mimeType)
+}
+
+function fileIcon(mimeType: string): string {
+  if (mimeType.startsWith('video/')) return '🎬'
+  if (mimeType.startsWith('audio/')) return '🎵'
+  if (mimeType.includes('pdf')) return '📄'
+  if (mimeType.includes('zip') || mimeType.includes('tar') || mimeType.includes('compress')) return '📦'
+  return '📎'
+}
 
 export const MessageArea: Component = () => {
   const store = useAppStore()
@@ -14,8 +35,15 @@ export const MessageArea: Component = () => {
   const [editContent, setEditContent] = createSignal('')
   const [showEmojiPicker, setShowEmojiPicker] = createSignal<string | null>(null)
   const [confirmDelete, setConfirmDelete] = createSignal<string | null>(null)
+  const [pendingAttachments, setPendingAttachments] = createSignal<AttachmentData[]>([])
+  const [uploading, setUploading] = createSignal(false)
+  const [uploadProgress, setUploadProgress] = createSignal('')
+  const [dragging, setDragging] = createSignal(false)
+  const [lightboxSrc, setLightboxSrc] = createSignal<string | null>(null)
   let messagesEndRef: HTMLDivElement | undefined
   let typingTimeout: ReturnType<typeof setTimeout> | undefined
+  let fileInputRef: HTMLInputElement | undefined
+  let dragCounter = 0
 
   const activeChannel = () => store.channels().find((c) => c.id === store.activeChannelId())
 
@@ -48,9 +76,118 @@ export const MessageArea: Component = () => {
     )
   )
 
+  async function handleFiles(files: FileList | File[]) {
+    const client = store.client()
+    const communityId = store.activeCommunityId()
+    const channelId = store.activeChannelId()
+
+    for (const file of Array.from(files)) {
+      if (file.size > MAX_FILE_SIZE) {
+        addToast({
+          message: t('FILE_UPLOAD_TOO_LARGE', { maxSize: formatFileSize(MAX_FILE_SIZE) }),
+          type: 'error'
+        })
+        continue
+      }
+
+      setUploading(true)
+      setUploadProgress(t('FILE_UPLOAD_UPLOADING', { filename: file.name }))
+
+      try {
+        const arrayBuffer = await file.arrayBuffer()
+        const data = new Uint8Array(arrayBuffer)
+
+        if (client?.isConnected() && communityId && channelId) {
+          const ref = await client.uploadFile(communityId, channelId, {
+            data,
+            filename: file.name,
+            contentType: file.type || 'application/octet-stream',
+            size: file.size
+          })
+          const attachment: AttachmentData = {
+            id: ref.id,
+            filename: ref.filename,
+            url: ref.url,
+            mimeType: ref.contentType,
+            size: ref.originalSize
+          }
+          setPendingAttachments((prev) => [...prev, attachment])
+        } else {
+          // Offline/local: create a local blob URL
+          const blob = new Blob([data], { type: file.type })
+          const url = URL.createObjectURL(blob)
+          const attachment: AttachmentData = {
+            id: 'local:' + Date.now().toString(36),
+            filename: file.name,
+            url,
+            mimeType: file.type || 'application/octet-stream',
+            size: file.size
+          }
+          setPendingAttachments((prev) => [...prev, attachment])
+        }
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+        addToast({
+          message: t('FILE_UPLOAD_FAILED', { error: errorMsg }),
+          type: 'error'
+        })
+      }
+    }
+
+    setUploading(false)
+    setUploadProgress('')
+  }
+
+  function removePendingAttachment(id: string) {
+    setPendingAttachments((prev) => prev.filter((a) => a.id !== id))
+  }
+
+  function handleDragEnter(e: DragEvent) {
+    e.preventDefault()
+    dragCounter++
+    if (e.dataTransfer?.types.includes('Files')) {
+      setDragging(true)
+    }
+  }
+
+  function handleDragLeave(e: DragEvent) {
+    e.preventDefault()
+    dragCounter--
+    if (dragCounter <= 0) {
+      dragCounter = 0
+      setDragging(false)
+    }
+  }
+
+  function handleDrop(e: DragEvent) {
+    e.preventDefault()
+    dragCounter = 0
+    setDragging(false)
+    if (e.dataTransfer?.files.length) {
+      handleFiles(e.dataTransfer.files)
+    }
+  }
+
+  function handlePaste(e: ClipboardEvent) {
+    const items = e.clipboardData?.items
+    if (!items) return
+    const files: File[] = []
+    for (const item of Array.from(items)) {
+      if (item.kind === 'file') {
+        const file = item.getAsFile()
+        if (file) files.push(file)
+      }
+    }
+    if (files.length > 0) {
+      e.preventDefault()
+      handleFiles(files)
+    }
+  }
+
   async function sendMessage() {
     const text = inputContent().trim()
-    if (!text) return
+    const attachments = pendingAttachments()
+    if (!text && attachments.length === 0) return
     const client = store.client()
     const communityId = store.activeCommunityId()
     const channelId = store.activeChannelId()
@@ -63,22 +200,24 @@ export const MessageArea: Component = () => {
           authorDid: store.did(),
           authorName: store.displayName() || store.did().substring(0, 16),
           timestamp: new Date().toISOString(),
-          reactions: []
+          reactions: [],
+          attachments: attachments.length > 0 ? attachments : undefined
         }
         store.addMessage(msg)
         store.addChannelMessage(channelId, msg)
         setInputContent('')
+        setPendingAttachments([])
         requestAnimationFrame(() => messagesEndRef?.scrollIntoView({ behavior: 'smooth' }))
       } catch (err) {
         console.error('Failed to send message:', err)
-        addLocalMessage(text)
+        addLocalMessage(text, attachments)
       }
     } else {
-      addLocalMessage(text)
+      addLocalMessage(text, attachments)
     }
   }
 
-  function addLocalMessage(text: string) {
+  function addLocalMessage(text: string, attachments?: AttachmentData[]) {
     const channelId = store.activeChannelId()
     const msg: MessageData = {
       id: 'msg:' + Date.now().toString(36),
@@ -86,11 +225,13 @@ export const MessageArea: Component = () => {
       authorDid: store.did(),
       authorName: store.displayName() || store.did().substring(0, 16),
       timestamp: new Date().toISOString(),
-      reactions: []
+      reactions: [],
+      attachments: attachments && attachments.length > 0 ? attachments : undefined
     }
     store.addMessage(msg)
     if (channelId) store.addChannelMessage(channelId, msg)
     setInputContent('')
+    setPendingAttachments([])
     requestAnimationFrame(() => messagesEndRef?.scrollIntoView({ behavior: 'smooth' }))
   }
 
@@ -183,7 +324,29 @@ export const MessageArea: Component = () => {
   const isOwnMessage = (msg: MessageData) => msg.authorDid === store.did()
 
   return (
-    <div class="flex flex-col flex-1 min-h-0">
+    <div
+      class="flex flex-col flex-1 min-h-0 relative"
+      onDragEnter={handleDragEnter}
+      onDragOver={(e) => e.preventDefault()}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Drag overlay */}
+      <Show when={dragging()}>
+        <div class="absolute inset-0 z-50 bg-[var(--accent)]/10 border-2 border-dashed border-[var(--accent)] rounded-lg flex items-center justify-center pointer-events-none">
+          <div class="text-lg font-semibold text-[var(--accent)]">{t('FILE_UPLOAD_DROP_ZONE')}</div>
+        </div>
+      </Show>
+
+      {/* Lightbox */}
+      <Show when={lightboxSrc()}>
+        <div
+          class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center cursor-pointer"
+          onClick={() => setLightboxSrc(null)}
+        >
+          <img src={lightboxSrc()!} class="max-w-[90vw] max-h-[90vh] object-contain rounded-lg" alt="" />
+        </div>
+      </Show>
       {/* Messages */}
       <div class="flex-1 overflow-y-auto px-4 py-2">
         <Show when={loadingHistory()}>
@@ -327,6 +490,47 @@ export const MessageArea: Component = () => {
                       </For>
                     </div>
                   </Show>
+
+                  {/* Attachments */}
+                  <Show when={msg.attachments && msg.attachments.length > 0}>
+                    <div class="flex flex-col gap-2 mt-2">
+                      <For each={msg.attachments}>
+                        {(attachment) => (
+                          <Show
+                            when={isImageMimeType(attachment.mimeType)}
+                            fallback={
+                              <a
+                                href={attachment.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                download={attachment.filename}
+                                class="flex items-center gap-2 px-3 py-2 bg-[var(--bg-input)] rounded-lg border border-[var(--border)] hover:border-[var(--accent)] transition-colors max-w-xs"
+                              >
+                                <span class="text-lg shrink-0">{fileIcon(attachment.mimeType)}</span>
+                                <div class="min-w-0 flex-1">
+                                  <div class="text-sm text-[var(--accent)] truncate">{attachment.filename}</div>
+                                  <div class="text-xs text-[var(--text-muted)]">{formatFileSize(attachment.size)}</div>
+                                </div>
+                              </a>
+                            }
+                          >
+                            <div class="max-w-sm">
+                              <img
+                                src={attachment.url}
+                                alt={attachment.filename}
+                                class="rounded-lg max-h-80 object-contain cursor-pointer hover:opacity-90 transition-opacity"
+                                onClick={() => setLightboxSrc(attachment.url)}
+                                loading="lazy"
+                              />
+                              <div class="text-xs text-[var(--text-muted)] mt-0.5">
+                                {attachment.filename} — {formatFileSize(attachment.size)}
+                              </div>
+                            </div>
+                          </Show>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
                 </div>
 
                 {/* Hover actions */}
@@ -420,8 +624,63 @@ export const MessageArea: Component = () => {
 
       {/* Message input */}
       <div class="px-4 pb-6 pt-2 shrink-0">
+        {/* Upload progress */}
+        <Show when={uploading()}>
+          <div class="flex items-center gap-2 px-3 py-2 mb-2 bg-[var(--bg-input)] rounded-lg text-sm text-[var(--text-muted)]">
+            <div class="w-4 h-4 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
+            <span>{uploadProgress() || t('FILE_UPLOAD_PROCESSING')}</span>
+          </div>
+        </Show>
+
+        {/* Pending attachments */}
+        <Show when={pendingAttachments().length > 0}>
+          <div class="flex flex-wrap gap-2 px-3 py-2 mb-2 bg-[var(--bg-input)] rounded-lg border border-[var(--border)]">
+            <For each={pendingAttachments()}>
+              {(attachment) => (
+                <div class="relative group">
+                  <Show
+                    when={isImageMimeType(attachment.mimeType)}
+                    fallback={
+                      <div class="flex items-center gap-1 px-2 py-1 bg-[var(--bg-surface)] rounded text-xs">
+                        <span>{fileIcon(attachment.mimeType)}</span>
+                        <span class="text-[var(--text-primary)] max-w-[120px] truncate">{attachment.filename}</span>
+                        <span class="text-[var(--text-muted)]">{formatFileSize(attachment.size)}</span>
+                      </div>
+                    }
+                  >
+                    <img src={attachment.url} alt={attachment.filename} class="w-16 h-16 object-cover rounded" />
+                  </Show>
+                  <button
+                    onClick={() => removePendingAttachment(attachment.id)}
+                    class="absolute -top-1 -right-1 w-4 h-4 bg-[var(--error)] text-white rounded-full text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+            </For>
+            <div class="text-[10px] text-[var(--text-muted)] self-end">{t('FILE_UPLOAD_SIZE_LIMIT')}</div>
+          </div>
+        </Show>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          class="hidden"
+          onChange={(e) => {
+            if (e.currentTarget.files?.length) {
+              handleFiles(e.currentTarget.files)
+              e.currentTarget.value = ''
+            }
+          }}
+        />
         <div class="flex items-end bg-[var(--bg-input)] rounded-lg border border-[var(--border)] focus-within:border-[var(--accent)] transition-colors">
-          <button class="p-3 text-[var(--text-muted)] hover:text-[var(--text-primary)] shrink-0" title="Attach file">
+          <button
+            class="p-3 text-[var(--text-muted)] hover:text-[var(--text-primary)] shrink-0"
+            title={t('FILE_UPLOAD_BUTTON')}
+            onClick={() => fileInputRef?.click()}
+          >
             📎
           </button>
           <textarea
@@ -431,6 +690,7 @@ export const MessageArea: Component = () => {
               handleInputForTyping()
             }}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             rows={1}
             class="flex-1 py-3 bg-transparent text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none resize-none text-sm"
             placeholder={t('MESSAGE_PLACEHOLDER', { channel: activeChannel()?.name ?? 'channel' })}
@@ -438,7 +698,7 @@ export const MessageArea: Component = () => {
           />
           <button
             onClick={sendMessage}
-            disabled={!inputContent().trim()}
+            disabled={!inputContent().trim() && pendingAttachments().length === 0}
             class="p-3 text-[var(--accent)] hover:text-[var(--accent-hover)] disabled:text-[var(--text-muted)] disabled:cursor-default shrink-0 transition-colors"
           >
             ▶

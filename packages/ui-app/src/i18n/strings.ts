@@ -234,6 +234,16 @@ export const en = {
   // Search
   SEARCH_RESULTS_COUNT: '{count} results found',
 
+  // File upload
+  FILE_UPLOAD_BUTTON: 'Attach file',
+  FILE_UPLOAD_DROP_ZONE: 'Drop files here to upload',
+  FILE_UPLOAD_SIZE_LIMIT: '25MB max file size',
+  FILE_UPLOAD_TOO_LARGE: 'File is too large. Maximum size is {maxSize}.',
+  FILE_UPLOAD_FAILED: 'Failed to upload file: {error}',
+  FILE_UPLOAD_UPLOADING: 'Uploading {filename}...',
+  FILE_UPLOAD_PROCESSING: 'Processing...',
+  FILE_DOWNLOAD: 'Download',
+
   // Bots
   BOT_STORE: 'Bot store',
   BOT_SETTINGS: 'Bot settings',

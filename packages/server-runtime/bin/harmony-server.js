@@ -49,7 +49,10 @@ if (existsSync(configPath)) {
   const envHost = process.env.HARMONY_HOST || '0.0.0.0'
   config = {
     server: { host: envHost, port: envPort },
-    storage: { database: './harmony.db', media: './media' },
+    storage: {
+      database: process.env.HARMONY_DB_PATH || './harmony.db',
+      media: process.env.HARMONY_MEDIA_PATH || './media'
+    },
     identity: {},
     federation: { enabled: false },
     relay: { enabled: false },

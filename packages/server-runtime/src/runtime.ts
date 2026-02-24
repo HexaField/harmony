@@ -185,6 +185,9 @@ export class ServerRuntime {
         return
       }
 
+      // Add CORS headers to all responses
+      res.setHeader('Access-Control-Allow-Origin', '*')
+
       if (req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ status: t('HEALTH_OK'), uptime: this.getUptime() }))

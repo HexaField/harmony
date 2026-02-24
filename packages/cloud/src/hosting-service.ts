@@ -183,16 +183,22 @@ export class HostingService {
     const instanceDataDir = resolve(this._dataDir, id)
     mkdirSync(instanceDataDir, { recursive: true })
 
+    // Resolve tsx from the monorepo root so fork() finds it regardless of cwd
+    const monorepoRoot = resolve(this._serverRuntimePath, '..', '..', '..', '..')
+    const tsxPath = resolve(monorepoRoot, 'node_modules', 'tsx', 'dist', 'esm', 'index.mjs')
+
     let child: ChildProcess
     try {
       child = fork(this._serverRuntimePath, [], {
-        execArgv: ['--import', 'tsx'],
+        execArgv: ['--import', tsxPath],
         env: {
           ...process.env,
           HARMONY_PORT: String(port),
-          HARMONY_HOST: '0.0.0.0'
+          HARMONY_HOST: '0.0.0.0',
+          HARMONY_DB_PATH: resolve(instanceDataDir, 'harmony.db'),
+          HARMONY_MEDIA_PATH: resolve(instanceDataDir, 'media')
         },
-        cwd: instanceDataDir,
+        cwd: monorepoRoot,
         stdio: 'pipe'
       })
     } catch {

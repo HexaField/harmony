@@ -78,10 +78,7 @@ export const CreateCommunityModal: Component = () => {
 
     const client = store.client()!
 
-    // Add server (no-op if already known)
-    store.addServer(url)
-
-    // If not yet connected, connect explicitly
+    // If not yet connected, connect with VP auth
     if (!client.isConnectedTo(url)) {
       setStatus(t('SERVER_AUTH_CREATING_VP'))
       const vp = await createAuthVP(identity.did, keyPair)

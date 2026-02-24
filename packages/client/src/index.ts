@@ -1,4 +1,5 @@
 import type { KeyPair, CryptoProvider } from '@harmony/crypto'
+import { createCryptoProvider } from '@harmony/crypto'
 import type { Identity } from '@harmony/identity'
 import type {
   ProtocolMessage,
@@ -12,7 +13,8 @@ import type {
 } from '@harmony/protocol'
 import { serialise, deserialise } from '@harmony/protocol'
 import { CRDTLog, clockTick, clockMerge } from '@harmony/crdt'
-import type { VCService, VerifiablePresentation, VerifiableCredential } from '@harmony/vc'
+import type { VCService as VCServiceType, VerifiablePresentation, VerifiableCredential } from '@harmony/vc'
+import { VCService } from '@harmony/vc'
 import type { ZCAPService, Capability } from '@harmony/zcap'
 import type { MLSGroup, MLSProvider, DMChannel, DMProvider } from '@harmony/e2ee'
 import type { VoiceClient, VoiceConnection } from '@harmony/voice'
@@ -221,7 +223,7 @@ export class HarmonyClient {
   private pushService: PushNotificationService | null = null
 
   constructor(options?: {
-    vcService?: VCService
+    vcService?: VCServiceType
     zcapService?: ZCAPService
     mlsProvider?: MLSProvider
     dmProvider?: DMProvider
@@ -252,7 +254,7 @@ export class HarmonyClient {
   // ── Static factory with persistence ──
 
   static async create(options: {
-    vcService?: VCService
+    vcService?: VCServiceType
     zcapService?: ZCAPService
     mlsProvider?: MLSProvider
     dmProvider?: DMProvider
@@ -311,6 +313,28 @@ export class HarmonyClient {
     this._clock = { counter: 0, authorDID: this._did }
     this._vp = params.vp ?? null
 
+    // Auto-create VP if not provided but we have identity + keyPair
+    if (!this._vp && this._did && this._keyPair) {
+      try {
+        const crypto = createCryptoProvider()
+        const vcSvc = new VCService(crypto)
+        const vc = await vcSvc.issue({
+          issuerDID: this._did,
+          issuerKeyPair: this._keyPair,
+          subjectDID: this._did,
+          type: 'IdentityAssertion',
+          claims: { type: 'IdentityAssertion' }
+        })
+        this._vp = await vcSvc.present({
+          holderDID: this._did,
+          holderKeyPair: this._keyPair,
+          credentials: [vc]
+        })
+      } catch {
+        // VP creation failed — will connect without auth
+      }
+    }
+
     // Ensure server entry exists in map
     if (!this._servers.has(params.serverUrl)) {
       this._servers.set(params.serverUrl, {
@@ -327,13 +351,16 @@ export class HarmonyClient {
     return new Promise<void>((resolve, reject) => {
       const ws = this._wsFactory
         ? this._wsFactory(params.serverUrl)
-        : (() => {
-            throw new Error('WebSocket factory required')
-          })()
+        : typeof globalThis.WebSocket !== 'undefined'
+          ? (new globalThis.WebSocket(params.serverUrl) as unknown as WSLike)
+          : (() => {
+              throw new Error('WebSocket factory required — no native WebSocket available')
+            })()
 
       sc.ws = ws
 
       ws.onopen = () => {
+        console.log('[HarmonyClient] WS onopen, has VP:', !!this._vp)
         // Send auth
         if (this._vp) {
           const authMsg: ProtocolMessage = {

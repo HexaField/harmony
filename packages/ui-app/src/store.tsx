@@ -348,6 +348,15 @@ export function createAppStore(): AppStore {
     setupClientListeners(client)
     updateConnectionStateFromClient(client)
     refreshServers()
+
+    // If already connected and we have an active channel, sync immediately
+    const communityId = activeCommunityId()
+    const channelId = activeChannelId()
+    if (client.isConnected() && communityId && channelId) {
+      client.syncChannel(communityId, channelId).catch(() => {
+        /* ignore */
+      })
+    }
   }
 
   function addServer(url: string) {

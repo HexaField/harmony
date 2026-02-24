@@ -69,6 +69,8 @@ describe('@harmony/protocol', () => {
       expect(SERVER_TO_CLIENT_TYPES).toContain('error')
       expect(SERVER_TO_CLIENT_TYPES).toContain('sync.response')
       expect(SERVER_TO_CLIENT_TYPES).toContain('presence.changed')
+      expect(SERVER_TO_CLIENT_TYPES).toContain('community.member.reconciled')
+      expect(SERVER_TO_CLIENT_TYPES).toContain('community.auto-joined')
     })
 
     it('MUST define all federation message types', () => {

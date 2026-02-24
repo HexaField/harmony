@@ -454,3 +454,181 @@ describe('@harmony/portal Edge Cases', () => {
     expect(r1.state).not.toBe(r2.state)
   })
 })
+
+describe('@harmony/portal Friends & Discord Profile', () => {
+  describe('storeFriendsList / discoverFriends', () => {
+    it('POST /api/friends/store stores friend IDs for a DID', async () => {
+      const portal = new PortalService(crypto)
+      await portal.initialize()
+      portal.storeFriendsList('did:key:zAlice', ['d1', 'd2', 'd3'])
+      const stored = portal.getStoredFriendIds('did:key:zAlice')
+      expect(stored).toEqual(['d1', 'd2', 'd3'])
+    })
+
+    it('GET /api/friends/:did returns stored friends (via discoverFriends)', async () => {
+      const portal = new PortalService(crypto)
+      await portal.initialize()
+      portal.storeFriendsList('did:key:zBob', ['d10', 'd20'])
+      // No friends linked, so discover returns empty
+      const friends = await portal.discoverFriends('did:key:zBob')
+      expect(friends).toEqual([])
+    })
+
+    it('POST /api/friends/discover cross-references stored friend IDs with linked accounts', async () => {
+      const portal = new PortalService(crypto)
+      await portal.initialize()
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+
+      // Link a Discord account
+      await portal.completeOAuthLink({
+        provider: 'discord',
+        code: 'c',
+        state: 's',
+        userDID: doc.id,
+        userKeyPair: kp,
+        providerUserId: 'friendDiscord1',
+        providerUsername: 'FriendUser'
+      })
+
+      // Another user stores their friend list including the linked discord ID
+      const kp2 = await crypto.generateSigningKeyPair()
+      const doc2 = await didProvider.create(kp2)
+      portal.storeFriendsList(doc2.id, ['friendDiscord1', 'unknownDiscord2'])
+
+      const friends = await portal.discoverFriends(doc2.id)
+      expect(friends.length).toBe(1)
+      expect(friends[0].discordId).toBe('friendDiscord1')
+      expect(friends[0].did).toBe(doc.id)
+      expect(friends[0].username).toBe('FriendUser')
+    })
+
+    it('discover returns empty when no friends have linked', async () => {
+      const portal = new PortalService(crypto)
+      await portal.initialize()
+      portal.storeFriendsList('did:key:zLonely', ['nobody1', 'nobody2'])
+      const friends = await portal.discoverFriends('did:key:zLonely')
+      expect(friends).toEqual([])
+    })
+
+    it('discover returns matches when friends have linked', async () => {
+      const portal = new PortalService(crypto)
+      await portal.initialize()
+
+      // Link two Discord accounts
+      const kp1 = await crypto.generateSigningKeyPair()
+      const doc1 = await didProvider.create(kp1)
+      await portal.completeOAuthLink({
+        provider: 'discord',
+        code: 'c',
+        state: 's',
+        userDID: doc1.id,
+        userKeyPair: kp1,
+        providerUserId: 'dA',
+        providerUsername: 'UserA'
+      })
+      const kp2 = await crypto.generateSigningKeyPair()
+      const doc2 = await didProvider.create(kp2)
+      await portal.completeOAuthLink({
+        provider: 'discord',
+        code: 'c',
+        state: 's',
+        userDID: doc2.id,
+        userKeyPair: kp2,
+        providerUserId: 'dB',
+        providerUsername: 'UserB'
+      })
+
+      // Store friends list with both linked IDs
+      portal.storeFriendsList('did:key:zQuerier', ['dA', 'dB', 'dC'])
+      const friends = await portal.discoverFriends('did:key:zQuerier')
+      expect(friends.length).toBe(2)
+      const ids = friends.map((f) => f.discordId).sort()
+      expect(ids).toEqual(['dA', 'dB'])
+    })
+  })
+
+  describe('Discord profile endpoint', () => {
+    it('getDiscordProfile returns linked Discord info', async () => {
+      const portal = new PortalService(crypto)
+      await portal.initialize()
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      await portal.completeOAuthLink({
+        provider: 'discord',
+        code: 'c',
+        state: 's',
+        userDID: doc.id,
+        userKeyPair: kp,
+        providerUserId: 'dp123',
+        providerUsername: 'ProfileUser'
+      })
+      const profile = portal.getDiscordProfile(doc.id)
+      expect(profile).not.toBeNull()
+      expect(profile!.discordId).toBe('dp123')
+      expect(profile!.username).toBe('ProfileUser')
+    })
+
+    it('getDiscordProfile returns null when no Discord link exists', async () => {
+      const portal = new PortalService(crypto)
+      await portal.initialize()
+      const profile = portal.getDiscordProfile('did:key:zNoLink')
+      expect(profile).toBeNull()
+    })
+  })
+})
+
+describe('@harmony/portal HTTP Friends & Discord Profile', () => {
+  let httpServer: Server
+  let baseUrl: string
+
+  beforeAll(async () => {
+    const app = await createApp()
+    await new Promise<void>((resolve) => {
+      httpServer = app.listen(0, () => {
+        const addr = httpServer.address() as any
+        baseUrl = `http://127.0.0.1:${addr.port}`
+        resolve()
+      })
+    })
+  })
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()))
+  })
+
+  it('POST /api/friends/store stores friend IDs', async () => {
+    const res = await fetch(`${baseUrl}/api/friends/store`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ did: 'did:key:zHTTP1', discordFriendIds: ['f1', 'f2'] })
+    })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.stored).toBe(2)
+  })
+
+  it('GET /api/friends/:did returns friends', async () => {
+    const res = await fetch(`${baseUrl}/api/friends/${encodeURIComponent('did:key:zHTTP1')}`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.friends).toBeDefined()
+    expect(Array.isArray(body.friends)).toBe(true)
+  })
+
+  it('POST /api/friends/discover returns discovered friends', async () => {
+    const res = await fetch(`${baseUrl}/api/friends/discover`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ did: 'did:key:zHTTP1' })
+    })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(Array.isArray(body.friends)).toBe(true)
+  })
+
+  it('GET /api/identity/:did/discord-profile returns 404 when no link exists', async () => {
+    const res = await fetch(`${baseUrl}/api/identity/${encodeURIComponent('did:key:zNoProfile')}/discord-profile`)
+    expect(res.status).toBe(404)
+  })
+})

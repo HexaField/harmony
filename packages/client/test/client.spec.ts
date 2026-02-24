@@ -1348,4 +1348,62 @@ describe('@harmony/client', () => {
       await client.disconnect()
     })
   })
+
+  describe('community.auto-joined handling', () => {
+    it('MUST emit community.auto-joined event with community info', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      // Create a community via the server
+      const community = await client.createCommunity({ name: 'Auto Join Client Test' })
+
+      // Create second client
+      const { identity: identity2, keyPair: keyPair2, vp: vp2 } = await createTestIdentity()
+      const client2 = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client2.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity: identity2, keyPair: keyPair2, vp: vp2 })
+
+      const eventPromise = new Promise<any>((resolve) => {
+        client2.on('community.auto-joined', (...args: unknown[]) => resolve(args[0]))
+      })
+
+      // Server auto-joins client2
+      await server.autoJoinCommunity(identity2.did, community.id)
+
+      const event = await eventPromise
+      expect(event.communityId).toBe(community.id)
+      expect(event.communityName).toBe('Auto Join Client Test')
+
+      await client.disconnect()
+      await client2.disconnect()
+    })
+
+    it('MUST add community to internal state on auto-join', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      const community = await client.createCommunity({ name: 'State Test' })
+
+      const { identity: identity2, keyPair: keyPair2, vp: vp2 } = await createTestIdentity()
+      const client2 = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client2.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity: identity2, keyPair: keyPair2, vp: vp2 })
+
+      expect(client2.communities().length).toBe(0)
+
+      const eventPromise = new Promise<void>((resolve) => {
+        client2.on('community.auto-joined', () => resolve())
+      })
+
+      await server.autoJoinCommunity(identity2.did, community.id)
+      await eventPromise
+
+      expect(client2.communities().length).toBe(1)
+      expect(client2.community(community.id)).not.toBeNull()
+      expect(client2.community(community.id)!.info.name).toBe('State Test')
+
+      await client.disconnect()
+      await client2.disconnect()
+    })
+  })
 })

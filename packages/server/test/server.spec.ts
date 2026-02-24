@@ -11,6 +11,7 @@ import { ZCAPService } from '@harmony/zcap'
 import type { ProtocolMessage, LamportClock } from '@harmony/protocol'
 import { serialise, deserialise } from '@harmony/protocol'
 import { HarmonyServer, CommunityManager, MessageStore } from '../src/index.js'
+import { HarmonyPredicate, RDFPredicate, HarmonyType } from '@harmony/vocab'
 
 const crypto = createCryptoProvider()
 const didProvider = new DIDKeyProvider(crypto)
@@ -653,7 +654,7 @@ describe('@harmony/server', () => {
 
       const quads = await store.match({ subject: result.communityId })
       expect(quads.length).toBeGreaterThan(0)
-      const typeQuad = quads.find((q) => q.predicate === 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type')
+      const typeQuad = quads.find((q) => q.predicate === RDFPredicate.type)
       expect(typeQuad).toBeDefined()
     })
   })
@@ -705,7 +706,7 @@ describe('@harmony/server', () => {
       const community = await cm.create({ name: 'Test', creatorDID: doc.id, creatorKeyPair: kp })
 
       const channelQuads = await store.match({
-        predicate: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+        predicate: RDFPredicate.type,
         object: 'https://harmony.example/vocab#Channel'
       })
       expect(channelQuads.length).toBeGreaterThan(0)
@@ -1863,6 +1864,249 @@ describe('@harmony/server', () => {
       const msg2 = await server.messageStoreInstance.getMessage('multi-c2')
       expect(msg1).not.toBeNull()
       expect(msg2).not.toBeNull()
+
+      ws.close()
+    })
+  })
+
+  describe('reconcileMember()', () => {
+    it('MUST update store quads and broadcast community.member.reconciled', async () => {
+      const { did, vp } = await createIdentity()
+      const ws = await connectAndAuth(vp)
+
+      // Create community so we have subscriptions
+      const createMsg: ProtocolMessage = {
+        id: 'rc-create',
+        type: 'community.create',
+        timestamp: new Date().toISOString(),
+        sender: did,
+        payload: { name: 'Reconcile Test', defaultChannels: ['general'] }
+      }
+      const createResp = await sendAndWait(ws, createMsg)
+      const communityId = (createResp.payload as any).communityId
+
+      // Add a ghost member to the store
+      const ghostSubject = `harmony:member:discord123`
+      await store.addAll([
+        { subject: ghostSubject, predicate: RDFPredicate.type, object: HarmonyType.Member, graph: communityId },
+        { subject: ghostSubject, predicate: HarmonyPredicate.name, object: { value: 'GhostUser' }, graph: communityId }
+      ])
+
+      // Listen for broadcast
+      const broadcastPromise = new Promise<ProtocolMessage>((resolve) => {
+        ws.once('message', (data) => resolve(deserialise<ProtocolMessage>(data.toString())))
+      })
+
+      // Reconcile
+      await server.reconcileMember(communityId, 'discord123', 'did:key:zNewDID', 'RealUser')
+
+      const broadcast = await broadcastPromise
+      expect(broadcast.type).toBe('community.member.reconciled')
+      expect((broadcast.payload as any).discordUserId).toBe('discord123')
+      expect((broadcast.payload as any).newDID).toBe('did:key:zNewDID')
+      expect((broadcast.payload as any).displayName).toBe('RealUser')
+
+      // Verify store was updated
+      const authorQuads = await store.match({
+        subject: ghostSubject,
+        predicate: HarmonyPredicate.author,
+        graph: communityId
+      })
+      expect(authorQuads.length).toBe(1)
+      expect(typeof authorQuads[0].object === 'string' ? authorQuads[0].object : authorQuads[0].object.value).toBe(
+        'did:key:zNewDID'
+      )
+
+      ws.close()
+    })
+
+    it('MUST update display name during reconciliation', async () => {
+      const communityId = 'test-community-reconcile'
+      const ghostSubject = `harmony:member:discord456`
+      await store.addAll([
+        { subject: ghostSubject, predicate: HarmonyPredicate.name, object: { value: 'OldName' }, graph: communityId }
+      ])
+
+      // Need to register community so broadcast doesn't fail
+      server.registerCommunity(communityId)
+
+      await server.reconcileMember(communityId, 'discord456', 'did:key:zNew', 'NewDisplayName')
+
+      const nameQuads = await store.match({
+        subject: ghostSubject,
+        predicate: HarmonyPredicate.name,
+        graph: communityId
+      })
+      expect(nameQuads.length).toBe(1)
+      const nameValue = typeof nameQuads[0].object === 'string' ? nameQuads[0].object : nameQuads[0].object.value
+      expect(nameValue).toBe('NewDisplayName')
+    })
+
+    it('MUST handle reconciliation for non-existent member gracefully', async () => {
+      server.registerCommunity('no-such-community')
+      // Should not throw even if the ghost member doesn't exist in the store
+      await expect(
+        server.reconcileMember('no-such-community', 'nonexistent', 'did:key:z1', 'User')
+      ).resolves.toBeUndefined()
+    })
+
+    it('MUST update community subscriptions after auto-join from reconciliation', async () => {
+      const { did, vp } = await createIdentity()
+      const ws = await connectAndAuth(vp)
+
+      // Create community
+      const createMsg: ProtocolMessage = {
+        id: 'rc-sub-create',
+        type: 'community.create',
+        timestamp: new Date().toISOString(),
+        sender: did,
+        payload: { name: 'Sub Update Test', defaultChannels: ['general'] }
+      }
+      const createResp = await sendAndWait(ws, createMsg)
+      const communityId = (createResp.payload as any).communityId
+
+      // Create second identity and connect
+      const { did: did2, vp: vp2 } = await createIdentity()
+      const ws2 = await connectAndAuth(vp2)
+
+      // Auto-join the second user
+      const autoJoinPromise = new Promise<ProtocolMessage>((resolve) => {
+        ws2.once('message', (data) => resolve(deserialise<ProtocolMessage>(data.toString())))
+      })
+
+      await server.autoJoinCommunity(did2, communityId)
+      const autoJoinMsg = await autoJoinPromise
+      expect(autoJoinMsg.type).toBe('community.auto-joined')
+
+      // Verify ws2 now receives broadcasts to this community
+      const broadcastPromise = new Promise<ProtocolMessage>((resolve) => {
+        ws2.once('message', (data) => resolve(deserialise<ProtocolMessage>(data.toString())))
+      })
+
+      // Reconcile a member — should broadcast to ws2 since they're now subscribed
+      server.registerCommunity(communityId)
+      await store.add({
+        subject: 'harmony:member:d999',
+        predicate: HarmonyPredicate.name,
+        object: { value: 'Ghost' },
+        graph: communityId
+      })
+      await server.reconcileMember(communityId, 'd999', 'did:key:zReconciled', 'Reconciled')
+
+      const reconciledMsg = await broadcastPromise
+      expect(reconciledMsg.type).toBe('community.member.reconciled')
+
+      ws.close()
+      ws2.close()
+    })
+  })
+
+  describe('autoJoinCommunity()', () => {
+    it('MUST send community.auto-joined message to connected client', async () => {
+      const { did, vp } = await createIdentity()
+      const ws = await connectAndAuth(vp)
+
+      // Create a community first
+      const createMsg: ProtocolMessage = {
+        id: 'aj-create',
+        type: 'community.create',
+        timestamp: new Date().toISOString(),
+        sender: did,
+        payload: { name: 'Auto Join Test', defaultChannels: ['general'] }
+      }
+      const createResp = await sendAndWait(ws, createMsg)
+      const communityId = (createResp.payload as any).communityId
+
+      // Create second user
+      const { did: did2, vp: vp2 } = await createIdentity()
+      const ws2 = await connectAndAuth(vp2)
+
+      const msgPromise = new Promise<ProtocolMessage>((resolve) => {
+        ws2.once('message', (data) => resolve(deserialise<ProtocolMessage>(data.toString())))
+      })
+
+      await server.autoJoinCommunity(did2, communityId)
+
+      const msg = await msgPromise
+      expect(msg.type).toBe('community.auto-joined')
+      expect((msg.payload as any).communityId).toBe(communityId)
+      expect((msg.payload as any).communityName).toBe('Auto Join Test')
+      expect((msg.payload as any).channels).toBeDefined()
+      expect(Array.isArray((msg.payload as any).channels)).toBe(true)
+
+      ws.close()
+      ws2.close()
+    })
+
+    it('MUST add client to community subscriptions', async () => {
+      const { did, vp } = await createIdentity()
+      const ws = await connectAndAuth(vp)
+
+      const createMsg: ProtocolMessage = {
+        id: 'aj-sub',
+        type: 'community.create',
+        timestamp: new Date().toISOString(),
+        sender: did,
+        payload: { name: 'Sub Test', defaultChannels: ['general'] }
+      }
+      const createResp = await sendAndWait(ws, createMsg)
+      const communityId = (createResp.payload as any).communityId
+
+      const { did: did2, vp: vp2 } = await createIdentity()
+      const ws2 = await connectAndAuth(vp2)
+
+      // Drain auto-joined message
+      const drainPromise = new Promise<void>((resolve) => {
+        ws2.once('message', () => resolve())
+      })
+
+      await server.autoJoinCommunity(did2, communityId)
+      await drainPromise
+
+      // Now send a message to the community — ws2 should receive broadcast
+      const broadcastPromise = new Promise<ProtocolMessage>((resolve) => {
+        ws2.once('message', (data) => resolve(deserialise<ProtocolMessage>(data.toString())))
+      })
+
+      ws.send(
+        serialise({
+          id: 'aj-msg-1',
+          type: 'channel.send',
+          timestamp: new Date().toISOString(),
+          sender: did,
+          payload: {
+            communityId,
+            channelId: 'any-channel',
+            content: { ciphertext: new Uint8Array([1]), epoch: 0, senderIndex: 0 },
+            nonce: 'n1',
+            clock: { counter: 1, authorDID: did }
+          }
+        })
+      )
+
+      const broadcast = await broadcastPromise
+      expect(broadcast.type).toBe('channel.message')
+
+      ws.close()
+      ws2.close()
+    })
+
+    it('MUST handle auto-join for disconnected user gracefully', async () => {
+      const { did, vp } = await createIdentity()
+      const ws = await connectAndAuth(vp)
+
+      const createMsg: ProtocolMessage = {
+        id: 'aj-disc',
+        type: 'community.create',
+        timestamp: new Date().toISOString(),
+        sender: did,
+        payload: { name: 'Disconnected Test', defaultChannels: ['general'] }
+      }
+      const createResp = await sendAndWait(ws, createMsg)
+      const communityId = (createResp.payload as any).communityId
+
+      // Auto-join a DID that has no connected websocket — should not crash
+      await expect(server.autoJoinCommunity('did:key:zNotConnected', communityId)).resolves.toBeUndefined()
 
       ws.close()
     })

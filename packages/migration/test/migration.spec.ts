@@ -430,4 +430,54 @@ describe('@harmony/migration', () => {
       expect((aliceVC!.credentialSubject.roles as string[]).length).toBeGreaterThan(0)
     })
   })
+
+  describe('Discord ID/Username Quads', () => {
+    it('MUST include discordId predicate in exported member quads', async () => {
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const { quads } = migration.transformServerExport(createTestServerExport(), doc.id)
+      const discordIdQuads = quads.filter((q) => q.predicate === HarmonyPredicate.discordId)
+      expect(discordIdQuads.length).toBe(3) // 3 members
+      const user1Quad = discordIdQuads.find((q) => {
+        const val = typeof q.object === 'string' ? q.object : q.object.value
+        return val === 'user1'
+      })
+      expect(user1Quad).toBeDefined()
+    })
+
+    it('MUST include discordUsername predicate in exported member quads', async () => {
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const { quads } = migration.transformServerExport(createTestServerExport(), doc.id)
+      const discordUsernameQuads = quads.filter((q) => q.predicate === HarmonyPredicate.discordUsername)
+      expect(discordUsernameQuads.length).toBe(3) // 3 members
+      const aliceQuad = discordUsernameQuads.find((q) => {
+        const val = typeof q.object === 'string' ? q.object : q.object.value
+        return val === 'Alice'
+      })
+      expect(aliceQuad).toBeDefined()
+    })
+
+    it('MUST preserve Discord IDs after transform round-trip', async () => {
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const { quads } = migration.transformServerExport(createTestServerExport(), doc.id)
+
+      // Verify each member has both discordId and discordUsername
+      const members = createTestServerExport().members
+      for (const member of members) {
+        const memberURI = `harmony:member:${member.userId}`
+        const idQuad = quads.find((q) => q.subject === memberURI && q.predicate === HarmonyPredicate.discordId)
+        const usernameQuad = quads.find(
+          (q) => q.subject === memberURI && q.predicate === HarmonyPredicate.discordUsername
+        )
+        expect(idQuad).toBeDefined()
+        expect(usernameQuad).toBeDefined()
+        const idVal = typeof idQuad!.object === 'string' ? idQuad!.object : idQuad!.object.value
+        const usernameVal = typeof usernameQuad!.object === 'string' ? usernameQuad!.object : usernameQuad!.object.value
+        expect(idVal).toBe(member.userId)
+        expect(usernameVal).toBe(member.username)
+      }
+    })
+  })
 })

@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { createCryptoProvider } from '@harmony/crypto'
+import { createCryptoProvider, type KeyPair } from '@harmony/crypto'
 import { MigrationBot, DiscordRESTAPI } from '@harmony/migration-bot'
 import { MigrationService, type EncryptedExportBundle } from '@harmony/migration'
 import type { ExportProgress } from '@harmony/migration-bot'
@@ -11,6 +11,7 @@ interface ExportJob {
   status: 'running' | 'complete' | 'error'
   progress: ExportProgress | null
   bundle: EncryptedExportBundle | null
+  adminKeyPair: KeyPair | null
   error: string | null
   createdAt: number
 }
@@ -95,6 +96,7 @@ export class MigrationEndpoint {
       status: 'running',
       progress: null,
       bundle: null,
+      adminKeyPair: null,
       error: null,
       createdAt: Date.now()
     }
@@ -123,6 +125,7 @@ export class MigrationEndpoint {
 
       job.status = 'complete'
       job.bundle = bundle
+      job.adminKeyPair = adminKeyPair
       this.logger.info('Migration export complete', { exportId, guildId: body.guildId })
     } catch (err) {
       job.status = 'error'
@@ -150,6 +153,12 @@ export class MigrationEndpoint {
         nonce: Buffer.from(job.bundle.nonce).toString('base64'),
         metadata: job.bundle.metadata
       }
+      if (job.adminKeyPair) {
+        response.adminKeyPair = {
+          publicKey: Buffer.from(job.adminKeyPair.publicKey).toString('base64'),
+          secretKey: Buffer.from(job.adminKeyPair.secretKey).toString('base64')
+        }
+      }
       // Clean up after retrieval
       this.exports.delete(exportId)
     } else if (job.status === 'error') {
@@ -169,6 +178,10 @@ export class MigrationEndpoint {
       }
       adminDID: string
       communityName: string
+      adminKeyPair?: {
+        publicKey: string
+        secretKey: string
+      }
     }
 
     try {
@@ -191,7 +204,13 @@ export class MigrationEndpoint {
     try {
       const cryptoProvider = createCryptoProvider()
       const migration = new MigrationService(cryptoProvider)
-      const adminKeyPair = await cryptoProvider.generateSigningKeyPair()
+      const adminKeyPair: KeyPair = body.adminKeyPair
+        ? {
+            publicKey: new Uint8Array(Buffer.from(body.adminKeyPair.publicKey, 'base64')),
+            secretKey: new Uint8Array(Buffer.from(body.adminKeyPair.secretKey, 'base64')),
+            type: 'Ed25519'
+          }
+        : await cryptoProvider.generateSigningKeyPair()
 
       const encryptedBundle: EncryptedExportBundle = {
         ciphertext: new Uint8Array(Buffer.from(body.bundle.ciphertext, 'base64')),

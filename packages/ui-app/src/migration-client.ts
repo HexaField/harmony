@@ -16,6 +16,7 @@ export interface ExportStatus {
   status: 'running' | 'complete' | 'error'
   progress: ExportProgress
   bundle?: any
+  adminKeyPair?: { publicKey: string; secretKey: string }
   error?: string
 }
 
@@ -79,6 +80,7 @@ export async function importBundle(params: {
   bundle: any
   adminDID: string
   communityName: string
+  adminKeyPair?: { publicKey: string; secretKey: string }
 }): Promise<ImportResult> {
   const base = toApiBase(params.serverUrl)
   const res = await fetch(`${base}/api/migration/import`, {
@@ -87,7 +89,8 @@ export async function importBundle(params: {
     body: JSON.stringify({
       bundle: params.bundle,
       adminDID: params.adminDID,
-      communityName: params.communityName
+      communityName: params.communityName,
+      adminKeyPair: params.adminKeyPair
     })
   })
   if (!res.ok) {

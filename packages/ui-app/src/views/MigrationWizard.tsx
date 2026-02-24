@@ -145,7 +145,7 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
           clearInterval(pollTimer!)
           pollTimer = undefined
           setExportProgress(100)
-          await doImport(url, status.bundle)
+          await doImport(url, status.bundle, status.adminKeyPair)
         } else if (status.status === 'error') {
           clearInterval(pollTimer!)
           pollTimer = undefined
@@ -159,7 +159,7 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
     }, 2000)
   }
 
-  async function doImport(url: string, bundle: any) {
+  async function doImport(url: string, bundle: any, adminKeyPair?: any) {
     setStep('importing')
     setPhaseText(t('MIGRATION_PHASE_IMPORTING'))
     try {
@@ -167,7 +167,8 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
         serverUrl: url,
         bundle,
         adminDID: store.did(),
-        communityName: bundle?.guild?.name || 'Imported Community'
+        communityName: bundle?.metadata?.guild?.name || bundle?.guild?.name || 'Imported Community',
+        adminKeyPair
       })
       // Populate the store with the imported community
       const existing = store.communities()

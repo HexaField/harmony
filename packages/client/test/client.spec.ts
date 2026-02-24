@@ -163,6 +163,32 @@ describe('@harmony/client', () => {
       expect(client.isConnected()).toBe(true)
       await client.disconnect()
     })
+
+    it('MUST attempt reconnect after initial connection failure', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+
+      // Try connecting to a port that doesn't have a server
+      const badPort = PORT + 100
+      try {
+        await client.connect({
+          serverUrl: `ws://127.0.0.1:${badPort}`,
+          identity,
+          keyPair,
+          vp
+        })
+      } catch {
+        // Expected to fail
+      }
+
+      // The client should have scheduled a reconnect attempt
+      const server = client.servers().find((s: any) => s.url === `ws://127.0.0.1:${badPort}`)
+      expect(server).toBeDefined()
+      expect(server!.reconnectTimer).not.toBeNull()
+
+      // Clean up
+      await client.disconnect()
+    })
   })
 
   describe('Community', () => {

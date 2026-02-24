@@ -410,7 +410,11 @@ export class HarmonyClient {
       }
 
       ws.onerror = (err: unknown) => {
-        if (!sc.connected) reject(err instanceof Error ? err : new Error('Connection failed'))
+        if (!sc.connected) {
+          reject(err instanceof Error ? err : new Error('Connection failed'))
+          // Schedule reconnect even on initial failure
+          this.attemptReconnectServer(params.serverUrl)
+        }
       }
     })
   }

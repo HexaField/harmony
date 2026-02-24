@@ -28,6 +28,9 @@ export type ClientEvent =
   | 'mls.welcome'
   | 'mls.commit'
   | 'mls.keypackage.response'
+  | 'voice.joined'
+  | 'voice.left'
+  | 'voice.state'
   | 'error'
 
 export type FederationEvent = 'peer.connected' | 'peer.disconnected' | 'peer.message' | 'peer.sync' | 'peer.error'

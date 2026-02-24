@@ -41,6 +41,9 @@ export const en = {
   VOICE_UNDEAFEN: 'Undeafen',
   VOICE_VIDEO_ON: 'Turn on camera',
   VOICE_VIDEO_OFF: 'Turn off camera',
+  VOICE_CONNECTED: 'Voice Connected',
+  VOICE_DISCONNECT: 'Disconnect',
+  VOICE_CHANNEL_USERS: '{count} connected',
 
   // Members
   MEMBER_ONLINE: 'Online',

@@ -604,6 +604,7 @@ export class HarmonyServer {
   private vcService: VCService
   private communitySubscriptions: Map<string, Set<string>> = new Map() // communityId → connection IDs
   private keyPackages: Map<string, Uint8Array[]> = new Map() // DID → key packages (serialized)
+  private voiceChannelParticipants: Map<string, Set<string>> = new Map() // channelId → Set<connId>
 
   constructor(config: ServerConfig) {
     this.config = config
@@ -738,6 +739,14 @@ export class HarmonyServer {
           for (const communityId of conn.communities) {
             this.communitySubscriptions.get(communityId)?.delete(connId)
           }
+          // Clean up voice channels
+          for (const [channelId, participants] of this.voiceChannelParticipants) {
+            if (participants.has(connId)) {
+              participants.delete(connId)
+              // Broadcast participant left
+              this.broadcastVoiceState(channelId, conn.did, 'voice.participant.left')
+            }
+          }
           this._connections.delete(connId)
         }
       })
@@ -860,6 +869,17 @@ export class HarmonyServer {
         break
       case 'mls.group.setup':
         await this.handleMLSGroupSetup(conn, msg)
+        break
+      case 'voice.join':
+        await this.handleVoiceJoin(conn, msg)
+        break
+      case 'voice.leave':
+        await this.handleVoiceLeave(conn, msg)
+        break
+      case 'voice.offer':
+      case 'voice.answer':
+      case 'voice.ice':
+        await this.handleVoiceSignaling(conn, msg)
         break
       default:
         // Unknown message type — ignore
@@ -1296,6 +1316,91 @@ export class HarmonyServer {
         conn.id
       )
     }
+  }
+
+  // ── Voice Handlers ──
+
+  private async handleVoiceJoin(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { channelId: string }
+    const channelId = payload.channelId
+    if (!this.voiceChannelParticipants.has(channelId)) {
+      this.voiceChannelParticipants.set(channelId, new Set())
+    }
+    this.voiceChannelParticipants.get(channelId)!.add(conn.id)
+
+    // Broadcast to all in channel that this user joined
+    this.broadcastVoiceState(channelId, conn.did, 'voice.participant.joined')
+
+    // Send current voice state to the joining user
+    const participants = this.getVoiceChannelParticipants(channelId)
+    this.sendToConnection(conn, {
+      id: `vs-${Date.now()}`,
+      type: 'voice.state',
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: { channelId, participants }
+    })
+  }
+
+  private async handleVoiceLeave(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { channelId: string }
+    const channelId = payload.channelId
+    const participants = this.voiceChannelParticipants.get(channelId)
+    if (participants) {
+      participants.delete(conn.id)
+      if (participants.size === 0) {
+        this.voiceChannelParticipants.delete(channelId)
+      }
+    }
+    this.broadcastVoiceState(channelId, conn.did, 'voice.participant.left')
+  }
+
+  private async handleVoiceSignaling(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { targetDID: string; channelId: string }
+    // Forward signaling message to the target peer
+    for (const [, otherConn] of this._connections) {
+      if (otherConn.did === payload.targetDID) {
+        this.sendToConnection(otherConn, {
+          id: msg.id,
+          type: msg.type,
+          timestamp: msg.timestamp,
+          sender: conn.did,
+          payload: msg.payload
+        })
+      }
+    }
+  }
+
+  private broadcastVoiceState(
+    channelId: string,
+    did: string,
+    type: 'voice.participant.joined' | 'voice.participant.left'
+  ): void {
+    const participants = this.voiceChannelParticipants.get(channelId)
+    if (!participants) return
+    const participantList = this.getVoiceChannelParticipants(channelId)
+    const msg: ProtocolMessage = {
+      id: `vs-${Date.now()}`,
+      type,
+      timestamp: new Date().toISOString(),
+      sender: did,
+      payload: { channelId, did, participants: participantList }
+    }
+    for (const connId of participants) {
+      const conn = this._connections.get(connId)
+      if (conn) this.sendToConnection(conn, msg)
+    }
+  }
+
+  private getVoiceChannelParticipants(channelId: string): string[] {
+    const connIds = this.voiceChannelParticipants.get(channelId)
+    if (!connIds) return []
+    const dids: string[] = []
+    for (const connId of connIds) {
+      const conn = this._connections.get(connId)
+      if (conn) dids.push(conn.did)
+    }
+    return dids
   }
 
   broadcastToCommunity(communityId: string, msg: ProtocolMessage, excludeConnId?: string): void {

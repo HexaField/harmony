@@ -119,6 +119,16 @@ export interface AppStore {
   removeRole: (id: string) => void
   showRoleManager: () => boolean
   setShowRoleManager: (s: boolean) => void
+
+  // Voice
+  voiceChannelId: () => string | null
+  setVoiceChannelId: (id: string | null) => void
+  voiceUsers: () => string[]
+  setVoiceUsers: (users: string[]) => void
+  isMuted: () => boolean
+  setMuted: (m: boolean) => void
+  isDeafened: () => boolean
+  setDeafened: (d: boolean) => void
 }
 
 // ── localStorage persistence helpers ──────────────────────────────
@@ -318,6 +328,12 @@ export function createAppStore(): AppStore {
   const [displayName, _setDisplayName] = createSignal(savedDisplayName)
   const [editingMessageId, setEditingMessageId] = createSignal<string | null>(null)
   const [showRoleManager, setShowRoleManager] = createSignal(false)
+
+  // Voice state
+  const [voiceChannelId, setVoiceChannelId] = createSignal<string | null>(null)
+  const [voiceUsers, setVoiceUsers] = createSignal<string[]>([])
+  const [isMuted, setMuted] = createSignal(false)
+  const [isDeafened, setDeafened] = createSignal(false)
   const [roles, _setRoles] = createSignal<RoleInfo[]>([])
 
   const setRoles = (r: RoleInfo[]) => _setRoles([...r].sort((a, b) => a.position - b.position))
@@ -717,6 +733,25 @@ export function createAppStore(): AppStore {
         setMembers(members().map((m) => (m.did === event.memberDID ? { ...m, roles: event.roles! } : m)))
       }
     })
+
+    client.on('voice.state', (...args: unknown[]) => {
+      const event = args[0] as { channelId?: string; participants?: string[] }
+      if (event?.channelId && event.channelId === voiceChannelId()) {
+        setVoiceUsers(event.participants ?? [])
+      }
+    })
+
+    client.on('voice.joined', (...args: unknown[]) => {
+      const event = args[0] as { channelId?: string }
+      if (event?.channelId) {
+        setVoiceChannelId(event.channelId)
+      }
+    })
+
+    client.on('voice.left', () => {
+      setVoiceChannelId(null)
+      setVoiceUsers([])
+    })
   }
 
   function updateConnectionStateFromClient(client: HarmonyClient) {
@@ -861,7 +896,15 @@ export function createAppStore(): AppStore {
     updateRole: storeUpdateRole,
     removeRole,
     showRoleManager,
-    setShowRoleManager
+    setShowRoleManager,
+    voiceChannelId,
+    setVoiceChannelId,
+    voiceUsers,
+    setVoiceUsers,
+    isMuted,
+    setMuted,
+    isDeafened,
+    setDeafened
   }
 }
 

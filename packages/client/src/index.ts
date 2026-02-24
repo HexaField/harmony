@@ -1244,6 +1244,16 @@ export class HarmonyClient {
       case 'mls.keypackage.response':
         this.emitter.emit('mls.keypackage.response', msg.payload)
         break
+      case 'voice.participant.joined':
+      case 'voice.participant.left':
+      case 'voice.state':
+        this.emitter.emit('voice.state', msg.payload)
+        break
+      case 'voice.offer':
+      case 'voice.answer':
+      case 'voice.ice':
+        this.emitter.emit(msg.type as string, msg)
+        break
     }
   }
 

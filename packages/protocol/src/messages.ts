@@ -67,6 +67,9 @@ export type MessageType =
   | 'voice.participant.joined'
   | 'voice.participant.left'
   | 'voice.speaking'
+  | 'voice.offer'
+  | 'voice.answer'
+  | 'voice.ice'
   // Files
   | 'media.upload.request'
   | 'media.upload.complete'
@@ -138,6 +141,9 @@ export const CLIENT_TO_SERVER_TYPES: MessageType[] = [
   'voice.join',
   'voice.leave',
   'voice.state',
+  'voice.offer',
+  'voice.answer',
+  'voice.ice',
   'media.upload.request',
   'media.upload.complete',
   'media.delete',
@@ -196,6 +202,10 @@ export const SERVER_TO_CLIENT_TYPES: MessageType[] = [
   'voice.participant.joined',
   'voice.participant.left',
   'voice.speaking',
+  'voice.state',
+  'voice.offer',
+  'voice.answer',
+  'voice.ice',
   'search.metadata.result',
   'bot.event',
   // E2EE / MLS

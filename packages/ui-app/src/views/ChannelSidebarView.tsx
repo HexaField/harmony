@@ -1,6 +1,7 @@
 import { For, Show, createSignal, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
+import { VoiceControlBar } from './VoiceControlBar.tsx'
 
 export const ChannelSidebarView: Component = () => {
   const store = useAppStore()
@@ -100,18 +101,75 @@ export const ChannelSidebarView: Component = () => {
             <h3 class="text-xs font-semibold uppercase text-[var(--text-muted)] tracking-wider mb-1">Voice Channels</h3>
           </div>
           <For each={voiceChannels()}>
-            {(channel) => (
-              <button
-                class="w-full flex items-center px-3 py-1.5 mx-2 rounded text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-input)]/50 transition-colors"
-                style={{ width: 'calc(100% - 16px)' }}
-              >
-                <span class="mr-1.5">🔊</span>
-                <span class="truncate">{channel.name}</span>
-              </button>
-            )}
+            {(channel) => {
+              const isInChannel = () => store.voiceChannelId() === channel.id
+              const handleVoiceClick = async () => {
+                if (isInChannel()) return
+                // Leave current voice channel if in one
+                if (store.voiceChannelId()) {
+                  const client = store.client()
+                  if (client) {
+                    try {
+                      await client.leaveVoice()
+                    } catch {
+                      /* ignore */
+                    }
+                  }
+                }
+                // Join new voice channel
+                const client = store.client()
+                if (client) {
+                  try {
+                    await client.joinVoice(channel.id)
+                  } catch {
+                    /* voice client not configured — update store directly */
+                    store.setVoiceChannelId(channel.id)
+                  }
+                } else {
+                  store.setVoiceChannelId(channel.id)
+                }
+              }
+
+              return (
+                <div>
+                  <button
+                    onClick={handleVoiceClick}
+                    class="w-full flex items-center px-3 py-1.5 mx-2 rounded text-sm transition-colors"
+                    classList={{
+                      'bg-[var(--bg-input)] text-[var(--text-primary)]': isInChannel(),
+                      'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-input)]/50':
+                        !isInChannel()
+                    }}
+                    style={{ width: 'calc(100% - 16px)' }}
+                    title={isInChannel() ? t('VOICE_LEAVE') : t('VOICE_JOIN')}
+                  >
+                    <span class="mr-1.5">{isInChannel() ? '🔊' : '🔈'}</span>
+                    <span class="truncate">{channel.name}</span>
+                  </button>
+                  {/* Show connected users in this voice channel */}
+                  <Show when={isInChannel() && store.voiceUsers().length > 0}>
+                    <div class="ml-8 mr-2 mb-1">
+                      <For each={store.voiceUsers()}>
+                        {(did) => (
+                          <div class="flex items-center gap-1.5 py-0.5 text-xs text-[var(--text-muted)]">
+                            <div class="w-4 h-4 rounded-full bg-[var(--accent)] flex items-center justify-center text-[8px] font-bold text-white">
+                              {did.substring(did.length - 2).toUpperCase()}
+                            </div>
+                            <span class="truncate">{did.substring(0, 16)}</span>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                </div>
+              )
+            }}
           </For>
         </Show>
       </div>
+
+      {/* Voice control bar */}
+      <VoiceControlBar />
 
       {/* User panel */}
       <div class="h-14 flex items-center px-3 bg-[var(--bg-primary)]/50 border-t border-[var(--border)]">

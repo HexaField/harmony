@@ -7,8 +7,7 @@ type MigrationStep = 'intro' | 'bot-setup' | 'bot-running' | 'importing' | 'link
 export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
   const store = useAppStore()
   const [step, setStep] = createSignal<MigrationStep>('intro')
-  const [serverUrl, setServerUrl] = createSignal('ws://localhost:4000')
-  const [portalUrl, setPortalUrl] = createSignal('http://localhost:3001')
+  const portalUrl = () => import.meta.env.VITE_PORTAL_URL || 'http://localhost:3001'
   const [botToken, setBotToken] = createSignal('')
   const [discordServerId, setDiscordServerId] = createSignal('')
   const [exportProgress, _setExportProgress] = createSignal(0)
@@ -80,7 +79,18 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
           <div class="space-y-4">
             <h3 class="text-lg font-semibold">{t('MIGRATION_BOT_SETUP_TITLE')}</h3>
             <div class="space-y-3 text-sm text-[var(--text-secondary)]">
-              <p>{t('MIGRATION_BOT_SETUP_STEP1')}</p>
+              <p>
+                {'1. '}
+                <a
+                  href="https://discord.com/developers/applications"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-[var(--accent)] hover:underline"
+                >
+                  {t('MIGRATION_BOT_SETUP_STEP1_LINK')}
+                </a>
+                {' ' + t('MIGRATION_BOT_SETUP_STEP1_SUFFIX')}
+              </p>
               <p>{t('MIGRATION_BOT_SETUP_STEP2')}</p>
               <p>{t('MIGRATION_BOT_SETUP_STEP3')}</p>
             </div>
@@ -104,16 +114,6 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
                   onInput={(e) => setDiscordServerId(e.currentTarget.value)}
                   class="w-full p-3 rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm font-mono"
                   placeholder={t('MIGRATION_DISCORD_SERVER_ID_PLACEHOLDER')}
-                />
-              </div>
-
-              <div>
-                <label class="block text-sm font-medium mb-1">{t('MIGRATION_SERVER_URL')}</label>
-                <input
-                  value={serverUrl()}
-                  onInput={(e) => setServerUrl(e.currentTarget.value)}
-                  class="w-full p-3 rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm"
-                  placeholder="ws://localhost:4000"
                 />
               </div>
             </div>
@@ -183,16 +183,6 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
             <div class="p-4 rounded-lg bg-[var(--bg-input)] border border-[var(--border)]">
               <p class="text-sm font-medium mb-2">{t('MIGRATION_LINK_YOUR_DID')}</p>
               <p class="font-mono text-xs text-[var(--text-muted)] break-all">{store.did()}</p>
-            </div>
-
-            <div>
-              <label class="block text-sm font-medium mb-1">{t('MIGRATION_PORTAL_URL')}</label>
-              <input
-                value={portalUrl()}
-                onInput={(e) => setPortalUrl(e.currentTarget.value)}
-                class="w-full p-3 rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm"
-                placeholder="http://localhost:3001"
-              />
             </div>
 
             <button

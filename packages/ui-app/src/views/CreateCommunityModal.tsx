@@ -6,7 +6,7 @@ import { HarmonyClient } from '@harmony/client'
 import { createAuthVP } from '../auth.js'
 import type { CommunityInfo, ChannelInfo, MemberData } from '../types.js'
 
-const DEFAULT_SERVER_URL = 'ws://localhost:4000'
+const DEFAULT_SERVER_URL = import.meta.env.VITE_DEFAULT_SERVER_URL || 'ws://localhost:4000'
 
 export const CreateCommunityModal: Component = () => {
   const store = useAppStore()

@@ -205,7 +205,8 @@ export const en = {
     'Connect your Discord identity to your Harmony DID. This lets other communities recognise you when they migrate.',
   MIGRATION_START_LINK: 'Link account',
   MIGRATION_BOT_SETUP_TITLE: 'Set up the migration bot',
-  MIGRATION_BOT_SETUP_STEP1: '1. Go to discord.com/developers/applications and create a new application.',
+  MIGRATION_BOT_SETUP_STEP1_LINK: 'Open the Discord Developer Portal',
+  MIGRATION_BOT_SETUP_STEP1_SUFFIX: 'and create a new application.',
   MIGRATION_BOT_SETUP_STEP2: '2. Under "Bot", click "Add Bot", then copy the bot token.',
   MIGRATION_BOT_SETUP_STEP3:
     '3. Invite the bot to your server with "Read Message History" and "View Channels" permissions.',

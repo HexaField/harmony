@@ -1,0 +1,56 @@
+digraph HarmonyArchitecture {
+  rankdir=TB
+  bgcolor="white"
+  fontname="Helvetica Neue"
+  node [fontname="Helvetica Neue", fontsize=11, style="filled,rounded", shape=box, color="#333333", penwidth=1.5]
+  edge [fontname="Helvetica Neue", fontsize=9, color="#666666"]
+
+  // ── Clients ──
+  browser [label="Browser App\n(ui-app)", fillcolor="#7C3AED", fontcolor="white"]
+  desktop [label="Desktop App\n(Electron/Tauri)", fillcolor="#7C3AED", fontcolor="white"]
+
+  // ── HarmonyClient ──
+  client [label="HarmonyClient\n(@harmony/client)\n\nWebSocket connections\nCRDT sync · E2EE\nAuto-reconnect", fillcolor="#2563EB", fontcolor="white", shape=component, penwidth=2]
+
+  // ── Services ──
+  portal [label="Portal\n\nIdentity creation\nDiscord OAuth linking\nFriend graph", fillcolor="#059669", fontcolor="white"]
+  cloud [label="Harmony Cloud\n\nServer provisioning\nEncrypted backup\nSocial recovery", fillcolor="#D97706", fontcolor="white"]
+
+  // ── Community Servers ──
+  server_self [label="Self-Hosted Server\n(server-runtime)", fillcolor="#DC2626", fontcolor="white"]
+  server_cloud [label="Cloud-Hosted Server\n(provisioned)", fillcolor="#DC2626", fontcolor="white"]
+  server_other [label="Other Org's Server", fillcolor="#DC2626", fontcolor="white"]
+
+  // ── External ──
+  discord [label="Discord\nOAuth2", fillcolor="#5865F2", fontcolor="white", shape=ellipse]
+  embedded [label="Embedded Server\n(desktop localhost)", fillcolor="#991B1B", fontcolor="white", style="filled,rounded,dashed"]
+
+  // ── Apps → Client ──
+  browser -> client [label="  uses", style=bold, color="#7C3AED"]
+  desktop -> client [label="  uses", style=bold, color="#7C3AED"]
+
+  // ── Client → Community Servers (WebSocket, persistent) ──
+  client -> server_self [label="  WebSocket · VP auth\n  messages · sync · presence", color="#DC2626", penwidth=2]
+  client -> server_cloud [label="  WebSocket", color="#DC2626", penwidth=2]
+  client -> server_other [label="  WebSocket", color="#DC2626", penwidth=2]
+  client -> embedded [label="  WebSocket\n  (localhost:4000)", color="#DC2626", style=dashed]
+
+  // ── Apps → Portal (HTTP, stateless) ──
+  browser -> portal [label="  HTTP · create identity\n  link Discord · find friends", color="#059669", style=dashed]
+
+  // ── Apps → Cloud (HTTP, stateless) ──
+  browser -> cloud [label="  HTTP · provision server\n  backup & restore", color="#D97706", style=dashed]
+
+  // ── Portal ↔ Discord ──
+  portal -> discord [label="  OAuth2 code exchange", color="#5865F2", dir=both]
+
+  // ── Cloud provisions servers ──
+  cloud -> server_cloud [label="  provisions\n  & manages", color="#D97706", style=dotted]
+
+  // ── Desktop spawns embedded ──
+  desktop -> embedded [label="  spawns locally", color="#991B1B", style=dotted]
+
+  // ── Federation ──
+  server_self -> server_other [label="  federation\n  (cross-server sync)", color="#374151", style=dashed, dir=both, constraint=false]
+  server_cloud -> server_other [label="  federation", color="#374151", style=dashed, dir=both, constraint=false]
+}

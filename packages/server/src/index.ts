@@ -623,7 +623,6 @@ export class HarmonyServer {
     this.wss = new WebSocketServer({ port: this.config.port, host: this.config.host })
 
     this.wss.on('connection', (ws: WebSocket, _req: IncomingMessage) => {
-      console.log('[WS] New connection established')
       const connId = 'conn:' + Array.from(randomBytes(8), (b) => b.toString(16).padStart(2, '0')).join('')
 
       // Connection must authenticate within timeout
@@ -635,7 +634,6 @@ export class HarmonyServer {
       }, 30000)
 
       ws.on('message', async (data: Buffer) => {
-        console.log('[WS] Message received, length:', data.length, 'type:', typeof data)
         try {
           const msg = deserialise<ProtocolMessage>(data.toString())
 
@@ -770,7 +768,6 @@ export class HarmonyServer {
     try {
       const result = await this.vcService.verifyPresentation(vp, this.config.didResolver)
       if (!result.valid) {
-        console.error('[AUTH] VP verification failed:', JSON.stringify(result))
         return { authenticated: false, error: 'Invalid VP' }
       }
 
@@ -790,8 +787,7 @@ export class HarmonyServer {
       }
 
       return { authenticated: true, did: vp.holder }
-    } catch (err) {
-      console.error('[AUTH] Authentication error:', err)
+    } catch {
       return { authenticated: false, error: 'Authentication error' }
     }
   }

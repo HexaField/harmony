@@ -360,7 +360,6 @@ export class HarmonyClient {
       sc.ws = ws
 
       ws.onopen = () => {
-        console.log('[HarmonyClient] WS onopen, has VP:', !!this._vp)
         // Send auth
         if (this._vp) {
           const authMsg: ProtocolMessage = {

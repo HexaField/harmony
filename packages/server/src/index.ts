@@ -603,6 +603,7 @@ export class HarmonyServer {
   private crypto: CryptoProvider
   private vcService: VCService
   private communitySubscriptions: Map<string, Set<string>> = new Map() // communityId → connection IDs
+  private keyPackages: Map<string, Uint8Array[]> = new Map() // DID → key packages (serialized)
 
   constructor(config: ServerConfig) {
     this.config = config
@@ -844,6 +845,21 @@ export class HarmonyServer {
         break
       case 'community.info':
         await this.handleCommunityInfo(conn, msg)
+        break
+      case 'mls.keypackage.upload':
+        await this.handleMLSKeyPackageUpload(conn, msg)
+        break
+      case 'mls.keypackage.fetch':
+        await this.handleMLSKeyPackageFetch(conn, msg)
+        break
+      case 'mls.welcome':
+        await this.handleMLSWelcome(conn, msg)
+        break
+      case 'mls.commit':
+        await this.handleMLSCommit(conn, msg)
+        break
+      case 'mls.group.setup':
+        await this.handleMLSGroupSetup(conn, msg)
         break
       default:
         // Unknown message type — ignore
@@ -1202,6 +1218,84 @@ export class HarmonyServer {
     // In a full implementation, we'd fetch the capability chain and verify.
     // For this simplified version, we check the proof structure is present.
     return !!(msg.proof.capabilityId && msg.proof.invocation?.proof)
+  }
+
+  // ── MLS / E2EE Handlers ──
+
+  private async handleMLSKeyPackageUpload(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { keyPackage: unknown }
+    const serialized = new TextEncoder().encode(serialise(payload.keyPackage))
+    if (!this.keyPackages.has(conn.did)) {
+      this.keyPackages.set(conn.did, [])
+    }
+    this.keyPackages.get(conn.did)!.push(serialized)
+  }
+
+  private async handleMLSKeyPackageFetch(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { dids: string[] }
+    const result: Record<string, unknown[]> = {}
+    for (const did of payload.dids) {
+      const packages = this.keyPackages.get(did) ?? []
+      result[did] = packages.map((p) => deserialise(new TextDecoder().decode(p)))
+    }
+    this.sendToConnection(conn, {
+      id: `mls-kp-${Date.now()}`,
+      type: 'mls.keypackage.response' as ProtocolMessage['type'],
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: { keyPackages: result }
+    })
+  }
+
+  private async handleMLSWelcome(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { recipientDID: string; communityId?: string }
+    // Forward welcome to the specific recipient
+    for (const [, otherConn] of this._connections) {
+      if (otherConn.did === payload.recipientDID) {
+        this.sendToConnection(otherConn, {
+          id: msg.id,
+          type: 'mls.welcome' as ProtocolMessage['type'],
+          timestamp: msg.timestamp,
+          sender: conn.did,
+          payload: msg.payload
+        })
+      }
+    }
+  }
+
+  private async handleMLSCommit(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { communityId?: string; channelId?: string }
+    if (payload.communityId) {
+      // Broadcast commit to all community members except sender
+      this.broadcastToCommunity(
+        payload.communityId,
+        {
+          id: msg.id,
+          type: 'mls.commit' as ProtocolMessage['type'],
+          timestamp: msg.timestamp,
+          sender: conn.did,
+          payload: msg.payload
+        },
+        conn.id
+      )
+    }
+  }
+
+  private async handleMLSGroupSetup(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { communityId?: string }
+    if (payload.communityId) {
+      this.broadcastToCommunity(
+        payload.communityId,
+        {
+          id: msg.id,
+          type: 'mls.group.setup' as ProtocolMessage['type'],
+          timestamp: msg.timestamp,
+          sender: conn.did,
+          payload: msg.payload
+        },
+        conn.id
+      )
+    }
   }
 
   broadcastToCommunity(communityId: string, msg: ProtocolMessage, excludeConnId?: string): void {

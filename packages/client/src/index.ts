@@ -204,6 +204,9 @@ export class HarmonyClient {
   // Dependencies (injected or created)
   private mlsGroups: Map<string, MLSGroup> = new Map()
   private dmEncChannels: Map<string, DMChannel> = new Map()
+  private mlsProvider: MLSProvider | null = null
+  private _dmProvider: DMProvider | null = null
+  private _encryptionKeyPair: KeyPair | null = null
 
   // VP for auth
   private _vp: VerifiablePresentation | null = null
@@ -241,6 +244,8 @@ export class HarmonyClient {
   }) {
     if (options) {
       this._wsFactory = options.wsFactory ?? null
+      this.mlsProvider = options.mlsProvider ?? null
+      this._dmProvider = options.dmProvider ?? null
       this.voiceClient = options.voiceClient ?? null
       this.mediaClient = options.mediaClient ?? null
       this.searchIndex = options.searchIndex ?? null
@@ -313,6 +318,16 @@ export class HarmonyClient {
     this._did = params.identity.did
     this._clock = { counter: 0, authorDID: this._did }
     this._vp = params.vp ?? null
+
+    // Generate encryption key pair for E2EE if we have a crypto provider
+    if (!this._encryptionKeyPair) {
+      try {
+        const crypto = createCryptoProvider()
+        this._encryptionKeyPair = await crypto.generateEncryptionKeyPair()
+      } catch {
+        // Encryption key generation failed — E2EE won't be available
+      }
+    }
 
     // Auto-create VP if not provided but we have identity + keyPair
     if (!this._vp && this._did && this._keyPair) {
@@ -588,6 +603,47 @@ export class HarmonyClient {
           const sc = this._servers.get(this._serverUrl)
           if (sc) sc.communities.add(event.communityId)
         }
+
+        // Set up MLS groups for each channel
+        if (this.mlsProvider && this._keyPair && this._encryptionKeyPair) {
+          const setupMLS = async () => {
+            for (const channel of state.channels) {
+              try {
+                const groupId = `${event.communityId}:${channel.id}`
+                const group = await this.mlsProvider!.createGroup({
+                  groupId,
+                  creatorDID: this._did,
+                  creatorKeyPair: this._keyPair!,
+                  creatorEncryptionKeyPair: this._encryptionKeyPair!
+                })
+                this.mlsGroups.set(groupId, group)
+
+                // Upload key package so others can fetch it
+                const kp = await this.mlsProvider!.createKeyPackage({
+                  did: this._did,
+                  signingKeyPair: this._keyPair!,
+                  encryptionKeyPair: this._encryptionKeyPair!
+                })
+                this.send(this.createMessage('mls.keypackage.upload', { keyPackage: kp }))
+
+                // Notify server about group setup
+                this.send(
+                  this.createMessage('mls.group.setup', {
+                    communityId: event.communityId,
+                    channelId: channel.id,
+                    groupId
+                  })
+                )
+              } catch {
+                // MLS setup failed for this channel — plaintext fallback
+              }
+            }
+          }
+          setupMLS().catch(() => {
+            /* ignore */
+          })
+        }
+
         this.persistState()
         unsub()
         resolve(state)
@@ -621,6 +677,22 @@ export class HarmonyClient {
             const sc = this._servers.get(this._serverUrl)
             if (sc) sc.communities.add(communityId)
           }
+
+          // Upload key package so existing members can add us to MLS groups
+          if (this.mlsProvider && this._keyPair && this._encryptionKeyPair) {
+            const uploadKP = async () => {
+              const kp = await this.mlsProvider!.createKeyPackage({
+                did: this._did,
+                signingKeyPair: this._keyPair!,
+                encryptionKeyPair: this._encryptionKeyPair!
+              })
+              this.send(this.createMessage('mls.keypackage.upload', { keyPackage: kp }))
+            }
+            uploadKP().catch(() => {
+              /* ignore */
+            })
+          }
+
           this.persistState()
           unsub()
           resolve(state)
@@ -1163,6 +1235,15 @@ export class HarmonyClient {
       case 'error':
         this.emitter.emit('error', msg.payload)
         break
+      case 'mls.welcome':
+        this.handleMLSWelcome(msg)
+        break
+      case 'mls.commit':
+        this.handleMLSCommit(msg)
+        break
+      case 'mls.keypackage.response':
+        this.emitter.emit('mls.keypackage.response', msg.payload)
+        break
     }
   }
 
@@ -1184,7 +1265,7 @@ export class HarmonyClient {
       id: msg.id,
       channelId: payload.channelId,
       authorDID: msg.sender,
-      content: { text: '[encrypted]' }, // Would decrypt in real implementation
+      content: { text: '[encrypted]' },
       timestamp: msg.timestamp,
       clock: payload.clock,
       replyTo: payload.replyTo,
@@ -1192,18 +1273,69 @@ export class HarmonyClient {
       edited: false
     }
 
-    if (!this._channelLogs.has(key)) {
-      this._channelLogs.set(key, new CRDTLog<DecryptedMessage>(this._did))
+    // Synchronous plaintext fallback first
+    const groupId = `${payload.communityId}:${payload.channelId}`
+    const mlsGroup = this.mlsGroups.get(groupId)
+    if (!mlsGroup && payload.content) {
+      const ct = payload.content as EncryptedContent
+      if (ct.epoch === 0 && ct.senderIndex === 0 && ct.ciphertext) {
+        try {
+          const bytes =
+            ct.ciphertext instanceof Uint8Array
+              ? ct.ciphertext
+              : (() => {
+                  const obj = ct.ciphertext as Record<string, number>
+                  const keys = Object.keys(obj).sort((a, b) => Number(a) - Number(b))
+                  return new Uint8Array(keys.map((k) => obj[k]))
+                })()
+          decrypted.content = { text: new TextDecoder().decode(bytes) }
+        } catch {
+          /* ignore */
+        }
+      }
     }
-    const log = this._channelLogs.get(key)!
-    log.merge(payload.clock, decrypted, msg.id)
 
-    const sub = this._channelSubscriptions.get(key)
-    if (sub) {
-      sub.messages = log.entries().map((e) => e.data)
+    const addAndEmit = () => {
+      if (!this._channelLogs.has(key)) {
+        this._channelLogs.set(key, new CRDTLog<DecryptedMessage>(this._did))
+      }
+      const log = this._channelLogs.get(key)!
+      log.merge(payload.clock, decrypted, msg.id)
+      const sub = this._channelSubscriptions.get(key)
+      if (sub) {
+        sub.messages = log.entries().map((e) => e.data)
+      }
+      this.emitter.emit('message', decrypted)
     }
 
-    this.emitter.emit('message', decrypted)
+    // Async MLS decryption
+    if (mlsGroup && payload.content) {
+      const ct = payload.content as EncryptedContent
+      const ciphertextBytes =
+        ct.ciphertext instanceof Uint8Array
+          ? ct.ciphertext
+          : (() => {
+              const obj = ct.ciphertext as Record<string, number>
+              const keys = Object.keys(obj).sort((a, b) => Number(a) - Number(b))
+              return new Uint8Array(keys.map((k) => obj[k]))
+            })()
+      mlsGroup
+        .decrypt({
+          epoch: ct.epoch,
+          senderIndex: ct.senderIndex,
+          ciphertext: ciphertextBytes,
+          contentType: 'application'
+        })
+        .then(({ plaintext }) => {
+          decrypted.content = { text: new TextDecoder().decode(plaintext) }
+          addAndEmit()
+        })
+        .catch(() => {
+          addAndEmit()
+        })
+    } else {
+      addAndEmit()
+    }
   }
 
   private handleChannelMessageDeleted(msg: ProtocolMessage): void {
@@ -1395,6 +1527,113 @@ export class HarmonyClient {
     })
   }
 
+  // ── MLS / E2EE Methods ──
+
+  private async handleMLSWelcome(msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { welcome: unknown; communityId: string; channelId: string; groupId: string }
+    if (!this.mlsProvider || !this._encryptionKeyPair) return
+    try {
+      const welcome = payload.welcome as import('@harmony/e2ee').Welcome
+      const group = await this.mlsProvider.joinFromWelcome(welcome, this._encryptionKeyPair)
+      this.mlsGroups.set(payload.groupId, group)
+      this.emitter.emit('mls.welcome', payload)
+    } catch {
+      // Welcome processing failed
+    }
+  }
+
+  private async handleMLSCommit(msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { commit: unknown; communityId: string; channelId: string; groupId: string }
+    const groupId = payload.groupId ?? `${payload.communityId}:${payload.channelId}`
+    const group = this.mlsGroups.get(groupId)
+    if (!group) return
+    try {
+      const commit = payload.commit as import('@harmony/e2ee').Commit
+      await group.processCommit(commit)
+      this.emitter.emit('mls.commit', payload)
+    } catch {
+      // Commit processing failed
+    }
+  }
+
+  /** Add a member to an MLS group for a channel (called by existing members when new member joins) */
+  async addMemberToChannel(communityId: string, channelId: string, memberDID: string): Promise<void> {
+    const groupId = `${communityId}:${channelId}`
+    const group = this.mlsGroups.get(groupId)
+    if (!group || !this.mlsProvider) return
+
+    // Fetch key packages for the new member
+    this.send(this.createMessage('mls.keypackage.fetch', { dids: [memberDID] }))
+
+    return new Promise((resolve) => {
+      const unsub = this.on('mls.keypackage.response', async (...args: unknown[]) => {
+        unsub()
+        const resp = args[0] as { keyPackages: Record<string, unknown[]> }
+        const packages = resp.keyPackages[memberDID]
+        if (!packages || packages.length === 0) {
+          resolve()
+          return
+        }
+        try {
+          const keyPackage = packages[0] as import('@harmony/e2ee').KeyPackage
+          const { welcome, commit } = await group.addMember(keyPackage)
+
+          // Send welcome to the new member
+          this.send(
+            this.createMessage('mls.welcome', {
+              recipientDID: memberDID,
+              communityId,
+              channelId,
+              groupId,
+              welcome
+            })
+          )
+
+          // Broadcast commit to existing members
+          this.send(
+            this.createMessage('mls.commit', {
+              communityId,
+              channelId,
+              groupId,
+              commit
+            })
+          )
+        } catch {
+          // Add member failed
+        }
+        resolve()
+      })
+    })
+  }
+
+  /** Decrypt channel message content if MLS group exists */
+  async decryptChannelMessage(
+    communityId: string,
+    channelId: string,
+    content: EncryptedContent
+  ): Promise<string | null> {
+    const groupId = `${communityId}:${channelId}`
+    const group = this.mlsGroups.get(groupId)
+    if (!group) return null
+    try {
+      const mlsCiphertext: import('@harmony/e2ee').MLSCiphertext = {
+        epoch: content.epoch,
+        senderIndex: content.senderIndex,
+        ciphertext: content.ciphertext,
+        contentType: 'application'
+      }
+      const { plaintext } = await group.decrypt(mlsCiphertext)
+      return new TextDecoder().decode(plaintext)
+    } catch {
+      return null
+    }
+  }
+
+  /** Check if a channel has E2EE enabled */
+  hasMLSGroup(communityId: string, channelId: string): boolean {
+    return this.mlsGroups.has(`${communityId}:${channelId}`)
+  }
+
   private send(msg: ProtocolMessage): void {
     // Try to send to the appropriate server based on community context
     const payload = msg.payload as { communityId?: string } | null
@@ -1510,7 +1749,7 @@ export class HarmonyClient {
 
   private async encryptForDM(_recipientDID: string, text: string): Promise<EncryptedContent> {
     const plaintext = new TextEncoder().encode(text)
-    const dmChannel = this.dmEncChannels.get(_recipientDID)
+    const dmChannel = this.dmEncChannels.get(_recipientDID) ?? (this._dmProvider ? undefined : undefined)
     if (dmChannel) {
       const ct = await dmChannel.encrypt(plaintext)
       return { ciphertext: ct.ciphertext, epoch: 0, senderIndex: 0 }

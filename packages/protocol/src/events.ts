@@ -25,6 +25,9 @@ export type ClientEvent =
   | 'community.updated'
   | 'community.info'
   | 'sync'
+  | 'mls.welcome'
+  | 'mls.commit'
+  | 'mls.keypackage.response'
   | 'error'
 
 export type FederationEvent = 'peer.connected' | 'peer.disconnected' | 'peer.message' | 'peer.sync' | 'peer.error'

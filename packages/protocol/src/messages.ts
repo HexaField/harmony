@@ -92,6 +92,13 @@ export type MessageType =
   | 'credential.issue'
   | 'credential.present'
   | 'credential.verify'
+  // E2EE / MLS
+  | 'mls.keypackage.upload'
+  | 'mls.keypackage.fetch'
+  | 'mls.keypackage.response'
+  | 'mls.welcome'
+  | 'mls.commit'
+  | 'mls.group.setup'
   // Federation
   | 'federation.relay'
   | 'federation.sync'
@@ -147,7 +154,13 @@ export const CLIENT_TO_SERVER_TYPES: MessageType[] = [
   'delegation.revoke',
   'credential.issue',
   'credential.present',
-  'credential.verify'
+  'credential.verify',
+  // E2EE / MLS
+  'mls.keypackage.upload',
+  'mls.keypackage.fetch',
+  'mls.commit',
+  'mls.welcome',
+  'mls.group.setup'
 ]
 
 export const SERVER_TO_CLIENT_TYPES: MessageType[] = [
@@ -184,7 +197,11 @@ export const SERVER_TO_CLIENT_TYPES: MessageType[] = [
   'voice.participant.left',
   'voice.speaking',
   'search.metadata.result',
-  'bot.event'
+  'bot.event',
+  // E2EE / MLS
+  'mls.keypackage.response',
+  'mls.welcome',
+  'mls.commit'
 ]
 
 export const FEDERATION_TYPES: MessageType[] = ['federation.relay', 'federation.sync', 'federation.presence']

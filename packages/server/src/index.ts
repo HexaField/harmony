@@ -862,6 +862,9 @@ export class HarmonyServer {
       case 'community.info':
         await this.handleCommunityInfo(conn, msg)
         break
+      case 'community.member.reconciled' as any:
+        await this.handleReconciliation(conn, msg)
+        break
       case 'mls.keypackage.upload':
         await this.handleMLSKeyPackageUpload(conn, msg)
         break
@@ -1410,6 +1413,51 @@ export class HarmonyServer {
     return dids
   }
 
+  private async handleReconciliation(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as {
+      did: string
+      reconciledCommunities: string[]
+    }
+    // For each reconciled community, auto-join the user
+    for (const communityId of payload.reconciledCommunities) {
+      await this.autoJoinCommunity(payload.did, communityId)
+    }
+  }
+
+  /** Auto-join a user to a community after reconciliation (ghost → real DID) */
+  async autoJoinCommunity(did: string, communityId: string): Promise<void> {
+    // Add as a real member
+    const info = await this.communityManager.getInfo(communityId)
+    const channels = await this.communityManager.getChannels(communityId)
+
+    // Subscribe any connected WebSocket for this DID
+    for (const [connId, conn] of this._connections) {
+      if (conn.did === did) {
+        if (!conn.communities.includes(communityId)) {
+          conn.communities.push(communityId)
+        }
+        if (!this.communitySubscriptions.has(communityId)) {
+          this.communitySubscriptions.set(communityId, new Set())
+        }
+        this.communitySubscriptions.get(communityId)!.add(connId)
+
+        // Send auto-joined message
+        this.sendToConnection(conn, {
+          id: `auto-join-${Date.now()}`,
+          type: 'community.auto-joined' as ProtocolMessage['type'],
+          timestamp: new Date().toISOString(),
+          sender: 'server',
+          payload: {
+            communityId,
+            communityName: info?.name ?? 'Community',
+            description: info?.description,
+            channels: channels.map((ch) => ({ id: ch.id, name: ch.name, type: ch.type }))
+          }
+        })
+      }
+    }
+  }
+
   broadcastToCommunity(communityId: string, msg: ProtocolMessage, excludeConnId?: string): void {
     const connIds = this.communitySubscriptions.get(communityId)
     if (!connIds) return
@@ -1446,5 +1494,55 @@ export class HarmonyServer {
       }
       this.communitySubscriptions.get(communityId)!.add(connId)
     }
+  }
+
+  /**
+   * Reconcile a ghost Discord member with a real Harmony DID.
+   * Updates community member list and broadcasts to connected clients.
+   */
+  async reconcileMember(
+    communityId: string,
+    discordUserId: string,
+    newDID: string,
+    displayName: string
+  ): Promise<void> {
+    const ghostSubject = `harmony:member:${discordUserId}`
+    const store = this.config.store
+
+    // Add DID link to the ghost member record
+    await store.add({
+      subject: ghostSubject,
+      predicate: HarmonyPredicate.author,
+      object: newDID,
+      graph: communityId
+    })
+
+    // Update display name
+    const oldNames = await store.match({
+      subject: ghostSubject,
+      predicate: HarmonyPredicate.name,
+      graph: communityId
+    })
+    for (const q of oldNames) await store.remove(q)
+    await store.add({
+      subject: ghostSubject,
+      predicate: HarmonyPredicate.name,
+      object: { value: displayName },
+      graph: communityId
+    })
+
+    // Broadcast reconciled event
+    this.broadcastToCommunity(communityId, {
+      id: `cmr-${Date.now()}`,
+      type: 'community.member.reconciled',
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: {
+        communityId,
+        discordUserId,
+        newDID,
+        displayName
+      }
+    })
   }
 }

@@ -50,6 +50,8 @@ export type MessageType =
   | 'community.member.updated'
   | 'community.member.kicked'
   | 'community.member.banned'
+  | 'community.member.reconciled'
+  | 'community.auto-joined'
   | 'channel.created'
   | 'channel.updated'
   | 'channel.deleted'
@@ -184,6 +186,8 @@ export const SERVER_TO_CLIENT_TYPES: MessageType[] = [
   'community.member.updated',
   'community.member.kicked',
   'community.member.banned',
+  'community.member.reconciled',
+  'community.auto-joined',
   'channel.created',
   'channel.updated',
   'channel.deleted',

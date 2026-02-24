@@ -19,6 +19,8 @@ export class PortalService {
   private exports: Map<string, { bundle: EncryptedExportBundle; storedAt: string }> = new Map()
   private identities: Map<string, { identity: Identity; keyPair: KeyPair }> = new Map()
   private discordLinks: Map<string, string> = new Map() // discordId → DID
+  private discordProfiles: Map<string, { discordId: string; username: string }> = new Map() // DID → discord profile
+  private friendsLists: Map<string, string[]> = new Map() // DID → Discord friend IDs
 
   private portalKeyPair!: KeyPair
   private portalDID!: string
@@ -78,6 +80,10 @@ export class PortalService {
       claims.discordUserId = params.providerUserId
       claims.discordUsername = params.providerUsername
       this.discordLinks.set(params.providerUserId, params.userDID)
+      this.discordProfiles.set(params.userDID, {
+        discordId: params.providerUserId,
+        username: params.providerUsername
+      })
     }
 
     const vc = await this.vcService.issue({
@@ -121,6 +127,10 @@ export class PortalService {
     return results
   }
 
+  getDiscordProfile(did: string): { discordId: string; username: string } | null {
+    return this.discordProfiles.get(did) ?? null
+  }
+
   async findLinkedIdentities(discordUserIds: string[]): Promise<Map<string, string>> {
     const result = new Map<string, string>()
     for (const id of discordUserIds) {
@@ -128,5 +138,29 @@ export class PortalService {
       if (did) result.set(id, did)
     }
     return result
+  }
+
+  storeFriendsList(did: string, discordFriendIds: string[]): void {
+    this.friendsLists.set(did, discordFriendIds)
+  }
+
+  getStoredFriendIds(did: string): string[] {
+    return this.friendsLists.get(did) ?? []
+  }
+
+  async discoverFriends(did: string): Promise<Array<{ discordId: string; did: string; username: string }>> {
+    const friendIds = this.friendsLists.get(did) ?? []
+    if (friendIds.length === 0) return []
+    const linked = await this.findLinkedIdentities(friendIds)
+    const results: Array<{ discordId: string; did: string; username: string }> = []
+    for (const [discordId, friendDid] of linked) {
+      const profile = this.discordProfiles.get(friendDid)
+      results.push({
+        discordId,
+        did: friendDid,
+        username: profile?.username ?? discordId
+      })
+    }
+    return results
   }
 }

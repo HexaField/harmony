@@ -19,7 +19,8 @@
     "@harmony/quads": "workspace:*",
     "@harmony/vc": "workspace:*",
     "@harmony/vocab": "workspace:*",
-    "@harmony/zcap": "workspace:*"
+    "@harmony/zcap": "workspace:*",
+    "fflate": "^0.8.2"
   },
   "devDependencies": {
     "@rollup/plugin-typescript": "^12.3.0",

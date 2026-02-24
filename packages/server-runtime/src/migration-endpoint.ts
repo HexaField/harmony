@@ -1,4 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { createHash } from 'node:crypto'
+import { mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync } from 'node:fs'
+import { join, dirname } from 'node:path'
 import { createCryptoProvider, type KeyPair } from '@harmony/crypto'
 import { MigrationBot, DiscordRESTAPI } from '@harmony/migration-bot'
 import { MigrationService, type EncryptedExportBundle } from '@harmony/migration'
@@ -41,10 +44,12 @@ export class MigrationEndpoint {
   private logger: Logger
   private store: SQLiteQuadStore | null
   private harmonyServer: HarmonyServer | null = null
+  private mediaPath: string
 
-  constructor(logger: Logger, store: SQLiteQuadStore | null) {
+  constructor(logger: Logger, store: SQLiteQuadStore | null, mediaPath?: string) {
     this.logger = logger
     this.store = store
+    this.mediaPath = mediaPath ?? './media'
   }
 
   /** Wire up the live HarmonyServer so imported communities can be registered */
@@ -116,6 +121,25 @@ export class MigrationEndpoint {
       return true
     }
 
+    // User data claim endpoints
+    if (req.method === 'POST' && url === '/api/user-data/upload') {
+      await this.handleUserDataUpload(req, res)
+      return true
+    }
+
+    const userDataMatch = url.match(/^\/api\/user-data\/(.+)$/)
+    if (userDataMatch) {
+      const did = decodeURIComponent(userDataMatch[1])
+      if (req.method === 'GET') {
+        await this.handleUserDataGet(did, req, res)
+        return true
+      }
+      if (req.method === 'DELETE') {
+        await this.handleUserDataDelete(did, req, res)
+        return true
+      }
+    }
+
     return false
   }
 
@@ -134,6 +158,138 @@ export class MigrationEndpoint {
       'Access-Control-Allow-Origin': '*'
     })
     res.end(JSON.stringify(body))
+  }
+
+  private didToFilePath(did: string): string {
+    const hash = createHash('sha256').update(did).digest('hex')
+    const dir = join(this.mediaPath, 'user-data')
+    return join(dir, `${hash}.enc`)
+  }
+
+  private didToMetaPath(did: string): string {
+    const hash = createHash('sha256').update(did).digest('hex')
+    const dir = join(this.mediaPath, 'user-data')
+    return join(dir, `${hash}.meta.json`)
+  }
+
+  private extractDIDFromAuth(req: IncomingMessage): string | null {
+    // Simple auth: DID passed in X-Harmony-DID header
+    // In production this would be verified via VP/signature
+    const did = req.headers['x-harmony-did']
+    return typeof did === 'string' ? did : null
+  }
+
+  private async handleUserDataUpload(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    let body: {
+      did: string
+      ciphertext: string // base64
+      nonce: string // base64
+      metadata: {
+        messageCount: number
+        channelCount: number
+        serverCount: number
+        dateRange: { earliest: string; latest: string } | null
+        uploadedAt: string
+      }
+    }
+
+    try {
+      body = JSON.parse(await this.readBody(req))
+    } catch {
+      this.json(res, 400, { error: 'Invalid JSON body' })
+      return
+    }
+
+    if (!body.did || !body.ciphertext || !body.nonce) {
+      this.json(res, 400, { error: 'Missing required fields: did, ciphertext, nonce' })
+      return
+    }
+
+    try {
+      const filePath = this.didToFilePath(body.did)
+      const metaPath = this.didToMetaPath(body.did)
+      mkdirSync(dirname(filePath), { recursive: true })
+
+      // Store the encrypted blob
+      const cipherBytes = Buffer.from(body.ciphertext, 'base64')
+      const nonceBytes = Buffer.from(body.nonce, 'base64')
+      const blob = Buffer.concat([Buffer.from(new Uint32Array([nonceBytes.length]).buffer), nonceBytes, cipherBytes])
+      writeFileSync(filePath, blob)
+
+      // Store metadata (not sensitive — just counts)
+      writeFileSync(metaPath, JSON.stringify(body.metadata))
+
+      this.logger.info('User data uploaded', {
+        did: body.did,
+        size: blob.length,
+        messageCount: body.metadata.messageCount
+      })
+
+      this.json(res, 200, { ok: true, size: blob.length })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      this.logger.error('User data upload failed', { error: message })
+      this.json(res, 500, { error: `Upload failed: ${message}` })
+    }
+  }
+
+  private async handleUserDataGet(did: string, _req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const filePath = this.didToFilePath(did)
+    const metaPath = this.didToMetaPath(did)
+
+    if (!existsSync(filePath)) {
+      this.json(res, 404, { error: 'No data found for this DID' })
+      return
+    }
+
+    try {
+      const blob = readFileSync(filePath)
+      // Parse: 4-byte nonce length, nonce, ciphertext
+      const nonceLen = new Uint32Array(blob.buffer.slice(blob.byteOffset, blob.byteOffset + 4))[0]
+      const nonce = blob.subarray(4, 4 + nonceLen)
+      const ciphertext = blob.subarray(4 + nonceLen)
+
+      let metadata = null
+      if (existsSync(metaPath)) {
+        metadata = JSON.parse(readFileSync(metaPath, 'utf-8'))
+      }
+
+      this.json(res, 200, {
+        ciphertext: Buffer.from(ciphertext).toString('base64'),
+        nonce: Buffer.from(nonce).toString('base64'),
+        metadata
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      this.json(res, 500, { error: `Read failed: ${message}` })
+    }
+  }
+
+  private async handleUserDataDelete(did: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+    // Verify the requester is the DID owner
+    const authDid = this.extractDIDFromAuth(req)
+    if (!authDid || authDid !== did) {
+      this.json(res, 403, { error: 'Not authorized to delete this data' })
+      return
+    }
+
+    const filePath = this.didToFilePath(did)
+    const metaPath = this.didToMetaPath(did)
+
+    if (!existsSync(filePath)) {
+      this.json(res, 404, { error: 'No data found for this DID' })
+      return
+    }
+
+    try {
+      unlinkSync(filePath)
+      if (existsSync(metaPath)) unlinkSync(metaPath)
+      this.logger.info('User data deleted', { did })
+      this.json(res, 200, { ok: true })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      this.json(res, 500, { error: `Delete failed: ${message}` })
+    }
   }
 
   private async handleExport(req: IncomingMessage, res: ServerResponse): Promise<void> {

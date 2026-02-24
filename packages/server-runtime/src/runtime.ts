@@ -156,7 +156,7 @@ export class ServerRuntime {
     this.server = new HarmonyServer(serverConfig)
 
     // Init migration endpoint
-    this.migrationEndpoint = new MigrationEndpoint(this.logger, this.store)
+    this.migrationEndpoint = new MigrationEndpoint(this.logger, this.store, this.config.storage.media)
     this.migrationEndpoint.setHarmonyServer(this.server)
 
     // Set up health endpoint HTTP server
@@ -192,7 +192,7 @@ export class ServerRuntime {
       if (req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ status: t('HEALTH_OK'), uptime: this.getUptime() }))
-      } else if (req.url?.startsWith('/api/migration/')) {
+      } else if (req.url?.startsWith('/api/migration/') || req.url?.startsWith('/api/user-data/')) {
         void this.migrationEndpoint!.handleRequest(req, res)
           .then((handled) => {
             if (!handled) {

@@ -119,6 +119,22 @@ export const en = {
   FRIENDS_REQUESTS: 'Friend requests',
   FRIENDS_FIND: 'Find friends',
   FRIENDS_DISCORD: 'Find Discord friends',
+  FRIENDS_TITLE: 'Find Your Friends',
+  FRIENDS_SEARCHING: 'Finding your friends...',
+  FRIENDS_FOUND_COUNT: '{count} friends already on Harmony',
+  FRIENDS_NONE_FOUND: 'No friends found on Harmony yet',
+  FRIENDS_SEND_DM: 'Send DM',
+  FRIENDS_INVITE: 'Invite',
+  FRIENDS_INVITE_COPIED: 'Invite link copied!',
+  FRIENDS_NOT_MIGRATED: 'Not yet on Harmony',
+  FRIENDS_ON_HARMONY: 'On Harmony',
+  FRIENDS_CONNECTIONS: 'Friends & Connections',
+  FRIENDS_AUTO_JOINED_TITLE: 'Your Communities',
+  FRIENDS_AUTO_JOINED_DESC: "You've been auto-joined to these communities",
+  FRIENDS_INVITE_OTHERS: "Invite friends who haven't migrated yet",
+  FRIENDS_POST_MIGRATION_TITLE: 'Welcome to Harmony!',
+  FRIENDS_UPLOAD_DATA: 'Upload Discord data package',
+  FRIENDS_UPLOAD_DESC: 'Upload your Discord data export to find friends (Settings → Privacy → Request Data)',
 
   // Migration
   MIGRATION_TITLE: 'Import from Discord',
@@ -403,7 +419,41 @@ export const en = {
   MIGRATION_PHASE_IMPORTING: 'Creating community...',
   MIGRATION_EXPORT_ERROR: 'Export failed: {error}',
   MIGRATION_EXPORT_RETRY: 'Retry export',
-  MIGRATION_IMPORT_SUCCESS: 'Community imported successfully!'
+  MIGRATION_IMPORT_SUCCESS: 'Community imported successfully!',
+
+  // Data Claim
+  DATA_CLAIM_TITLE: 'Claim Your Data',
+  DATA_CLAIM_INTRO:
+    'Import your Discord data export to take ownership of your message history. Your data is encrypted client-side — the server never sees the plaintext.',
+  DATA_CLAIM_DISCORD_LINK: 'Request your data from Discord',
+  DATA_CLAIM_DISCORD_INSTRUCTIONS:
+    'Go to Discord Settings → Privacy & Safety → Request All of My Data. Discord will email you a download link (may take up to 30 days).',
+  DATA_CLAIM_SELECT_FILE: 'Select your Discord data ZIP file',
+  DATA_CLAIM_DROP_FILE: 'Drop your ZIP file here or click to browse',
+  DATA_CLAIM_PARSING: 'Parsing your data...',
+  DATA_CLAIM_PREVIEW_TITLE: 'Data Preview',
+  DATA_CLAIM_MESSAGES: '{count} messages',
+  DATA_CLAIM_CHANNELS: '{count} channels',
+  DATA_CLAIM_SERVERS: '{count} servers',
+  DATA_CLAIM_DATE_RANGE: 'From {from} to {to}',
+  DATA_CLAIM_ENCRYPT_UPLOAD: 'Encrypt & Upload',
+  DATA_CLAIM_ENCRYPTING: 'Encrypting your data...',
+  DATA_CLAIM_UPLOADING: 'Uploading encrypted data...',
+  DATA_CLAIM_SUCCESS_TITLE: 'Your data is securely stored',
+  DATA_CLAIM_SUCCESS_DESC:
+    'Only you can decrypt this data using your recovery phrase. The server stores an opaque encrypted blob.',
+  DATA_CLAIM_ERROR: 'Data claim failed: {error}',
+  DATA_CLAIM_BROWSE: 'Browse Your Data',
+
+  // Data Browser
+  DATA_BROWSER_TITLE: 'Your Claimed Data',
+  DATA_BROWSER_DECRYPTING: 'Decrypting your data...',
+  DATA_BROWSER_NO_DATA: 'No claimed data yet',
+  DATA_BROWSER_SEARCH: 'Search messages...',
+  DATA_BROWSER_ALL_CHANNELS: 'All channels',
+  DATA_BROWSER_ALL_SERVERS: 'All servers',
+  DATA_BROWSER_DELETE: 'Delete claimed data',
+  DATA_BROWSER_DELETE_CONFIRM: 'Are you sure? This cannot be undone.'
 } as const
 
 export type StringKey = keyof typeof en

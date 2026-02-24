@@ -14,6 +14,13 @@ import type {
   DelegationInfo
 } from './types.js'
 
+export interface FriendData {
+  did: string
+  discordUsername: string
+  harmonyName: string
+  status: 'on-harmony' | 'not-migrated'
+}
+
 export interface AppStore {
   // Identity
   did: () => string
@@ -158,6 +165,14 @@ export interface AppStore {
   setDeafened: (d: boolean) => void
   speakingUsers: () => Set<string>
   setSpeaking: (did: string, isSpeaking: boolean) => void
+
+  // Friends
+  friends: () => FriendData[]
+  setFriends: (f: FriendData[]) => void
+  showFriendFinder: () => boolean
+  setShowFriendFinder: (s: boolean) => void
+  autoJoinedCommunities: () => Array<{ communityId: string; communityName: string }>
+  addAutoJoinedCommunity: (c: { communityId: string; communityName: string }) => void
 }
 
 // ── localStorage persistence helpers ──────────────────────────────
@@ -396,6 +411,17 @@ export function createAppStore(): AppStore {
       return next
     })
   }
+
+  // Friends state
+  const [friends, setFriends] = createSignal<FriendData[]>([])
+  const [showFriendFinder, setShowFriendFinder] = createSignal(false)
+  const [autoJoinedCommunities, setAutoJoinedCommunities] = createSignal<
+    Array<{ communityId: string; communityName: string }>
+  >([])
+  const addAutoJoinedCommunity = (c: { communityId: string; communityName: string }) => {
+    setAutoJoinedCommunities((prev) => [...prev, c])
+  }
+
   const [roles, _setRoles] = createSignal<RoleInfo[]>([])
 
   const setRoles = (r: RoleInfo[]) => _setRoles([...r].sort((a, b) => a.position - b.position))

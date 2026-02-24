@@ -24,6 +24,7 @@ export type ClientEvent =
   | 'role.deleted'
   | 'community.updated'
   | 'community.info'
+  | 'community.auto-joined'
   | 'sync'
   | 'mls.welcome'
   | 'mls.commit'

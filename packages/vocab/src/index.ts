@@ -121,7 +121,11 @@ export const HarmonyPredicate = {
   score: `${HARMONY}score`,
   // Phase 3 additions — Mobile
   pushToken: `${HARMONY}pushToken`,
-  pushPlatform: `${HARMONY}pushPlatform`
+  pushPlatform: `${HARMONY}pushPlatform`,
+  // Discord reconciliation
+  discordId: `${HARMONY}discordId`,
+  discordUsername: `${HARMONY}discordUsername`,
+  did: `${HARMONY}did`
 } as const
 
 // Harmony VC types

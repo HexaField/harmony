@@ -20,6 +20,7 @@
     "@harmony/migration": "workspace:*",
     "@harmony/quads": "workspace:*",
     "@harmony/vc": "workspace:*",
+    "@harmony/vocab": "workspace:*",
     "@harmony/zcap": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",

@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express'
 import type { PortalService } from '../index.js'
+import type { ReconciliationService } from '../reconciliation.js'
 
 // In-memory state store for OAuth flows
 const pendingStates = new Map<string, { userDID: string; redirectUri?: string; createdAt: number }>()
@@ -18,7 +19,7 @@ function generateState(): string {
   return Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('')
 }
 
-export function oauthRoutes(portal: PortalService): Router {
+export function oauthRoutes(portal: PortalService, reconciliationService?: ReconciliationService): Router {
   const router = Router()
 
   // Legacy POST initiate (kept for backward compatibility)
@@ -176,6 +177,17 @@ export function oauthRoutes(portal: PortalService): Router {
         providerUsername: discordUser.username
       })
 
+      // Reconcile ghost member records
+      let reconciledCommunities: string[] = []
+      if (reconciliationService) {
+        const result = await reconciliationService.onDiscordLinked(
+          discordUser.id,
+          discordUser.username,
+          pending.userDID
+        )
+        reconciledCommunities = result.reconciledCommunities
+      }
+
       // If client provided a redirect URI, redirect with VC
       if (pending.redirectUri) {
         const redirectUrl = new URL(pending.redirectUri)
@@ -193,7 +205,7 @@ export function oauthRoutes(portal: PortalService): Router {
 <p style="color:#888">This window will close automatically.</p>
 </div>
 <script>
-try { window.opener && window.opener.postMessage({ type: 'harmony:oauth-complete', provider: 'discord', userDID: ${JSON.stringify(pending.userDID)}, discordUsername: ${JSON.stringify(discordUser.username)} }, '*'); } catch(e) {}
+try { window.opener && window.opener.postMessage({ type: 'harmony:oauth-complete', provider: 'discord', userDID: ${JSON.stringify(pending.userDID)}, discordUsername: ${JSON.stringify(discordUser.username)}, reconciledCommunities: ${JSON.stringify(reconciledCommunities)} }, '*'); } catch(e) {}
 setTimeout(() => window.close(), 2000);
 </script>
 </body></html>`
@@ -239,6 +251,21 @@ setTimeout(() => window.close(), 2000);
       })
 
       res.json({ redirectUrl: `https://discord.com/api/oauth2/authorize?${params.toString()}` })
+    } catch (err: any) {
+      res.status(500).json({ error: err.message })
+    }
+  })
+
+  // GET /api/identity/:did/discord-profile — Get linked Discord profile for a DID
+  router.get('/identity/:did/discord-profile', (req: Request, res: Response) => {
+    try {
+      const did = req.params.did as string
+      const profile = portal.getDiscordProfile(did)
+      if (!profile) {
+        res.status(404).json({ error: 'No Discord profile linked for this DID' })
+        return
+      }
+      res.json(profile)
     } catch (err: any) {
       res.status(500).json({ error: err.message })
     }

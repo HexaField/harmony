@@ -223,6 +223,18 @@ export class MigrationService {
 
       quads.push({ subject: memberURI, predicate: RDFPredicate.type, object: HarmonyType.Member, graph: g })
       quads.push({ subject: memberURI, predicate: HarmonyPredicate.name, object: { value: member.username }, graph: g })
+      quads.push({
+        subject: memberURI,
+        predicate: HarmonyPredicate.discordId,
+        object: { value: member.userId },
+        graph: g
+      })
+      quads.push({
+        subject: memberURI,
+        predicate: HarmonyPredicate.discordUsername,
+        object: { value: member.username },
+        graph: g
+      })
       quads.push({ subject: memberURI, predicate: HarmonyPredicate.community, object: communityURI, graph: g })
       quads.push({
         subject: memberURI,

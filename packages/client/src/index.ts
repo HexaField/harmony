@@ -1254,6 +1254,9 @@ export class HarmonyClient {
       case 'voice.ice':
         this.emitter.emit(msg.type as string, msg)
         break
+      case 'community.auto-joined':
+        this.handleCommunityAutoJoined(msg)
+        break
     }
   }
 
@@ -1410,6 +1413,50 @@ export class HarmonyClient {
       community.info.memberCount = community.members.length
     }
     this.emitter.emit('member.left', payload)
+  }
+
+  private handleCommunityAutoJoined(msg: ProtocolMessage): void {
+    const payload = msg.payload as {
+      communityId: string
+      communityName: string
+      description?: string
+      channels: Array<{ id: string; name: string; type: string }>
+      serverUrl?: string
+    }
+
+    const state: CommunityState = {
+      id: payload.communityId,
+      info: {
+        id: payload.communityId,
+        name: payload.communityName,
+        description: payload.description,
+        creatorDID: '',
+        createdAt: new Date().toISOString(),
+        memberCount: 0,
+        channels: payload.channels
+      },
+      channels: payload.channels.map((ch) => ({
+        id: ch.id,
+        communityId: payload.communityId,
+        name: ch.name,
+        type: ch.type as 'text' | 'voice' | 'announcement',
+        createdAt: new Date().toISOString()
+      })),
+      members: [],
+      myRoles: [],
+      myCapabilities: []
+    }
+
+    this._communities.set(payload.communityId, state)
+    if (payload.serverUrl || this._serverUrl) {
+      const url = payload.serverUrl || this._serverUrl
+      this._communityServerMap.set(payload.communityId, url)
+      const sc = this._servers.get(url)
+      if (sc) sc.communities.add(payload.communityId)
+    }
+
+    this.persistState()
+    this.emitter.emit('community.auto-joined', payload)
   }
 
   private handlePresenceChanged(msg: ProtocolMessage): void {

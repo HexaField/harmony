@@ -3,7 +3,7 @@ import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 import { createCryptoProvider } from '@harmony/crypto'
 import { IdentityManager } from '@harmony/identity'
-import { HarmonyClient } from '@harmony/client'
+// HarmonyClient is now managed by the store
 
 type OnboardingStep = 'welcome' | 'mnemonic-display' | 'mnemonic-confirm' | 'recover'
 
@@ -94,11 +94,12 @@ export const OnboardingView: Component = () => {
     }
   })
 
-  function initClient() {
-    const client = new HarmonyClient({
-      wsFactory: (url: string) => new WebSocket(url) as any
-    })
-    store.setClient(client)
+  async function initClientFromStore() {
+    const id = store.identity()
+    const kp = store.keyPair()
+    if (id && kp) {
+      await store.initClient(id, kp)
+    }
   }
 
   function pickQuizIndices(): number[] {
@@ -158,7 +159,7 @@ export const OnboardingView: Component = () => {
       store.setKeyPair(pendingKeyPair)
     }
     clearOnboardingState()
-    initClient()
+    initClientFromStore()
     // Identity is now set in store — App.tsx will show MainLayout
   }
 
@@ -190,7 +191,7 @@ export const OnboardingView: Component = () => {
       store.setIdentity(result.identity)
       store.setKeyPair(result.keyPair)
       clearOnboardingState()
-      initClient()
+      initClientFromStore()
     } catch (err) {
       setError(String(err))
     } finally {

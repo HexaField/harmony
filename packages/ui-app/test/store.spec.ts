@@ -1,6 +1,36 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createRoot } from 'solid-js'
 import { createAppStore } from '../src/store.js'
+
+// Mock WebSocket for tests that init the client
+class MockWebSocket {
+  static CONNECTING = 0
+  static OPEN = 1
+  static CLOSING = 2
+  static CLOSED = 3
+  readyState = MockWebSocket.CONNECTING
+  onopen: (() => void) | null = null
+  onmessage: ((event: { data: string }) => void) | null = null
+  onclose: (() => void) | null = null
+  onerror: ((event: unknown) => void) | null = null
+  send(_data: string) {}
+  close() {
+    this.readyState = MockWebSocket.CLOSED
+    this.onclose?.()
+  }
+}
+
+// @ts-ignore
+globalThis.WebSocket = MockWebSocket
+
+beforeEach(() => {
+  // Clear localStorage between tests to avoid cross-contamination
+  try {
+    localStorage.clear()
+  } catch {
+    /* ignore */
+  }
+})
 
 describe('AppStore', () => {
   it('initializes with default values', () => {
@@ -38,50 +68,62 @@ describe('AppStore', () => {
   })
 
   it('initClient creates a HarmonyClient instance', async () => {
-    await createRoot(async (dispose) => {
-      const store = createAppStore()
-      const mockIdentity = { did: 'did:key:z6MkTest', document: {} } as any
-      const mockKeyPair = { publicKey: new Uint8Array(32), secretKey: new Uint8Array(64) } as any
-
-      await store.initClient(mockIdentity, mockKeyPair)
-      expect(store.client()).not.toBeNull()
-      expect(store.client()!.myDID()).toBe('did:key:z6MkTest')
-      dispose()
+    let storeRef: ReturnType<typeof createAppStore>
+    let disposeRef: () => void
+    createRoot((dispose) => {
+      storeRef = createAppStore()
+      disposeRef = dispose
     })
+
+    const mockIdentity = { did: 'did:key:z6MkTest', document: {} } as any
+    const mockKeyPair = { publicKey: new Uint8Array(32), secretKey: new Uint8Array(64) } as any
+
+    await storeRef!.initClient(mockIdentity, mockKeyPair)
+    expect(storeRef!.client()).not.toBeNull()
+    expect(storeRef!.client()!.myDID()).toBe('did:key:z6MkTest')
+    disposeRef!()
   })
 
   it('initClient is idempotent — does not create a second client', async () => {
-    await createRoot(async (dispose) => {
-      const store = createAppStore()
-      const mockIdentity = { did: 'did:key:z6MkTest', document: {} } as any
-      const mockKeyPair = { publicKey: new Uint8Array(32), secretKey: new Uint8Array(64) } as any
-
-      await store.initClient(mockIdentity, mockKeyPair)
-      const firstClient = store.client()
-
-      await store.initClient(mockIdentity, mockKeyPair)
-      expect(store.client()).toBe(firstClient)
-      dispose()
+    let storeRef: ReturnType<typeof createAppStore>
+    let disposeRef: () => void
+    createRoot((dispose) => {
+      storeRef = createAppStore()
+      disposeRef = dispose
     })
+
+    const mockIdentity = { did: 'did:key:z6MkTest', document: {} } as any
+    const mockKeyPair = { publicKey: new Uint8Array(32), secretKey: new Uint8Array(64) } as any
+
+    await storeRef!.initClient(mockIdentity, mockKeyPair)
+    const firstClient = storeRef!.client()
+
+    await storeRef!.initClient(mockIdentity, mockKeyPair)
+    expect(storeRef!.client()).toBe(firstClient)
+    disposeRef!()
   })
 
   it('addServer delegates to client.addServer', async () => {
-    await createRoot(async (dispose) => {
-      const store = createAppStore()
-      const mockIdentity = { did: 'did:key:z6MkTest', document: {} } as any
-      const mockKeyPair = { publicKey: new Uint8Array(32), secretKey: new Uint8Array(64) } as any
-
-      await store.initClient(mockIdentity, mockKeyPair)
-      store.addServer('ws://localhost:4000')
-
-      const client = store.client()!
-      const serverUrls = client.servers().map((s) => s.url)
-      expect(serverUrls).toContain('ws://localhost:4000')
-
-      // Store's reactive servers mirror should also be updated
-      expect(store.servers().map((s) => s.url)).toContain('ws://localhost:4000')
-      dispose()
+    let storeRef: ReturnType<typeof createAppStore>
+    let disposeRef: () => void
+    createRoot((dispose) => {
+      storeRef = createAppStore()
+      disposeRef = dispose
     })
+
+    const mockIdentity = { did: 'did:key:z6MkTest', document: {} } as any
+    const mockKeyPair = { publicKey: new Uint8Array(32), secretKey: new Uint8Array(64) } as any
+
+    await storeRef!.initClient(mockIdentity, mockKeyPair)
+    storeRef!.addServer('ws://localhost:4000')
+
+    const client = storeRef!.client()!
+    const serverUrls = client.servers().map((s: any) => s.url)
+    expect(serverUrls).toContain('ws://localhost:4000')
+
+    // Store's reactive servers mirror should also be updated
+    expect(storeRef!.servers().map((s: any) => s.url)).toContain('ws://localhost:4000')
+    disposeRef!()
   })
 
   it('addServer is a no-op when client is null', () => {
@@ -95,20 +137,24 @@ describe('AppStore', () => {
   })
 
   it('connectionState reflects client state', async () => {
-    await createRoot(async (dispose) => {
-      const store = createAppStore()
-      const mockIdentity = { did: 'did:key:z6MkTest', document: {} } as any
-      const mockKeyPair = { publicKey: new Uint8Array(32), secretKey: new Uint8Array(64) } as any
-
-      // Before init — disconnected
-      expect(store.connectionState()).toBe('disconnected')
-
-      await store.initClient(mockIdentity, mockKeyPair)
-
-      // After init with no servers — still disconnected
-      expect(store.connectionState()).toBe('disconnected')
-      dispose()
+    let storeRef: ReturnType<typeof createAppStore>
+    let disposeRef: () => void
+    createRoot((dispose) => {
+      storeRef = createAppStore()
+      disposeRef = dispose
     })
+
+    const mockIdentity = { did: 'did:key:z6MkTest', document: {} } as any
+    const mockKeyPair = { publicKey: new Uint8Array(32), secretKey: new Uint8Array(64) } as any
+
+    // Before init — disconnected
+    expect(storeRef!.connectionState()).toBe('disconnected')
+
+    await storeRef!.initClient(mockIdentity, mockKeyPair)
+
+    // After init with no servers — still disconnected
+    expect(storeRef!.connectionState()).toBe('disconnected')
+    disposeRef!()
   })
 
   it('messages: add and retrieve', () => {

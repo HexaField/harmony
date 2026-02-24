@@ -152,10 +152,20 @@ export const ChannelSidebarView: Component = () => {
                       <For each={store.voiceUsers()}>
                         {(did) => (
                           <div class="flex items-center gap-1.5 py-0.5 text-xs text-[var(--text-muted)]">
-                            <div class="w-4 h-4 rounded-full bg-[var(--accent)] flex items-center justify-center text-[8px] font-bold text-white">
+                            <div
+                              class="w-4 h-4 rounded-full bg-[var(--accent)] flex items-center justify-center text-[8px] font-bold text-white transition-shadow"
+                              classList={{
+                                'ring-2 ring-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]': store
+                                  .speakingUsers()
+                                  .has(did)
+                              }}
+                            >
                               {did.substring(did.length - 2).toUpperCase()}
                             </div>
                             <span class="truncate">{did.substring(0, 16)}</span>
+                            <Show when={store.isMuted() && did === store.did()}>
+                              <span title={t('VOICE_USER_MUTED')}>🔇</span>
+                            </Show>
                           </div>
                         )}
                       </For>

@@ -49,8 +49,11 @@ export const VoiceControlBar: Component = () => {
             <For each={store.voiceUsers()}>
               {(did) => (
                 <div
-                  class="w-6 h-6 rounded-full bg-[var(--accent)] flex items-center justify-center text-[10px] font-bold text-white"
-                  title={did}
+                  class="w-6 h-6 rounded-full bg-[var(--accent)] flex items-center justify-center text-[10px] font-bold text-white transition-shadow"
+                  classList={{
+                    'ring-2 ring-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]': store.speakingUsers().has(did)
+                  }}
+                  title={did + (store.speakingUsers().has(did) ? ` — ${t('VOICE_SPEAKING')}` : '')}
                 >
                   {did.substring(did.length - 2).toUpperCase()}
                 </div>

@@ -3,7 +3,15 @@ import type { KeyPair } from '@harmony/crypto'
 import type { Identity } from '@harmony/identity'
 import { HarmonyClient, LocalStoragePersistence } from '@harmony/client'
 import type { ServerConnection } from '@harmony/client'
-import type { CommunityInfo, ChannelInfo, MessageData, MemberData, DMConversationInfo, RoleInfo } from './types.js'
+import type {
+  CommunityInfo,
+  ChannelInfo,
+  MessageData,
+  MemberData,
+  DMConversationInfo,
+  RoleInfo,
+  DelegationInfo
+} from './types.js'
 
 export interface AppStore {
   // Identity
@@ -120,6 +128,24 @@ export interface AppStore {
   showRoleManager: () => boolean
   setShowRoleManager: (s: boolean) => void
 
+  // Channel settings
+  showChannelSettings: () => string | null
+  setShowChannelSettings: (channelId: string | null) => void
+  channelPermissions: () => Map<string, Map<string, { read: boolean; send: boolean; manage: boolean }>>
+  setChannelPermission: (
+    channelId: string,
+    roleId: string,
+    perms: { read: boolean; send: boolean; manage: boolean }
+  ) => void
+
+  // Delegations
+  delegations: () => DelegationInfo[]
+  setDelegations: (d: DelegationInfo[]) => void
+  addDelegation: (d: DelegationInfo) => void
+  removeDelegation: (id: string) => void
+  showDelegationView: () => boolean
+  setShowDelegationView: (s: boolean) => void
+
   // Voice
   voiceChannelId: () => string | null
   setVoiceChannelId: (id: string | null) => void
@@ -129,6 +155,8 @@ export interface AppStore {
   setMuted: (m: boolean) => void
   isDeafened: () => boolean
   setDeafened: (d: boolean) => void
+  speakingUsers: () => Set<string>
+  setSpeaking: (did: string, isSpeaking: boolean) => void
 }
 
 // ── localStorage persistence helpers ──────────────────────────────
@@ -329,11 +357,44 @@ export function createAppStore(): AppStore {
   const [editingMessageId, setEditingMessageId] = createSignal<string | null>(null)
   const [showRoleManager, setShowRoleManager] = createSignal(false)
 
+  // Channel settings state
+  const [showChannelSettings, setShowChannelSettings] = createSignal<string | null>(null)
+  const [channelPermissionsVersion, setChannelPermissionsVersion] = createSignal(0)
+  const channelPermsMap = new Map<string, Map<string, { read: boolean; send: boolean; manage: boolean }>>()
+  const channelPermissions = () => {
+    channelPermissionsVersion()
+    return channelPermsMap
+  }
+  const setChannelPermission = (
+    channelId: string,
+    roleId: string,
+    perms: { read: boolean; send: boolean; manage: boolean }
+  ) => {
+    if (!channelPermsMap.has(channelId)) channelPermsMap.set(channelId, new Map())
+    channelPermsMap.get(channelId)!.set(roleId, perms)
+    setChannelPermissionsVersion((v) => v + 1)
+  }
+
+  // Delegation state
+  const [delegations, setDelegations] = createSignal<DelegationInfo[]>([])
+  const addDelegation = (d: DelegationInfo) => setDelegations((prev) => [...prev, d])
+  const removeDelegation = (id: string) => setDelegations((prev) => prev.filter((d) => d.id !== id))
+  const [showDelegationView, setShowDelegationView] = createSignal(false)
+
   // Voice state
   const [voiceChannelId, setVoiceChannelId] = createSignal<string | null>(null)
   const [voiceUsers, setVoiceUsers] = createSignal<string[]>([])
   const [isMuted, setMuted] = createSignal(false)
   const [isDeafened, setDeafened] = createSignal(false)
+  const [speakingUsers, _setSpeakingUsers] = createSignal<Set<string>>(new Set())
+  const setSpeaking = (did: string, isSpeaking: boolean) => {
+    _setSpeakingUsers((prev) => {
+      const next = new Set(prev)
+      if (isSpeaking) next.add(did)
+      else next.delete(did)
+      return next
+    })
+  }
   const [roles, _setRoles] = createSignal<RoleInfo[]>([])
 
   const setRoles = (r: RoleInfo[]) => _setRoles([...r].sort((a, b) => a.position - b.position))
@@ -897,6 +958,16 @@ export function createAppStore(): AppStore {
     removeRole,
     showRoleManager,
     setShowRoleManager,
+    showChannelSettings,
+    setShowChannelSettings,
+    channelPermissions,
+    setChannelPermission,
+    delegations,
+    setDelegations,
+    addDelegation,
+    removeDelegation,
+    showDelegationView,
+    setShowDelegationView,
     voiceChannelId,
     setVoiceChannelId,
     voiceUsers,
@@ -904,7 +975,9 @@ export function createAppStore(): AppStore {
     isMuted,
     setMuted,
     isDeafened,
-    setDeafened
+    setDeafened,
+    speakingUsers,
+    setSpeaking
   }
 }
 

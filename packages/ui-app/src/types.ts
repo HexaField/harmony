@@ -443,6 +443,16 @@ export interface MigrationSummary {
   members: number
   roles: number
 }
+export interface DelegationInfo {
+  id: string
+  fromDID: string
+  toDID: string
+  capabilities: string[]
+  createdAt: string
+  expiresAt?: string
+  channelScope?: string
+  active: boolean
+}
 export interface MenuItem {
   label: string
   action: () => void

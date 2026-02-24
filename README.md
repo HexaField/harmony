@@ -184,14 +184,15 @@ Migration:  @harmony/migration → migration-bot → portal → cli
 
 ### Applications
 
-| Package                  | Purpose                                                 |
-| ------------------------ | ------------------------------------------------------- |
-| `@harmony/ui`            | SolidJS web application — full chat interface           |
-| `@harmony/mobile`        | Capacitor/Tauri native shell + mobile-specific features |
-| `@harmony/migration`     | Discord export parsing, RDF transformation              |
-| `@harmony/migration-bot` | Discord bot for community export                        |
-| `@harmony/portal`        | Identity service, OAuth gateway, encrypted storage      |
-| `@harmony/cli`           | Command-line interface                                  |
+| Package                  | Purpose                                                   |
+| ------------------------ | --------------------------------------------------------- |
+| `@harmony/ui`            | SolidJS web application — full chat interface             |
+| `@harmony/mobile`        | Capacitor/Tauri native shell + mobile-specific features   |
+| `@harmony/migration`     | Discord export parsing, RDF transformation                |
+| `@harmony/migration-bot` | Discord bot for community export                          |
+| `@harmony/portal`        | Identity service, OAuth gateway, encrypted storage        |
+| `@harmony/cloud`         | Cloud hosting API — managed instances, identity, recovery |
+| `@harmony/cli`           | Command-line interface                                    |
 
 ---
 
@@ -201,6 +202,15 @@ Migration:  @harmony/migration → migration-bot → portal → cli
 
 ```bash
 # Visit harmony.example.com, create identity, join or create a community
+# Cloud hosting is automatic — no server setup required
+```
+
+### Desktop App
+
+```bash
+# Download from harmony.example.com/download
+# Create identity → Create community → choose "This device" or "Harmony Cloud"
+# Your server starts automatically in the background
 ```
 
 ### Self-Hosted

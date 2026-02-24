@@ -23,6 +23,8 @@ export type ClientEvent =
   | 'role.updated'
   | 'role.deleted'
   | 'community.updated'
+  | 'community.info'
+  | 'sync'
   | 'error'
 
 export type FederationEvent = 'peer.connected' | 'peer.disconnected' | 'peer.message' | 'peer.sync' | 'peer.error'

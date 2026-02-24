@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createRoot } from 'solid-js'
 import { createAppStore } from '../src/store.js'
@@ -239,6 +240,115 @@ describe('AppStore', () => {
       expect(store.showCreateCommunity()).toBe(true)
       store.setShowMemberSidebar(false)
       expect(store.showMemberSidebar()).toBe(false)
+      dispose()
+    })
+  })
+})
+
+describe('localStorage Persistence', () => {
+  const testCommunities = [{ id: 'c1', name: 'Test Community', memberCount: 5 }]
+  const testChannels = [{ id: 'ch1', name: 'general', communityId: 'c1' }]
+
+  it('MUST persist communities to localStorage when setCommunities is called', () => {
+    createRoot((dispose) => {
+      const store = createAppStore()
+      store.setCommunities(testCommunities)
+      const stored = JSON.parse(localStorage.getItem('harmony:communities')!)
+      expect(stored).toEqual(testCommunities)
+      dispose()
+    })
+  })
+
+  it('MUST restore communities from localStorage on creation', () => {
+    localStorage.setItem('harmony:communities', JSON.stringify(testCommunities))
+    createRoot((dispose) => {
+      const store = createAppStore()
+      expect(store.communities()).toEqual(testCommunities)
+      dispose()
+    })
+  })
+
+  it('MUST persist activeCommunityId', () => {
+    createRoot((dispose) => {
+      const store = createAppStore()
+      store.setActiveCommunityId('c1')
+      expect(localStorage.getItem('harmony:activeCommunityId')).toBe('c1')
+      dispose()
+    })
+  })
+
+  it('MUST restore activeCommunityId on creation', () => {
+    localStorage.setItem('harmony:activeCommunityId', 'c1')
+    createRoot((dispose) => {
+      const store = createAppStore()
+      expect(store.activeCommunityId()).toBe('c1')
+      dispose()
+    })
+  })
+
+  it('MUST persist channels to localStorage', () => {
+    createRoot((dispose) => {
+      const store = createAppStore()
+      store.setChannels(testChannels)
+      const stored = JSON.parse(localStorage.getItem('harmony:channels')!)
+      expect(stored).toEqual(testChannels)
+      dispose()
+    })
+  })
+
+  it('MUST restore channels from localStorage on creation', () => {
+    localStorage.setItem('harmony:channels', JSON.stringify(testChannels))
+    createRoot((dispose) => {
+      const store = createAppStore()
+      expect(store.channels()).toEqual(testChannels)
+      dispose()
+    })
+  })
+
+  it('MUST persist activeChannelId', () => {
+    createRoot((dispose) => {
+      const store = createAppStore()
+      store.setActiveChannelId('ch1')
+      expect(localStorage.getItem('harmony:activeChannelId')).toBe('ch1')
+      dispose()
+    })
+  })
+
+  it('MUST persist did, mnemonic, displayName, theme', () => {
+    createRoot((dispose) => {
+      const store = createAppStore()
+      store.setDid('did:key:z6MkTest')
+      store.setMnemonic('word1 word2 word3')
+      store.setDisplayName('Alice')
+      store.setTheme('light')
+      expect(localStorage.getItem('harmony:did')).toBe('did:key:z6MkTest')
+      expect(localStorage.getItem('harmony:mnemonic')).toBe('word1 word2 word3')
+      expect(localStorage.getItem('harmony:displayName')).toBe('Alice')
+      expect(localStorage.getItem('harmony:theme')).toBe('light')
+      dispose()
+    })
+  })
+
+  it('MUST restore did, mnemonic, displayName, theme on creation', () => {
+    localStorage.setItem('harmony:did', 'did:key:z6MkRestored')
+    localStorage.setItem('harmony:mnemonic', 'restore words here')
+    localStorage.setItem('harmony:displayName', 'Bob')
+    localStorage.setItem('harmony:theme', 'light')
+    createRoot((dispose) => {
+      const store = createAppStore()
+      expect(store.did()).toBe('did:key:z6MkRestored')
+      expect(store.mnemonic()).toBe('restore words here')
+      expect(store.displayName()).toBe('Bob')
+      expect(store.theme()).toBe('light')
+      dispose()
+    })
+  })
+
+  it('MUST handle corrupted localStorage gracefully', () => {
+    localStorage.setItem('harmony:communities', '{not valid json!!')
+    createRoot((dispose) => {
+      const store = createAppStore()
+      expect(store.communities()).toEqual([])
       dispose()
     })
   })

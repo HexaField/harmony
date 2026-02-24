@@ -227,6 +227,10 @@ export function createAppStore(): AppStore {
           /* ignore sync errors */
         })
       }
+      // Request community info for member/presence data
+      for (const c of communities()) {
+        client.requestCommunityInfo(c.id)
+      }
     })
 
     client.on('disconnected' as any, () => {
@@ -280,7 +284,7 @@ export function createAppStore(): AppStore {
             id: m.id,
             content: m.content.text ?? '',
             authorDid: m.authorDID,
-            authorName: m.authorDID.substring(0, 12),
+            authorName: m.authorDID === did() ? displayName() || 'You' : m.authorDID.substring(0, 16),
             timestamp: m.timestamp,
             reactions: [] as Array<{ emoji: string; count: number; userReacted: boolean }>
           }))
@@ -289,6 +293,31 @@ export function createAppStore(): AppStore {
         if (event.channelId === activeChannelId()) {
           setMessages(mapped)
         }
+      }
+    })
+
+    client.on('community.info', (...args: unknown[]) => {
+      const event = args[0] as {
+        communityId: string
+        onlineMembers?: Array<{ did: string; status: string }>
+      }
+      if (event?.onlineMembers) {
+        const current = members()
+        const updated = [...current]
+        for (const om of event.onlineMembers) {
+          const existing = updated.find((m) => m.did === om.did)
+          if (existing) {
+            existing.status = om.status as 'online' | 'idle' | 'dnd' | 'offline'
+          } else {
+            updated.push({
+              did: om.did,
+              displayName: om.did.substring(0, 12),
+              roles: [],
+              status: om.status as 'online' | 'idle' | 'dnd' | 'offline'
+            })
+          }
+        }
+        setMembers(updated)
       }
     })
 

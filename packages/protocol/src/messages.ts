@@ -30,6 +30,7 @@ export type MessageType =
   | 'presence.update'
   | 'sync.request'
   | 'sync.state'
+  | 'community.info'
   // Server → Client
   | 'channel.message'
   | 'channel.message.updated'
@@ -57,6 +58,7 @@ export type MessageType =
   | 'role.deleted'
   | 'presence.changed'
   | 'sync.response'
+  | 'community.info.response'
   | 'error'
   // Voice
   | 'voice.join'
@@ -124,6 +126,7 @@ export const CLIENT_TO_SERVER_TYPES: MessageType[] = [
   'presence.update',
   'sync.request',
   'sync.state',
+  'community.info',
   // Phase 3
   'voice.join',
   'voice.leave',
@@ -174,6 +177,7 @@ export const SERVER_TO_CLIENT_TYPES: MessageType[] = [
   'role.deleted',
   'presence.changed',
   'sync.response',
+  'community.info.response',
   'error',
   // Phase 3
   'voice.participant.joined',

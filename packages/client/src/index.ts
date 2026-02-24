@@ -43,6 +43,7 @@ export interface CommunityInfo {
   creatorDID: string
   createdAt: string
   memberCount: number
+  channels?: Array<{ id: string; name: string; type: string }>
 }
 
 export interface ChannelInfo {
@@ -1146,6 +1147,9 @@ export class HarmonyClient {
       case 'sync.response':
         this.handleSyncResponse(msg)
         break
+      case 'community.info.response':
+        this.handleCommunityInfoResponse(msg)
+        break
       case 'thread.created':
         this.emitter.emit('message', msg.payload)
         break
@@ -1270,6 +1274,51 @@ export class HarmonyClient {
       if (member) member.presence = payload
     }
     this.emitter.emit('presence', { did: msg.sender, ...payload })
+  }
+
+  requestCommunityInfo(communityId: string): void {
+    this.send({
+      id: `info-req-${Date.now()}`,
+      type: 'community.info',
+      timestamp: new Date().toISOString(),
+      sender: this._did,
+      payload: { communityId }
+    })
+  }
+
+  private handleCommunityInfoResponse(msg: ProtocolMessage): void {
+    const payload = msg.payload as {
+      communityId: string
+      info: { id: string; name: string; channels?: Array<{ id: string; name: string; type: string }> } | null
+      onlineMembers: Array<{ did: string; status: string }>
+    }
+
+    const community = this._communities.get(payload.communityId)
+    if (community && payload.info) {
+      community.info.name = payload.info.name
+      if (payload.info.channels) {
+        community.info.channels = payload.info.channels
+      }
+    }
+
+    // Update member presence
+    if (community && payload.onlineMembers) {
+      for (const om of payload.onlineMembers) {
+        const existing = community.members.find((m) => m.did === om.did)
+        if (existing) {
+          existing.presence = { status: om.status as 'online' | 'idle' | 'dnd' | 'offline' }
+        } else {
+          community.members.push({
+            did: om.did,
+            roles: [],
+            joinedAt: new Date().toISOString(),
+            presence: { status: om.status as 'online' | 'idle' | 'dnd' | 'offline' }
+          })
+        }
+      }
+    }
+
+    this.emitter.emit('community.info', payload)
   }
 
   private handleSyncResponse(msg: ProtocolMessage): void {

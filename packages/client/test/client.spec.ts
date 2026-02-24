@@ -759,6 +759,235 @@ describe('@harmony/client', () => {
       await new Promise((r) => setTimeout(r, 100))
       await client.disconnect()
     })
+
+    it('MUST emit sync event with decoded messages', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      const community = await client.createCommunity({ name: 'Sync Event Test' })
+      const channelId = community.channels[0]?.id ?? 'ch1'
+
+      await client.sendMessage(community.id, channelId, 'sync-event-msg')
+      await new Promise((r) => setTimeout(r, 200))
+
+      const syncPromise = new Promise<{
+        communityId: string
+        channelId: string
+        messages: Array<{ content: { text: string } }>
+      }>((resolve) => {
+        client.on('sync', (...args: unknown[]) => {
+          resolve(args[0] as { communityId: string; channelId: string; messages: Array<{ content: { text: string } }> })
+        })
+      })
+
+      await client.syncChannel(community.id, channelId)
+      const event = await syncPromise
+
+      expect(event.communityId).toBe(community.id)
+      expect(event.channelId).toBe(channelId)
+      expect(event.messages.length).toBeGreaterThan(0)
+      expect(event.messages.some((m: { content: { text: string } }) => m.content.text === 'sync-event-msg')).toBe(true)
+
+      await client.disconnect()
+    })
+  })
+
+  describe('Content Decoding', () => {
+    it('MUST decode plaintext content { text } from synced messages', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      const community = await client.createCommunity({ name: 'Plaintext Decode' })
+      const channelId = community.channels[0]?.id ?? 'ch1'
+
+      await client.sendMessage(community.id, channelId, 'Hello')
+      await new Promise((r) => setTimeout(r, 200))
+
+      const syncPromise = new Promise<{ messages: Array<{ content: { text: string } }> }>((resolve) => {
+        client.on('sync', (...args: unknown[]) => {
+          resolve(args[0] as { messages: Array<{ content: { text: string } }> })
+        })
+      })
+
+      await client.syncChannel(community.id, channelId)
+      const event = await syncPromise
+
+      const msg = event.messages.find((m: { content: { text: string } }) => m.content.text === 'Hello')
+      expect(msg).toBeDefined()
+      expect(msg!.content.text).toBe('Hello')
+
+      await client.disconnect()
+    })
+
+    it('MUST decode Uint8Array ciphertext from synced messages', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      const community = await client.createCommunity({ name: 'Uint8Array Decode' })
+      const channelId = community.channels[0]?.id ?? 'ch1'
+
+      // Send a message — the server stores ciphertext as Uint8Array
+      await client.sendMessage(community.id, channelId, 'Hello')
+      await new Promise((r) => setTimeout(r, 200))
+
+      const syncPromise = new Promise<{ messages: Array<{ content: { text: string } }> }>((resolve) => {
+        client.on('sync', (...args: unknown[]) => {
+          resolve(args[0] as { messages: Array<{ content: { text: string } }> })
+        })
+      })
+
+      await client.syncChannel(community.id, channelId)
+      const event = await syncPromise
+
+      // The server may return ciphertext as Uint8Array; either way content should decode
+      expect(event.messages.length).toBeGreaterThan(0)
+      const decoded = event.messages[event.messages.length - 1]
+      expect(typeof decoded.content.text).toBe('string')
+      expect(decoded.content.text.length).toBeGreaterThan(0)
+      expect(decoded.content.text).not.toBe('[synced]')
+
+      await client.disconnect()
+    })
+
+    it('MUST decode serialized Uint8Array ciphertext (numeric keys) from synced messages', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      const community = await client.createCommunity({ name: 'Serialized Decode' })
+      const channelId = community.channels[0]?.id ?? 'ch1'
+
+      // Simulate a sync response with serialized Uint8Array ciphertext (numeric keys object)
+      // This format occurs when JSON serialization converts Uint8Array to { "0": 72, "1": 101, ... }
+      const syncPromise = new Promise<{ messages: Array<{ content: { text: string } }> }>((resolve) => {
+        client.on('sync', (...args: unknown[]) => {
+          resolve(args[0] as { messages: Array<{ content: { text: string } }> })
+        })
+      })
+
+      // Inject a fake sync response via the client's WebSocket message handler
+      // We need to craft a protocol message that looks like a sync.response
+      const fakeMsg = serialise({
+        id: 'fake-sync-1',
+        type: 'sync.response',
+        sender: 'server',
+        timestamp: new Date().toISOString(),
+        payload: {
+          communityId: community.id,
+          channelId,
+          messages: [
+            {
+              id: 'msg-serialized-1',
+              type: 'channel.send',
+              sender: identity.did,
+              timestamp: new Date().toISOString(),
+              payload: {
+                clock: { counter: 1, authorDID: identity.did },
+                channelId,
+                content: {
+                  ciphertext: { 0: 72, 1: 101, 2: 108, 3: 108, 4: 111 }
+                }
+              }
+            }
+          ],
+          hasMore: false,
+          latestClock: { counter: 1, authorDID: identity.did }
+        }
+      })
+
+      // Get the underlying ws connection and inject the message
+      const servers = client.servers()
+      const serverEntry = servers[0]
+      // Access internal ws via private field — cast to any for test
+      const clientAny = client as unknown as {
+        _servers: Map<string, { ws: { onmessage: ((event: { data: string }) => void) | null } }>
+      }
+      const wsEntry = clientAny._servers.get(serverEntry.url)
+      wsEntry?.ws?.onmessage?.({ data: fakeMsg })
+
+      const event = await syncPromise
+
+      expect(event.messages.length).toBeGreaterThan(0)
+      const msg = event.messages.find((m: { content: { text: string } }) => m.content.text === 'Hello')
+      expect(msg).toBeDefined()
+      expect(msg!.content.text).toBe('Hello')
+
+      await client.disconnect()
+    })
+
+    it('MUST fallback to [synced] when content is missing', async () => {
+      const { identity, keyPair, vp } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
+
+      const community = await client.createCommunity({ name: 'Fallback Decode' })
+      const channelId = community.channels[0]?.id ?? 'ch1'
+
+      const syncPromise = new Promise<{ messages: Array<{ content: { text: string } }> }>((resolve) => {
+        client.on('sync', (...args: unknown[]) => {
+          resolve(args[0] as { messages: Array<{ content: { text: string } }> })
+        })
+      })
+
+      // Inject a sync response with no content field
+      const fakeMsg = serialise({
+        id: 'fake-sync-2',
+        type: 'sync.response',
+        sender: 'server',
+        timestamp: new Date().toISOString(),
+        payload: {
+          communityId: community.id,
+          channelId,
+          messages: [
+            {
+              id: 'msg-no-content',
+              type: 'channel.send',
+              sender: identity.did,
+              timestamp: new Date().toISOString(),
+              payload: {
+                clock: { counter: 1, authorDID: identity.did },
+                channelId
+                // no content field
+              }
+            }
+          ],
+          hasMore: false,
+          latestClock: { counter: 1, authorDID: identity.did }
+        }
+      })
+
+      const servers = client.servers()
+      const clientAny = client as unknown as {
+        _servers: Map<string, { ws: { onmessage: ((event: { data: string }) => void) | null } }>
+      }
+      const wsEntry = clientAny._servers.get(servers[0].url)
+      wsEntry?.ws?.onmessage?.({ data: fakeMsg })
+
+      const event = await syncPromise
+
+      expect(event.messages.length).toBeGreaterThan(0)
+      const msg = event.messages.find((m: { content: { text: string } }) => m.content.text === '[synced]')
+      expect(msg).toBeDefined()
+      expect(msg!.content.text).toBe('[synced]')
+
+      await client.disconnect()
+    })
+  })
+
+  describe('Auto-VP Creation', () => {
+    it('MUST auto-create VP when connecting without explicit VP', async () => {
+      const { identity, keyPair } = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+
+      // Connect without providing vp parameter
+      await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair })
+      expect(client.isConnected()).toBe(true)
+
+      await client.disconnect()
+    })
   })
 
   describe('Multi-Server', () => {

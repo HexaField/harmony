@@ -842,6 +842,9 @@ export class HarmonyServer {
       case 'sync.request':
         await this.handleSyncRequest(conn, msg)
         break
+      case 'community.info':
+        await this.handleCommunityInfo(conn, msg)
+        break
       default:
         // Unknown message type — ignore
         break
@@ -1119,6 +1122,38 @@ export class HarmonyServer {
         conn.id
       )
     }
+  }
+
+  private async handleCommunityInfo(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { communityId: string }
+    const info = await this.communityManager.getInfo(payload.communityId)
+
+    // Also gather online presence from connected members
+    const connIds = this.communitySubscriptions.get(payload.communityId)
+    const onlineMembers: Array<{ did: string; status: string; displayName?: string }> = []
+    if (connIds) {
+      for (const cid of connIds) {
+        const c = this._connections.get(cid)
+        if (c) {
+          onlineMembers.push({
+            did: c.did,
+            status: c.presence?.status ?? 'online'
+          })
+        }
+      }
+    }
+
+    this.sendToConnection(conn, {
+      id: `info-${Date.now()}`,
+      type: 'community.info.response',
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: {
+        communityId: payload.communityId,
+        info: info ?? null,
+        onlineMembers
+      }
+    })
   }
 
   private async handleSyncRequest(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {

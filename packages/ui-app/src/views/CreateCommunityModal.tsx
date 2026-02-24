@@ -29,7 +29,7 @@ export const CreateCommunityModal: Component = () => {
   const store = useAppStore()
   const [step, setStep] = createSignal<'hosting' | 'details'>('hosting')
   const [hostingMode, setHostingMode] = createSignal<HostingMode | null>(null)
-  const [remoteUrl, setRemoteUrl] = createSignal('')
+  const [remoteUrl, setRemoteUrl] = createSignal(import.meta.env.VITE_DEFAULT_SERVER_URL || '')
   const [name, setName] = createSignal('')
   const [description, setDescription] = createSignal('')
   const [creating, setCreating] = createSignal(false)
@@ -175,7 +175,7 @@ export const CreateCommunityModal: Component = () => {
 
       const memberInfos: MemberData[] = communityState.members.map((m) => ({
         did: m.did,
-        displayName: m.displayName ?? m.did.substring(0, 16),
+        displayName: m.did === store.did() ? store.displayName() || 'You' : (m.displayName ?? m.did.substring(0, 16)),
         roles: m.roles,
         status: m.presence.status === 'online' ? ('online' as const) : ('offline' as const)
       }))

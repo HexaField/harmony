@@ -871,6 +871,119 @@ describe('@harmony/server', () => {
       expect(typeof payload.latestClock.counter).toBe('number')
       ws.close()
     })
+
+    it('MUST auto-subscribe connection to community on sync.request', async () => {
+      const alice = await createIdentity()
+      const bob = await createIdentity()
+
+      // Alice connects but does NOT manually subscribe
+      const aliceWs = await connectAndAuth(alice.vp)
+      const bobWs = await connectAndAuth(bob.vp)
+
+      // Subscribe bob manually so he can send messages
+      const conns = server.connections()
+      const bobConn = conns.find((c) => c.did === bob.did)!
+      server.subscribeToCommunity(bobConn.id, 'c1')
+
+      // Bob sends a message
+      bobWs.send(
+        serialise({
+          id: 'auto-sub-msg-1',
+          type: 'channel.send',
+          timestamp: new Date().toISOString(),
+          sender: bob.did,
+          payload: {
+            communityId: 'c1',
+            channelId: 'ch1',
+            content: { ciphertext: new Uint8Array([1]), epoch: 0, senderIndex: 0 },
+            nonce: 'as1',
+            clock: { counter: 1, authorDID: bob.did }
+          }
+        })
+      )
+
+      await new Promise((r) => setTimeout(r, 200))
+
+      // Alice sends sync.request (should auto-subscribe her)
+      await sendAndWait(aliceWs, {
+        id: 'auto-sub-sync',
+        type: 'sync.request',
+        timestamp: new Date().toISOString(),
+        sender: alice.did,
+        payload: { communityId: 'c1', channelId: 'ch1', limit: 50 }
+      })
+
+      // Now bob sends another message — alice should receive it in real-time
+      const aliceMsgPromise = waitForMessage(aliceWs)
+
+      bobWs.send(
+        serialise({
+          id: 'auto-sub-msg-2',
+          type: 'channel.send',
+          timestamp: new Date().toISOString(),
+          sender: bob.did,
+          payload: {
+            communityId: 'c1',
+            channelId: 'ch1',
+            content: { ciphertext: new Uint8Array([2]), epoch: 0, senderIndex: 0 },
+            nonce: 'as2',
+            clock: { counter: 2, authorDID: bob.did }
+          }
+        })
+      )
+
+      const received = await aliceMsgPromise
+      expect(received.type).toBe('channel.message')
+      expect(received.sender).toBe(bob.did)
+
+      aliceWs.close()
+      bobWs.close()
+    })
+
+    it('MUST add connection to conn.communities on sync.request', async () => {
+      const { vp, did } = await createIdentity()
+      const ws = await connectAndAuth(vp)
+
+      // Send sync.request without manual subscribe
+      await sendAndWait(ws, {
+        id: 'conn-communities-sync',
+        type: 'sync.request',
+        timestamp: new Date().toISOString(),
+        sender: did,
+        payload: { communityId: 'c1', channelId: 'ch1', limit: 50 }
+      })
+
+      const conn = server.connections().find((c) => c.did === did)!
+      expect(conn.communities).toContain('c1')
+      ws.close()
+    })
+
+    it('MUST not duplicate subscription on repeated sync.request', async () => {
+      const { vp, did } = await createIdentity()
+      const ws = await connectAndAuth(vp)
+
+      // Send two sync.requests for the same community
+      await sendAndWait(ws, {
+        id: 'dup-sync-1',
+        type: 'sync.request',
+        timestamp: new Date().toISOString(),
+        sender: did,
+        payload: { communityId: 'c1', channelId: 'ch1', limit: 50 }
+      })
+
+      await sendAndWait(ws, {
+        id: 'dup-sync-2',
+        type: 'sync.request',
+        timestamp: new Date().toISOString(),
+        sender: did,
+        payload: { communityId: 'c1', channelId: 'ch1', limit: 50 }
+      })
+
+      const conn = server.connections().find((c) => c.did === did)!
+      const c1Count = conn.communities.filter((c: string) => c === 'c1').length
+      expect(c1Count).toBe(1)
+      ws.close()
+    })
   })
 
   describe('Presence', () => {

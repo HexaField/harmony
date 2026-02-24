@@ -109,7 +109,16 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
     const data = event.data
     if (data?.type === 'harmony:oauth-complete' && data.provider === 'discord') {
       setDiscordLinked(true)
-      if (data.discordUsername) setDiscordUsername(data.discordUsername)
+      if (data.discordUsername) {
+        setDiscordUsername(data.discordUsername)
+        // Auto-fill display name if empty
+        if (!setupName().trim()) setSetupName(data.discordUsername)
+      }
+      // Deduplication: if the Discord account was already linked to a different DID,
+      // the portal returns existingDID — auto-recover that identity
+      if (data.existingDID && data.existingDID !== store.did()) {
+        handleDedup(data.existingDID)
+      }
     }
   }
   onMount(() => {
@@ -135,6 +144,42 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
     } catch {
       // Portal unavailable — no problem
     }
+  }
+
+  async function handleDedup(existingDID: string) {
+    // The user's Discord account is already linked to an existing Harmony identity.
+    // Fetch that identity's mnemonic hint or prompt recovery — for now, if we have the
+    // existing DID's mnemonic in localStorage (same device), auto-switch to it.
+    const storedMnemonic = (() => {
+      try {
+        return localStorage.getItem('harmony:mnemonic')
+      } catch {
+        return null
+      }
+    })()
+
+    if (storedMnemonic) {
+      try {
+        const crypto = createCryptoProvider()
+        const idMgr = new IdentityManager(crypto)
+        const result = await idMgr.createFromMnemonic(storedMnemonic)
+        if (result.identity.did === existingDID) {
+          // Same mnemonic → same identity, auto-login
+          store.setDid(existingDID)
+          store.setMnemonic(storedMnemonic)
+          store.setIdentity(result.identity)
+          store.setKeyPair(result.keyPair)
+          clearOnboardingState()
+          await initClientFromStore()
+          return
+        }
+      } catch {
+        /* fall through */
+      }
+    }
+
+    // Different device or mnemonic not available — tell the user
+    setError(t('SETUP_DEDUP_EXISTING', { did: existingDID }))
   }
 
   async function initClientFromStore() {
@@ -456,6 +501,10 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
                 <p class="text-sm text-green-400">✓ {t('SETUP_DISCORD_LINKED', { username: discordUsername() })}</p>
               </Show>
             </div>
+
+            <Show when={error()}>
+              <p class="mb-4 text-[var(--error)] text-sm">{error()}</p>
+            </Show>
 
             {/* Continue button (requires display name) */}
             <button

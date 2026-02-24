@@ -131,6 +131,10 @@ export class PortalService {
     return this.discordProfiles.get(did) ?? null
   }
 
+  resolveDiscordUser(discordId: string): string | null {
+    return this.discordLinks.get(discordId) || null
+  }
+
   async findLinkedIdentities(discordUserIds: string[]): Promise<Map<string, string>> {
     const result = new Map<string, string>()
     for (const id of discordUserIds) {

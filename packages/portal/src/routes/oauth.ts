@@ -167,11 +167,15 @@ export function oauthRoutes(portal: PortalService, reconciliationService?: Recon
 
       // Complete the OAuth link — issue VC
       // Generate a temporary key pair for the VC (the portal signs as issuer)
+      // Check if this Discord account is already linked to a different DID
+      const existingDID = portal.resolveDiscordUser?.(discordUser.id) || null
+      const isDedup = existingDID && existingDID !== pending.userDID
+
       const vc = await portal.completeOAuthLink({
         provider: 'discord',
         code: code as string,
         state: state as string,
-        userDID: pending.userDID,
+        userDID: isDedup ? existingDID : pending.userDID,
         userKeyPair: undefined as any, // Not needed — portal signs as issuer
         providerUserId: discordUser.id,
         providerUsername: discordUser.username
@@ -183,7 +187,7 @@ export function oauthRoutes(portal: PortalService, reconciliationService?: Recon
         const result = await reconciliationService.onDiscordLinked(
           discordUser.id,
           discordUser.username,
-          pending.userDID
+          isDedup ? existingDID : pending.userDID
         )
         reconciledCommunities = result.reconciledCommunities
       }
@@ -192,7 +196,8 @@ export function oauthRoutes(portal: PortalService, reconciliationService?: Recon
       if (pending.redirectUri) {
         const redirectUrl = new URL(pending.redirectUri)
         redirectUrl.searchParams.set('vc', JSON.stringify(vc))
-        redirectUrl.searchParams.set('did', pending.userDID)
+        redirectUrl.searchParams.set('did', isDedup ? existingDID : pending.userDID)
+        if (isDedup) redirectUrl.searchParams.set('existingDID', existingDID)
         res.redirect(redirectUrl.toString())
       } else {
         // Return HTML that posts result to opener and closes the popup
@@ -205,7 +210,7 @@ export function oauthRoutes(portal: PortalService, reconciliationService?: Recon
 <p style="color:#888">This window will close automatically.</p>
 </div>
 <script>
-try { window.opener && window.opener.postMessage({ type: 'harmony:oauth-complete', provider: 'discord', userDID: ${JSON.stringify(pending.userDID)}, discordUsername: ${JSON.stringify(discordUser.username)}, reconciledCommunities: ${JSON.stringify(reconciledCommunities)} }, '*'); } catch(e) {}
+try { window.opener && window.opener.postMessage({ type: 'harmony:oauth-complete', provider: 'discord', userDID: ${JSON.stringify(isDedup ? existingDID : pending.userDID)}, discordUsername: ${JSON.stringify(discordUser.username)}, reconciledCommunities: ${JSON.stringify(reconciledCommunities)}${isDedup ? `, existingDID: ${JSON.stringify(existingDID)}` : ''} }, '*'); } catch(e) {}
 setTimeout(() => window.close(), 2000);
 </script>
 </body></html>`

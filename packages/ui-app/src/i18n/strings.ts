@@ -275,6 +275,8 @@ export const en = {
   SETUP_DISCORD_NOT_LINKED: 'Not linked',
   SETUP_CONTINUE: 'Continue',
   SETUP_SKIP: "Skip — I'll do this later",
+  SETUP_DEDUP_EXISTING:
+    'This Discord account is already linked to an existing Harmony identity. Please recover that identity using your mnemonic backup phrase.',
   SETUP_WHATS_NEXT: 'What would you like to do?',
 
   // Shared

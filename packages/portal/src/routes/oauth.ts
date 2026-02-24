@@ -183,7 +183,21 @@ export function oauthRoutes(portal: PortalService): Router {
         redirectUrl.searchParams.set('did', pending.userDID)
         res.redirect(redirectUrl.toString())
       } else {
-        res.status(201).json({ vc, userDID: pending.userDID })
+        // Return HTML that posts result to opener and closes the popup
+        const html = `<!DOCTYPE html>
+<html><head><title>Discord Linked</title></head>
+<body style="background:#1a1a2e;color:#e0e0e0;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+<div style="text-align:center">
+<div style="font-size:3em;margin-bottom:0.5em">✅</div>
+<h2>Discord account linked!</h2>
+<p style="color:#888">This window will close automatically.</p>
+</div>
+<script>
+try { window.opener && window.opener.postMessage({ type: 'harmony:oauth-complete', provider: 'discord', userDID: ${JSON.stringify(pending.userDID)}, discordUsername: ${JSON.stringify(discordUser.username)} }, '*'); } catch(e) {}
+setTimeout(() => window.close(), 2000);
+</script>
+</body></html>`
+        res.status(200).type('html').send(html)
       }
     } catch (err: any) {
       res.status(500).json({ error: err.message })

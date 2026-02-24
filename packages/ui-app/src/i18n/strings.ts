@@ -227,7 +227,7 @@ export const en = {
   MIGRATION_BOT_SETUP_STEP3:
     '3. Enable "Server Members Intent" and "Message Content Intent" under Privileged Gateway Intents, then save.',
   MIGRATION_BOT_SETUP_STEP4:
-    '4. Go to "OAuth2" → "URL Generator". Select the "bot" scope, then tick these permissions: "Read Message History" (messages.read) and "View Channels" (guilds.channels.read).',
+    '4. Go to "OAuth2" → "URL Generator". First, tick the "bot" scope. In the "Bot Permissions" section that appears below, tick "Read Message History" and "View Channels".',
   MIGRATION_BOT_SETUP_STEP5:
     '5. Copy the generated URL at the bottom and open it in your browser to invite the bot to your server.',
   MIGRATION_BOT_SETUP_STEP6:

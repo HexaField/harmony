@@ -9,6 +9,8 @@ import { SearchOverlayView } from './SearchOverlayView.tsx'
 import { EmptyStateView } from './EmptyStateView.tsx'
 import { CreateCommunityModal } from './CreateCommunityModal.tsx'
 import { CreateChannelModal } from './CreateChannelModal.tsx'
+import { ChannelSettingsModal } from './ChannelSettingsModal.tsx'
+import { DelegationView } from './DelegationView.tsx'
 import { DMListView } from './DMListView.tsx'
 import { DMConversationView } from './DMConversationView.tsx'
 import { NewDMModal } from './NewDMModal.tsx'
@@ -101,6 +103,12 @@ export const MainLayout: Component = () => {
       <Show when={store.showNewDMModal()}>
         <NewDMModal />
       </Show>
+
+      {/* Channel settings modal */}
+      <ChannelSettingsModal />
+
+      {/* Delegation view */}
+      <DelegationView />
     </>
   )
 }

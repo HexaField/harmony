@@ -15,6 +15,15 @@ export const ChannelSidebarView: Component = () => {
   const voiceChannels = () =>
     store.channels().filter((c) => c.type === 'voice' && c.communityId === store.activeCommunityId())
 
+  const canManageChannels = () => {
+    const myDid = store.did()
+    const me = store.members().find((m) => m.did === myDid)
+    if (!me) return false
+    if (me.roles.includes('admin')) return true
+    const myRoles = store.roles().filter((r) => me.roles.includes(r.id))
+    return myRoles.some((r) => r.permissions.includes('manage_channels'))
+  }
+
   return (
     <div class="w-[var(--sidebar-width)] bg-[var(--bg-secondary)] flex flex-col shrink-0 border-r border-[var(--border)]">
       {/* Community header */}
@@ -79,7 +88,7 @@ export const ChannelSidebarView: Component = () => {
               return (
                 <button
                   onClick={() => store.setActiveChannelId(channel.id)}
-                  class="w-full flex items-center px-3 py-1.5 mx-2 rounded text-sm transition-colors"
+                  class="w-full flex items-center px-3 py-1.5 mx-2 rounded text-sm transition-colors group"
                   classList={{
                     'bg-[var(--bg-input)] text-[var(--text-primary)]': isActive(),
                     'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-input)]/50':
@@ -89,6 +98,18 @@ export const ChannelSidebarView: Component = () => {
                 >
                   <span class="mr-1.5 text-[var(--text-muted)]">#</span>
                   <span class="truncate">{channel.name}</span>
+                  <Show when={canManageChannels()}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        store.setShowChannelSettings(channel.id)
+                      }}
+                      class="ml-auto text-[var(--text-muted)] hover:text-[var(--text-primary)] opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+                      title={t('CHANNEL_SETTINGS')}
+                    >
+                      ⚙️
+                    </button>
+                  </Show>
                 </button>
               )
             }}

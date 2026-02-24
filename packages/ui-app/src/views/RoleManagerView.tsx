@@ -147,12 +147,23 @@ export const RoleManagerView: Component = () => {
         >
           <div class="flex justify-between items-center mb-4">
             <h2 class="text-lg font-bold">{t('ROLE_MANAGER_TITLE')}</h2>
-            <button
-              class="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-              onClick={() => store.setShowRoleManager(false)}
-            >
-              ✕
-            </button>
+            <div class="flex items-center gap-2">
+              <button
+                class="text-xs text-[var(--accent)] hover:underline"
+                onClick={() => {
+                  store.setShowRoleManager(false)
+                  store.setShowDelegationView(true)
+                }}
+              >
+                {t('DELEGATION_TITLE')}
+              </button>
+              <button
+                class="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                onClick={() => store.setShowRoleManager(false)}
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
           <Show when={canManageRoles()} fallback={<p class="text-[var(--text-muted)]">{t('ROLE_NO_ROLES')}</p>}>

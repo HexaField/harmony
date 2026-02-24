@@ -218,6 +218,15 @@ export function createAppStore(): AppStore {
     client.on('connected' as any, () => {
       updateConnectionStateFromClient(client)
       refreshServers()
+
+      // After reconnect, sync the active channel to load message history
+      const communityId = activeCommunityId()
+      const channelId = activeChannelId()
+      if (communityId && channelId) {
+        client.syncChannel(communityId, channelId).catch(() => {
+          /* ignore sync errors */
+        })
+      }
     })
 
     client.on('disconnected' as any, () => {
@@ -249,6 +258,37 @@ export function createAppStore(): AppStore {
         }
         addMessage(data)
         addChannelMessage(msg.channelId, data)
+      }
+    })
+
+    client.on('sync' as any, (...args: unknown[]) => {
+      const event = args[0] as {
+        communityId: string
+        channelId: string
+        messages: Array<{
+          id: string
+          channelId: string
+          authorDID: string
+          content: { text?: string }
+          timestamp: string
+        }>
+      }
+      if (event?.channelId && event.messages) {
+        const mapped = event.messages
+          .filter((m) => m.content?.text)
+          .map((m) => ({
+            id: m.id,
+            content: m.content.text ?? '',
+            authorDid: m.authorDID,
+            authorName: m.authorDID.substring(0, 12),
+            timestamp: m.timestamp,
+            reactions: [] as Array<{ emoji: string; count: number; userReacted: boolean }>
+          }))
+        setChannelMessages(event.channelId, mapped)
+        // If this is the active channel, update displayed messages too
+        if (event.channelId === activeChannelId()) {
+          setMessages(mapped)
+        }
       }
     })
 

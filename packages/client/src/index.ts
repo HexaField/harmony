@@ -1288,13 +1288,13 @@ export class HarmonyClient {
     const log = this._channelLogs.get(key)!
 
     for (const m of payload.messages) {
-      const p = m.payload as { clock?: LamportClock; channelId?: string }
+      const p = m.payload as { clock?: LamportClock; channelId?: string; content?: { text?: string } }
       const clock = p?.clock ?? { counter: 0, authorDID: m.sender }
       const decrypted: DecryptedMessage = {
         id: m.id,
         channelId: payload.channelId,
         authorDID: m.sender,
-        content: { text: '[synced]' },
+        content: { text: p?.content?.text ?? '[synced]' },
         timestamp: m.timestamp,
         clock,
         reactions: new Map(),
@@ -1312,6 +1312,13 @@ export class HarmonyClient {
       sub.messages = log.entries().map((e) => e.data)
       sub.hasMore = payload.hasMore
     }
+
+    // Emit sync event so UI can update
+    this.emitter.emit('sync', {
+      communityId: payload.communityId,
+      channelId: payload.channelId,
+      messages: log.entries().map((e) => e.data)
+    })
   }
 
   private send(msg: ProtocolMessage): void {

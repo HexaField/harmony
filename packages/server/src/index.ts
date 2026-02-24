@@ -1123,6 +1123,18 @@ export class HarmonyServer {
 
   private async handleSyncRequest(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
     const payload = msg.payload as { communityId: string; channelId: string; clock?: LamportClock; limit?: number }
+
+    // Ensure connection is subscribed to this community
+    if (payload.communityId && !conn.communities.includes(payload.communityId)) {
+      conn.communities.push(payload.communityId)
+    }
+    if (payload.communityId) {
+      if (!this.communitySubscriptions.has(payload.communityId)) {
+        this.communitySubscriptions.set(payload.communityId, new Set())
+      }
+      this.communitySubscriptions.get(payload.communityId)!.add(conn.id)
+    }
+
     const messages = await this.messageStore.getHistory({
       communityId: payload.communityId,
       channelId: payload.channelId,

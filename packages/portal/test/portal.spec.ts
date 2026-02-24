@@ -283,14 +283,19 @@ describe('@harmony/portal HTTP Server', () => {
     expect(body.did).toBe(did)
   })
 
-  it('POST /api/identity/link returns error without Discord config', async () => {
+  it('POST /api/identity/link returns redirect when Discord is configured, or 500 without', async () => {
     const res = await fetch(`${baseUrl}/api/identity/link`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider: 'discord', userDID: 'did:key:zTest' })
     })
-    // Without DISCORD_CLIENT_ID env var, should return 500
-    expect(res.status).toBe(500)
+    if (process.env.DISCORD_CLIENT_ID) {
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.redirectUrl).toContain('discord.com')
+    } else {
+      expect(res.status).toBe(500)
+    }
   })
 
   it('POST /api/identity/link rejects unsupported provider', async () => {
@@ -310,6 +315,20 @@ describe('@harmony/portal HTTP Server', () => {
   it('GET /api/oauth/discord/callback rejects missing params', async () => {
     const res = await fetch(`${baseUrl}/api/oauth/discord/callback`)
     expect(res.status).toBe(400)
+  })
+
+  it('GET /api/oauth/discord/callback rejects invalid state', async () => {
+    const res = await fetch(`${baseUrl}/api/oauth/discord/callback?code=fake&state=invalid`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('Invalid or expired')
+  })
+
+  it('GET /api/oauth/discord/callback returns error for OAuth error param', async () => {
+    const res = await fetch(`${baseUrl}/api/oauth/discord/callback?error=access_denied`)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('access_denied')
   })
 
   it.skip('GET /api/oauth/discord/authorize redirects to Discord (needs DISCORD_CLIENT_ID)', async () => {

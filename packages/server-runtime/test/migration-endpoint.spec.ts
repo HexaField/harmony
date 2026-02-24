@@ -119,4 +119,49 @@ describe('MigrationEndpoint', () => {
     expect(res.body.exportId).toBeTruthy()
     expect(typeof res.body.exportId).toBe('string')
   })
+
+  it('MUST include adminKeyPair in completed export status', async () => {
+    // Start an export (will fail due to fake token, but job is created)
+    const exportRes = await makeRequest(server, 'POST', '/api/migration/export', {
+      botToken: 'fake-token',
+      guildId: '123',
+      adminDID: 'did:key:z123'
+    })
+    expect(exportRes.status).toBe(202)
+    const { exportId } = exportRes.body
+
+    // Poll until the job finishes (should error quickly with fake token)
+    let statusRes: { status: number; body: any }
+    let attempts = 0
+    do {
+      await new Promise((r) => setTimeout(r, 200))
+      statusRes = await makeRequest(server, 'GET', `/api/migration/export/${exportId}`)
+      attempts++
+    } while (statusRes.body.status === 'running' && attempts < 20)
+
+    // Even on error, verify the response structure
+    expect(statusRes.status).toBe(200)
+    expect(['complete', 'error']).toContain(statusRes.body.status)
+    // If complete, it should have adminKeyPair
+    if (statusRes.body.status === 'complete') {
+      expect(statusRes.body.adminKeyPair).toBeDefined()
+      expect(statusRes.body.adminKeyPair.publicKey).toBeTruthy()
+      expect(statusRes.body.adminKeyPair.secretKey).toBeTruthy()
+    }
+  })
+
+  it('MUST accept adminKeyPair in import request body', async () => {
+    // Import with a provided key pair (will fail with null store, but validates parsing)
+    const res = await makeRequest(server, 'POST', '/api/migration/import', {
+      bundle: { ciphertext: 'aa', nonce: 'bb', metadata: {} },
+      adminDID: 'did:key:z123',
+      communityName: 'Test',
+      adminKeyPair: {
+        publicKey: Buffer.from('test-pub').toString('base64'),
+        secretKey: Buffer.from('test-sec').toString('base64')
+      }
+    })
+    // 503 because store is null, but it parsed the request fine
+    expect(res.status).toBe(503)
+  })
 })

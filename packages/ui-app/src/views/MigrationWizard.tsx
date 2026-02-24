@@ -64,16 +64,20 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
   /** Resolve the server WebSocket URL based on the hosting mode */
   function resolveServerUrl(): string {
     const mode = hostingMode()
-    if (mode === 'remote') return remoteUrl()
+    if (mode === 'remote') return remoteUrl() || import.meta.env.VITE_DEFAULT_SERVER_URL || 'ws://localhost:4000'
     if (mode === 'local') return 'ws://localhost:4000'
     // cloud/other: fall back to remote URL or default
-    return remoteUrl() || 'ws://localhost:4000'
+    return remoteUrl() || import.meta.env.VITE_DEFAULT_SERVER_URL || 'ws://localhost:4000'
   }
 
   function selectHosting(mode: HostingMode) {
     setHostingMode(mode)
     setError('')
-    setStep('bot-setup')
+    if (mode === 'remote') {
+      // Don't auto-advance — let user enter URL or accept default
+    } else {
+      setStep('bot-setup')
+    }
   }
 
   function phaseToProgress(progress: ExportProgress): number {
@@ -291,12 +295,18 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
               <div>
                 <label class="block text-sm font-medium mb-1">{t('SERVER_URL_LABEL')}</label>
                 <input
-                  value={remoteUrl()}
+                  value={remoteUrl() || import.meta.env.VITE_DEFAULT_SERVER_URL || 'ws://localhost:4000'}
                   onInput={(e) => setRemoteUrl(e.currentTarget.value)}
                   class="w-full p-3 rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm font-mono"
                   placeholder={t('SERVER_URL_PLACEHOLDER')}
                 />
               </div>
+              <button
+                onClick={() => setStep('bot-setup')}
+                class="w-full py-3 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-semibold transition-colors"
+              >
+                {t('MIGRATION_COMPLETE_CONTINUE')}
+              </button>
             </Show>
 
             <div class="flex gap-3 mt-4">

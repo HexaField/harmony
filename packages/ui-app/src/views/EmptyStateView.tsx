@@ -2,10 +2,12 @@ import { createSignal, Show, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 import type { CommunityInfo, ChannelInfo } from '../types.js'
+import { MigrationWizard } from './MigrationWizard.tsx'
 
 export const EmptyStateView: Component = () => {
   const store = useAppStore()
   const [showJoinInput, setShowJoinInput] = createSignal(false)
+  const [showMigration, setShowMigration] = createSignal(false)
   const [inviteLink, setInviteLink] = createSignal('')
   const [joining, setJoining] = createSignal(false)
   const [joinError, setJoinError] = createSignal('')
@@ -245,7 +247,18 @@ export const EmptyStateView: Component = () => {
               </button>
             </div>
           </Show>
+
+          <button
+            onClick={() => setShowMigration(true)}
+            class="w-full py-3 px-6 rounded-lg bg-[#5865F2]/20 hover:bg-[#5865F2]/30 border border-[#5865F2]/30 text-[var(--text-primary)] font-semibold transition-colors"
+          >
+            {t('ONBOARDING_IMPORT_DISCORD')}
+          </button>
         </div>
+
+        <Show when={showMigration()}>
+          <MigrationWizard initialStep="hosting" onClose={() => setShowMigration(false)} />
+        </Show>
 
         <div class="mt-6 pt-4 border-t border-[var(--border)]">
           <p class="text-xs text-[var(--text-muted)]">

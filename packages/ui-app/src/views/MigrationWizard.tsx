@@ -1,7 +1,8 @@
-import { createSignal, Show, For, type Component } from 'solid-js'
+import { createSignal, Show, For, onCleanup, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 import { createServerProvider, type HostingMode } from '../server-provider.js'
+import { startExport, pollExport, importBundle, type ExportProgress } from '../migration-client.js'
 
 type MigrationStep = 'intro' | 'hosting' | 'bot-setup' | 'bot-running' | 'importing' | 'linking' | 'complete'
 
@@ -13,6 +14,14 @@ const HOSTING_OPTIONS: Record<HostingMode, { icon: string; titleKey: string; des
   remote: { icon: '🔗', titleKey: 'HOSTING_REMOTE_TITLE', descKey: 'HOSTING_REMOTE_DESC' }
 }
 
+const PHASE_STRINGS: Record<string, string> = {
+  channels: 'MIGRATION_PHASE_CHANNELS',
+  roles: 'MIGRATION_PHASE_ROLES',
+  members: 'MIGRATION_PHASE_MEMBERS',
+  messages: 'MIGRATION_PHASE_MESSAGES',
+  encrypting: 'MIGRATION_PHASE_ENCRYPTING'
+}
+
 export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
   const store = useAppStore()
   const [step, setStep] = createSignal<MigrationStep>('intro')
@@ -21,19 +30,156 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
   const portalUrl = () => import.meta.env.VITE_PORTAL_URL || 'http://localhost:3001'
   const [botToken, setBotToken] = createSignal('')
   const [discordServerId, setDiscordServerId] = createSignal('')
-  const [exportProgress, _setExportProgress] = createSignal(0)
+  const [exportProgress, setExportProgress] = createSignal(0)
+  const [phaseText, setPhaseText] = createSignal('')
   const [error, setError] = createSignal('')
-  const [_exportId, _setExportId] = createSignal('')
+  const [, setExportId] = createSignal('')
+  const [, setServerUrl] = createSignal('')
+
+  let pollTimer: ReturnType<typeof setInterval> | undefined
+
+  onCleanup(() => {
+    if (pollTimer) clearInterval(pollTimer)
+  })
 
   const availableModes = provider.availableModes()
 
   const allSteps: MigrationStep[] = ['intro', 'hosting', 'bot-setup', 'bot-running', 'importing', 'linking', 'complete']
   const stepIndex = () => allSteps.indexOf(step())
 
+  /** Resolve the server WebSocket URL based on the hosting mode */
+  function resolveServerUrl(): string {
+    const mode = hostingMode()
+    if (mode === 'remote') return remoteUrl()
+    if (mode === 'local') return 'ws://localhost:4000'
+    // cloud/other: fall back to remote URL or default
+    return remoteUrl() || 'ws://localhost:4000'
+  }
+
   function selectHosting(mode: HostingMode) {
     setHostingMode(mode)
     setError('')
     setStep('bot-setup')
+  }
+
+  function phaseToProgress(progress: ExportProgress): number {
+    const phaseWeights: Record<string, [number, number]> = {
+      channels: [0, 10],
+      roles: [10, 20],
+      members: [20, 30],
+      messages: [30, 90],
+      encrypting: [90, 100]
+    }
+    const [start, end] = phaseWeights[progress.phase] || [0, 100]
+    const fraction = progress.total > 0 ? progress.current / progress.total : 0
+    return Math.round(start + (end - start) * fraction)
+  }
+
+  function updatePhaseText(progress: ExportProgress) {
+    const key = PHASE_STRINGS[progress.phase]
+    if (!key) {
+      setPhaseText('')
+      return
+    }
+    if (progress.phase === 'messages') {
+      setPhaseText(
+        t(key as any, {
+          channelName: progress.channelName || '...',
+          current: String(progress.current),
+          total: String(progress.total)
+        })
+      )
+    } else {
+      setPhaseText(t(key as any))
+    }
+  }
+
+  async function beginExport() {
+    setError('')
+    const url = resolveServerUrl()
+    setServerUrl(url)
+
+    try {
+      const id = await startExport({
+        serverUrl: url,
+        botToken: botToken(),
+        guildId: discordServerId(),
+        adminDID: store.did()
+      })
+      setExportId(id)
+      setStep('bot-running')
+      startPolling(url, id)
+    } catch (err: any) {
+      setError(t('MIGRATION_EXPORT_ERROR', { error: err.message || String(err) }))
+    }
+  }
+
+  function startPolling(url: string, id: string) {
+    if (pollTimer) clearInterval(pollTimer)
+    pollTimer = setInterval(async () => {
+      try {
+        const status = await pollExport(url, id)
+        if (status.progress) {
+          setExportProgress(phaseToProgress(status.progress))
+          updatePhaseText(status.progress)
+        }
+        if (status.status === 'complete') {
+          clearInterval(pollTimer!)
+          pollTimer = undefined
+          setExportProgress(100)
+          await doImport(url, status.bundle)
+        } else if (status.status === 'error') {
+          clearInterval(pollTimer!)
+          pollTimer = undefined
+          setError(t('MIGRATION_EXPORT_ERROR', { error: status.error || 'Unknown error' }))
+        }
+      } catch (err: any) {
+        clearInterval(pollTimer!)
+        pollTimer = undefined
+        setError(t('MIGRATION_EXPORT_ERROR', { error: err.message || String(err) }))
+      }
+    }, 2000)
+  }
+
+  async function doImport(url: string, bundle: any) {
+    setStep('importing')
+    setPhaseText(t('MIGRATION_PHASE_IMPORTING'))
+    try {
+      const result = await importBundle({
+        serverUrl: url,
+        bundle,
+        adminDID: store.did(),
+        communityName: bundle?.guild?.name || 'Imported Community'
+      })
+      // Populate the store with the imported community
+      const existing = store.communities()
+      store.setCommunities([
+        ...existing,
+        {
+          id: result.communityId,
+          name: bundle?.guild?.name || 'Imported Community',
+          description: '',
+          iconUrl: undefined,
+          serverUrl: url,
+          memberCount: result.members?.length || 0
+        }
+      ])
+      if (result.channels) {
+        store.setChannels([...store.channels(), ...result.channels])
+      }
+      store.setActiveCommunityId(result.communityId)
+      setStep('linking')
+    } catch (err: any) {
+      setError(t('MIGRATION_EXPORT_ERROR', { error: err.message || String(err) }))
+      setStep('bot-running') // allow retry
+    }
+  }
+
+  function retryExport() {
+    setError('')
+    setExportProgress(0)
+    setPhaseText('')
+    beginExport()
   }
 
   return (
@@ -59,6 +205,11 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
         <Show when={error()}>
           <div class="mb-4 p-3 rounded-lg bg-[var(--error)]/20 border border-[var(--error)]/30 text-[var(--error)] text-sm">
             {error()}
+            <Show when={step() === 'bot-running'}>
+              <button onClick={retryExport} class="ml-3 underline hover:no-underline text-sm">
+                {t('MIGRATION_EXPORT_RETRY')}
+              </button>
+            </Show>
           </div>
         </Show>
 
@@ -203,7 +354,7 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
                     return
                   }
                   setError('')
-                  setStep('bot-running')
+                  beginExport()
                 }}
                 disabled={!botToken() || !discordServerId()}
                 class="flex-1 py-3 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-semibold transition-colors disabled:opacity-50"
@@ -229,6 +380,10 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
             </div>
             <p class="text-sm text-[var(--text-muted)]">{exportProgress()}%</p>
 
+            <Show when={phaseText()}>
+              <p class="text-sm text-[var(--text-secondary)]">{phaseText()}</p>
+            </Show>
+
             <p class="text-xs text-[var(--text-muted)] mt-4">{t('MIGRATION_EXPORTING_NOTE')}</p>
           </div>
         </Show>
@@ -239,6 +394,9 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
             <div class="text-4xl mb-2">🔐</div>
             <h3 class="text-lg font-semibold">{t('MIGRATION_IMPORTING')}</h3>
             <p class="text-sm text-[var(--text-secondary)]">{t('MIGRATION_IMPORTING_DESC')}</p>
+            <Show when={phaseText()}>
+              <p class="text-sm text-[var(--text-secondary)]">{phaseText()}</p>
+            </Show>
             <div class="flex justify-center mt-4">
               <div class="animate-spin w-8 h-8 border-2 border-[var(--accent)] border-t-transparent rounded-full" />
             </div>

@@ -175,6 +175,14 @@ describe('@harmony/cloud', () => {
       expect(discordLink.lookupByDiscordId('unknown')).toBeNull()
     })
 
+    it.skip('GET /api/oauth/discord/authorize redirects to Discord (needs DISCORD_CLIENT_ID)', async () => {
+      // Requires DISCORD_CLIENT_ID and DISCORD_REDIRECT_URI env vars
+    })
+
+    it.skip('GET /api/oauth/discord/callback exchanges real code (needs Discord credentials)', async () => {
+      // Requires real Discord OAuth credentials
+    })
+
     it('MUST consume state after use (prevent replay)', async () => {
       const link = discordLink.initiateLink({
         userDID: 'did:key:z1',

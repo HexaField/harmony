@@ -22,6 +22,8 @@
     "@harmony/federation": "workspace:*",
     "@harmony/identity": "workspace:*",
     "@harmony/media": "workspace:*",
+    "@harmony/migration": "workspace:*",
+    "@harmony/migration-bot": "workspace:*",
     "@harmony/moderation": "workspace:*",
     "@harmony/protocol": "workspace:*",
     "@harmony/quads": "workspace:*",

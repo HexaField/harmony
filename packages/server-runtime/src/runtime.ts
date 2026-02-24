@@ -17,6 +17,7 @@ import { SQLiteQuadStore } from './sqlite-quad-store.js'
 import { loadConfig, type RuntimeConfig } from './config.js'
 import { createLogger, type Logger } from './logger.js'
 import { MediaFileStore } from './media-store.js'
+import { MigrationEndpoint } from './migration-endpoint.js'
 import { t } from './strings.js'
 
 export interface ServerStatus {
@@ -59,6 +60,7 @@ export class ServerRuntime {
   private httpServer: HttpServer | null = null
   private store: SQLiteQuadStore | null = null
   private mediaStore: MediaFileStore | null = null
+  private migrationEndpoint: MigrationEndpoint | null = null
   private logger: Logger
   private startTime: number = 0
   private _running = false
@@ -83,7 +85,8 @@ export class ServerRuntime {
         maxChannelsPerCommunity: 500,
         maxMessageSize: 16384,
         mediaMaxSize: 52428800
-      }
+      },
+      portal: { enabled: false }
     }
     this.configPath = configPath
     this.logger = createLogger({
@@ -152,6 +155,9 @@ export class ServerRuntime {
 
     this.server = new HarmonyServer(serverConfig)
 
+    // Init migration endpoint
+    this.migrationEndpoint = new MigrationEndpoint(this.logger, this.store)
+
     // Set up health endpoint HTTP server
     if (this.config.server.tls?.cert && this.config.server.tls?.key) {
       try {
@@ -168,9 +174,35 @@ export class ServerRuntime {
     }
 
     this.httpServer.on('request', (req: IncomingMessage, res: ServerResponse) => {
+      // CORS preflight
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204, {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type'
+        })
+        res.end()
+        return
+      }
+
       if (req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ status: t('HEALTH_OK'), uptime: this.getUptime() }))
+      } else if (req.url?.startsWith('/api/migration/')) {
+        void this.migrationEndpoint!.handleRequest(req, res)
+          .then((handled) => {
+            if (!handled) {
+              res.writeHead(404)
+              res.end()
+            }
+          })
+          .catch((err) => {
+            this.logger.error('Migration endpoint error', { error: String(err) })
+            if (!res.headersSent) {
+              res.writeHead(500, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ error: 'Internal server error' }))
+            }
+          })
       } else {
         res.writeHead(404)
         res.end()

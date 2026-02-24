@@ -1,3 +1,4 @@
+export { DiscordRESTAPI } from './discord-api.js'
 import type { KeyPair, CryptoProvider } from '@harmony/crypto'
 import {
   MigrationService,

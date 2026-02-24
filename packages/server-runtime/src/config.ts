@@ -62,6 +62,16 @@ export interface LoggingSection {
   file?: string
 }
 
+export interface PortalSection {
+  enabled: boolean
+  port?: number
+  discord?: {
+    clientId: string
+    clientSecret: string
+    redirectUri: string
+  }
+}
+
 export interface LimitsSection {
   maxConnections: number
   maxCommunities: number
@@ -80,6 +90,7 @@ export interface RuntimeConfig {
   voice: VoiceSection
   logging: LoggingSection
   limits: LimitsSection
+  portal: PortalSection
 }
 
 const defaults: RuntimeConfig = {
@@ -91,6 +102,7 @@ const defaults: RuntimeConfig = {
   moderation: {},
   voice: { enabled: false },
   logging: { level: 'info', format: 'json' },
+  portal: { enabled: false },
   limits: {
     maxConnections: 1000,
     maxCommunities: 100,
@@ -190,6 +202,20 @@ function mergeWithDefaults(raw: Record<string, unknown>): RuntimeConfig {
       config.logging.format = s.format as LoggingSection['format']
     }
     if (typeof s.file === 'string') config.logging.file = s.file
+  }
+
+  if (raw.portal && typeof raw.portal === 'object') {
+    const s = raw.portal as Record<string, unknown>
+    if (typeof s.enabled === 'boolean') config.portal.enabled = s.enabled
+    if (typeof s.port === 'number') config.portal.port = s.port
+    if (s.discord && typeof s.discord === 'object') {
+      const d = s.discord as Record<string, unknown>
+      config.portal.discord = {
+        clientId: String(d.clientId ?? ''),
+        clientSecret: String(d.clientSecret ?? ''),
+        redirectUri: String(d.redirectUri ?? '')
+      }
+    }
   }
 
   if (raw.limits && typeof raw.limits === 'object') {

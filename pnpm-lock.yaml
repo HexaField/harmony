@@ -1004,6 +1004,12 @@ importers:
       '@harmony/media':
         specifier: workspace:*
         version: link:../media
+      '@harmony/migration':
+        specifier: workspace:*
+        version: link:../migration
+      '@harmony/migration-bot':
+        specifier: workspace:*
+        version: link:../migration-bot
       '@harmony/moderation':
         specifier: workspace:*
         version: link:../moderation

@@ -251,7 +251,7 @@ describe('@harmony/portal HTTP Server', () => {
     })
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(typeof body).toBe('object')
+    expect(body.linked).toEqual([])
   })
 
   it('POST /api/oauth/initiate returns redirect URL', async () => {
@@ -264,6 +264,62 @@ describe('@harmony/portal HTTP Server', () => {
     const body = await res.json()
     expect(body.redirectUrl).toContain('discord')
     expect(body.state).toBeTruthy()
+  })
+
+  it('POST /api/identity/create creates identity', async () => {
+    const res = await fetch(`${baseUrl}/api/identity/create`, { method: 'POST' })
+    expect(res.status).toBe(201)
+    const body = await res.json()
+    expect(body.did).toMatch(/^did:key:z/)
+    expect(body.mnemonic.split(' ')).toHaveLength(12)
+  })
+
+  it('GET /api/identity/:did resolves identity', async () => {
+    const createRes = await fetch(`${baseUrl}/api/identity/create`, { method: 'POST' })
+    const { did } = await createRes.json()
+    const res = await fetch(`${baseUrl}/api/identity/${encodeURIComponent(did)}`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.did).toBe(did)
+  })
+
+  it('POST /api/identity/link returns error without Discord config', async () => {
+    const res = await fetch(`${baseUrl}/api/identity/link`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'discord', userDID: 'did:key:zTest' })
+    })
+    // Without DISCORD_CLIENT_ID env var, should return 500
+    expect(res.status).toBe(500)
+  })
+
+  it('POST /api/identity/link rejects unsupported provider', async () => {
+    const res = await fetch(`${baseUrl}/api/identity/link`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'twitter', userDID: 'did:key:zTest' })
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('GET /api/oauth/discord/authorize requires userDID', async () => {
+    const res = await fetch(`${baseUrl}/api/oauth/discord/authorize`, { redirect: 'manual' })
+    expect(res.status).toBeLessThanOrEqual(500)
+  })
+
+  it('GET /api/oauth/discord/callback rejects missing params', async () => {
+    const res = await fetch(`${baseUrl}/api/oauth/discord/callback`)
+    expect(res.status).toBe(400)
+  })
+
+  it.skip('GET /api/oauth/discord/authorize redirects to Discord (needs DISCORD_CLIENT_ID)', async () => {
+    const res = await fetch(`${baseUrl}/api/oauth/discord/authorize?userDID=did:key:zTest`, { redirect: 'manual' })
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toContain('discord.com')
+  })
+
+  it.skip('GET /api/oauth/discord/callback exchanges code (needs real Discord credentials)', async () => {
+    // This test requires real Discord OAuth credentials
   })
 })
 

@@ -248,7 +248,18 @@ export const en = {
   MIGRATION_COMPLETE_TITLE: 'Migration complete',
   MIGRATION_COMPLETE_DESC:
     'Your community is ready. Members can link their Discord accounts to claim their Harmony identity.',
-  MIGRATION_COMPLETE_CONTINUE: 'Go to your community'
+  MIGRATION_COMPLETE_CONTINUE: 'Go to your community',
+
+  // Migration phases
+  MIGRATION_PHASE_CHANNELS: 'Fetching channels...',
+  MIGRATION_PHASE_ROLES: 'Fetching roles...',
+  MIGRATION_PHASE_MEMBERS: 'Fetching members...',
+  MIGRATION_PHASE_MESSAGES: 'Exporting #{channelName} ({current} of {total} channels)...',
+  MIGRATION_PHASE_ENCRYPTING: 'Encrypting export...',
+  MIGRATION_PHASE_IMPORTING: 'Creating community...',
+  MIGRATION_EXPORT_ERROR: 'Export failed: {error}',
+  MIGRATION_EXPORT_RETRY: 'Retry export',
+  MIGRATION_IMPORT_SUCCESS: 'Community imported successfully!'
 } as const
 
 export type StringKey = keyof typeof en

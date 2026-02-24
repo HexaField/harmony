@@ -1413,7 +1413,7 @@ export class HarmonyServer {
     return dids
   }
 
-  private async handleReconciliation(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+  private async handleReconciliation(_conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
     const payload = msg.payload as {
       did: string
       reconciledCommunities: string[]

@@ -3,6 +3,7 @@ import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 import type { CommunityInfo, ChannelInfo } from '../types.js'
 import { MigrationWizard } from './MigrationWizard.tsx'
+import { FriendFinderView } from './FriendFinderView.tsx'
 
 export const EmptyStateView: Component = () => {
   const store = useAppStore()
@@ -254,10 +255,21 @@ export const EmptyStateView: Component = () => {
           >
             {t('ONBOARDING_IMPORT_DISCORD')}
           </button>
+
+          <button
+            onClick={() => store.setShowFriendFinder(true)}
+            class="w-full py-3 px-6 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)] font-semibold transition-colors"
+          >
+            {t('FRIENDS_TITLE')}
+          </button>
         </div>
 
         <Show when={showMigration()}>
           <MigrationWizard onClose={() => setShowMigration(false)} />
+        </Show>
+
+        <Show when={store.showFriendFinder()}>
+          <FriendFinderView />
         </Show>
 
         <div class="mt-6 pt-4 border-t border-[var(--border)]">

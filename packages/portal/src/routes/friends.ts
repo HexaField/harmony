@@ -38,7 +38,7 @@ export function friendsRoutes(portal: PortalService): Router {
   // GET /api/friends/:did — Get a user's discovered friends
   router.get('/friends/:did', async (req: Request, res: Response) => {
     try {
-      const { did } = req.params
+      const { did } = req.params as { did: string }
       const friends = await portal.discoverFriends(did)
       res.json({ friends })
     } catch (err: any) {

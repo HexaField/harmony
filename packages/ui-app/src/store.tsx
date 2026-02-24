@@ -173,6 +173,28 @@ export interface AppStore {
   setShowFriendFinder: (s: boolean) => void
   autoJoinedCommunities: () => Array<{ communityId: string; communityName: string }>
   addAutoJoinedCommunity: (c: { communityId: string; communityName: string }) => void
+
+  // Data Claim
+  hasClaimedData: () => boolean
+  setHasClaimedData: (v: boolean) => void
+  claimedDataMeta: () => {
+    messageCount: number
+    channelCount: number
+    serverCount: number
+    dateRange: { earliest: string; latest: string } | null
+  } | null
+  setClaimedDataMeta: (
+    m: {
+      messageCount: number
+      channelCount: number
+      serverCount: number
+      dateRange: { earliest: string; latest: string } | null
+    } | null
+  ) => void
+  showDataClaim: () => boolean
+  setShowDataClaim: (s: boolean) => void
+  showDataBrowser: () => boolean
+  setShowDataBrowser: (s: boolean) => void
 }
 
 // ── localStorage persistence helpers ──────────────────────────────
@@ -420,6 +442,34 @@ export function createAppStore(): AppStore {
   >([])
   const addAutoJoinedCommunity = (c: { communityId: string; communityName: string }) => {
     setAutoJoinedCommunities((prev) => [...prev, c])
+  }
+
+  // Data Claim state
+  const [hasClaimedData, setHasClaimedData] = createSignal(restore('hasClaimedData') === 'true')
+  const [claimedDataMeta, setClaimedDataMeta] = createSignal<{
+    messageCount: number
+    channelCount: number
+    serverCount: number
+    dateRange: { earliest: string; latest: string } | null
+  } | null>(() => {
+    try {
+      const raw = restore('claimedDataMeta')
+      return raw ? JSON.parse(raw) : null
+    } catch {
+      return null
+    }
+  })
+  const [showDataClaim, setShowDataClaim] = createSignal(false)
+  const [showDataBrowser, setShowDataBrowser] = createSignal(false)
+
+  // Wrap setters to persist
+  const _setHasClaimedData = (v: boolean) => {
+    setHasClaimedData(v)
+    persist('hasClaimedData', String(v))
+  }
+  const _setClaimedDataMeta = (m: typeof claimedDataMeta extends () => infer R ? R : never) => {
+    setClaimedDataMeta(m as any)
+    persist('claimedDataMeta', m ? JSON.stringify(m) : null)
   }
 
   const [roles, _setRoles] = createSignal<RoleInfo[]>([])
@@ -841,6 +891,41 @@ export function createAppStore(): AppStore {
       setVoiceChannelId(null)
       setVoiceUsers([])
     })
+
+    client.on('community.auto-joined' as any, (...args: unknown[]) => {
+      const event = args[0] as {
+        communityId: string
+        communityName: string
+        description?: string
+        channels?: Array<{ id: string; name: string; type: string }>
+      }
+      if (event?.communityId) {
+        // Add community to store
+        const communityInfo: CommunityInfo = {
+          id: event.communityId,
+          name: event.communityName || 'Community',
+          description: event.description,
+          memberCount: 0
+        }
+        setCommunities([...communities(), communityInfo])
+
+        // Add channels
+        if (event.channels) {
+          const channelInfos = event.channels.map((ch) => ({
+            id: ch.id,
+            name: ch.name,
+            type: ch.type as 'text' | 'voice' | 'announcement',
+            communityId: event.communityId
+          }))
+          setChannels([...channels(), ...channelInfos])
+        }
+
+        addAutoJoinedCommunity({
+          communityId: event.communityId,
+          communityName: event.communityName
+        })
+      }
+    })
   }
 
   function updateConnectionStateFromClient(client: HarmonyClient) {
@@ -1005,7 +1090,21 @@ export function createAppStore(): AppStore {
     isDeafened,
     setDeafened,
     speakingUsers,
-    setSpeaking
+    setSpeaking,
+    friends,
+    setFriends,
+    showFriendFinder,
+    setShowFriendFinder,
+    autoJoinedCommunities,
+    addAutoJoinedCommunity,
+    hasClaimedData,
+    setHasClaimedData: _setHasClaimedData,
+    claimedDataMeta,
+    setClaimedDataMeta: _setClaimedDataMeta,
+    showDataClaim,
+    setShowDataClaim,
+    showDataBrowser,
+    setShowDataBrowser
   }
 }
 

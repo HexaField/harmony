@@ -2,7 +2,7 @@ import { createSignal, Show, For, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 
-type SettingsSection = 'identity' | 'servers' | 'appearance' | 'about'
+type SettingsSection = 'identity' | 'servers' | 'friends' | 'appearance' | 'about'
 
 export const SettingsView: Component = () => {
   const store = useAppStore()
@@ -22,6 +22,7 @@ export const SettingsView: Component = () => {
   const navItems: { key: SettingsSection; label: () => string }[] = [
     { key: 'identity', label: () => t('SETTINGS_IDENTITY') },
     { key: 'servers', label: () => t('SETTINGS_SERVERS') },
+    { key: 'friends', label: () => t('FRIENDS_CONNECTIONS') },
     { key: 'appearance', label: () => t('SETTINGS_APPEARANCE') },
     { key: 'about', label: () => t('SETTINGS_ABOUT') }
   ]
@@ -149,6 +150,23 @@ export const SettingsView: Component = () => {
           <button class="py-2 px-4 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-sm font-semibold transition-colors">
             {t('SETTINGS_ADD_SERVER')}
           </button>
+        </Show>
+
+        {/* Friends & Connections */}
+        <Show when={section() === 'friends'}>
+          <h3 class="text-xl font-bold mb-6">{t('FRIENDS_CONNECTIONS')}</h3>
+          <div class="bg-[var(--bg-surface)] p-4 rounded-lg mb-4">
+            <p class="text-sm text-[var(--text-secondary)] mb-4">{t('FRIENDS_DISCORD')}</p>
+            <button
+              onClick={() => {
+                store.setShowSettings(false)
+                store.setShowFriendFinder(true)
+              }}
+              class="py-2 px-4 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-sm font-semibold transition-colors"
+            >
+              {t('FRIENDS_FIND')}
+            </button>
+          </div>
         </Show>
 
         {/* Appearance */}

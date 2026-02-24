@@ -1288,13 +1288,34 @@ export class HarmonyClient {
     const log = this._channelLogs.get(key)!
 
     for (const m of payload.messages) {
-      const p = m.payload as { clock?: LamportClock; channelId?: string; content?: { text?: string } }
+      const p = m.payload as { clock?: LamportClock; channelId?: string; content?: EncryptedContent | DecryptedContent }
       const clock = p?.clock ?? { counter: 0, authorDID: m.sender }
+
+      // Extract text from content — may be plaintext { text } or encrypted { ciphertext }
+      let text = '[synced]'
+      if (p?.content) {
+        const c = p.content as unknown as Record<string, unknown>
+        if (typeof c.text === 'string') {
+          text = c.text
+        } else if (c.ciphertext) {
+          // Decode ciphertext bytes to string (plaintext in dev mode)
+          const ct = c.ciphertext
+          if (ct instanceof Uint8Array) {
+            text = new TextDecoder().decode(ct)
+          } else if (typeof ct === 'object' && ct !== null) {
+            // Serialized Uint8Array as { 0: byte, 1: byte, ... }
+            const keys = Object.keys(ct as Record<string, number>).sort((a, b) => Number(a) - Number(b))
+            const bytes = new Uint8Array(keys.map((k) => (ct as Record<string, number>)[k]))
+            text = new TextDecoder().decode(bytes)
+          }
+        }
+      }
+
       const decrypted: DecryptedMessage = {
         id: m.id,
         channelId: payload.channelId,
         authorDID: m.sender,
-        content: { text: p?.content?.text ?? '[synced]' },
+        content: { text },
         timestamp: m.timestamp,
         clock,
         reactions: new Map(),

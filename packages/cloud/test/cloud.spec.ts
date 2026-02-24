@@ -210,7 +210,8 @@ describe('@harmony/cloud', () => {
       hosting = new HostingService(crypto, {
         maxInstancesPerUser: 3,
         defaultMaxStorageBytes: 1024,
-        serverRuntimePath: '/nonexistent/harmony-server.js'
+        serverRuntimePath: '/nonexistent/harmony-server.js',
+        basePort: 19000 + Math.floor(Math.random() * 10000)
       })
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)

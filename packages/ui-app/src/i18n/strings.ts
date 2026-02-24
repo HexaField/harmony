@@ -50,6 +50,20 @@ export const en = {
   // DM
   DM_NEW: 'New message',
   DM_EMPTY: 'No direct messages',
+  DM_SECTION_TITLE: 'Direct Messages',
+  DM_SEND_PLACEHOLDER: 'Message {recipient}',
+  DM_NEW_TITLE: 'New Direct Message',
+  DM_NEW_RECIPIENT_LABEL: 'Recipient DID',
+  DM_NEW_RECIPIENT_PLACEHOLDER: 'Enter a DID or select a member',
+  DM_NEW_START: 'Start conversation',
+  DM_NEW_CANCEL: 'Cancel',
+  DM_NEW_INVALID_DID: 'Please enter a valid DID',
+  DM_CONVERSATION_EMPTY: 'No messages yet. Say hello!',
+  DM_TYPING_SINGLE: '{user} is typing...',
+  DM_TYPING_MULTIPLE: '{count} people are typing...',
+  DM_BACK_TO_COMMUNITY: 'Back to community',
+  DM_UNREAD_COUNT: '{count} unread',
+  DM_OR_SELECT_MEMBER: 'Or select a community member:',
 
   // Onboarding — mnemonic backup
   ONBOARDING_MNEMONIC_WARNING:

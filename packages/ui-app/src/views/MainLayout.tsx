@@ -9,6 +9,9 @@ import { SearchOverlayView } from './SearchOverlayView.tsx'
 import { EmptyStateView } from './EmptyStateView.tsx'
 import { CreateCommunityModal } from './CreateCommunityModal.tsx'
 import { CreateChannelModal } from './CreateChannelModal.tsx'
+import { DMListView } from './DMListView.tsx'
+import { DMConversationView } from './DMConversationView.tsx'
+import { NewDMModal } from './NewDMModal.tsx'
 
 export const MainLayout: Component = () => {
   const store = useAppStore()
@@ -37,13 +40,17 @@ export const MainLayout: Component = () => {
           {/* Server list bar (left icon strip) */}
           <ServerListBar />
 
-          {/* Channel sidebar */}
-          <ChannelSidebarView />
+          {/* Channel sidebar or DM list */}
+          <Show when={store.showDMView()} fallback={<ChannelSidebarView />}>
+            <DMListView />
+          </Show>
 
           {/* Main content area */}
           <div class="flex flex-col flex-1 min-w-0">
             {/* Title bar */}
-            <TitleBarView />
+            <Show when={!store.showDMView()}>
+              <TitleBarView />
+            </Show>
 
             {/* Connection state banner */}
             <Show when={store.connectionState() === 'disconnected' && store.communities().length > 0}>
@@ -62,8 +69,10 @@ export const MainLayout: Component = () => {
               </div>
             </Show>
 
-            {/* Message area */}
-            <MessageArea />
+            {/* Message area — DM or channel */}
+            <Show when={store.showDMView() && store.activeDMRecipient()} fallback={<MessageArea />}>
+              <DMConversationView />
+            </Show>
           </div>
 
           {/* Member sidebar (right) */}
@@ -86,6 +95,11 @@ export const MainLayout: Component = () => {
       {/* Create channel modal */}
       <Show when={store.showCreateChannel()}>
         <CreateChannelModal />
+      </Show>
+
+      {/* New DM modal */}
+      <Show when={store.showNewDMModal()}>
+        <NewDMModal />
       </Show>
     </>
   )

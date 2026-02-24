@@ -62,6 +62,21 @@ export interface AppStore {
 
   // DMs
   dmConversations: () => DMConversationInfo[]
+  setDMConversations: (c: DMConversationInfo[]) => void
+  addDMConversation: (c: DMConversationInfo) => void
+  activeDMRecipient: () => string | null
+  setActiveDMRecipient: (did: string | null) => void
+  dmMessages: (recipientDid: string) => MessageData[]
+  addDMMessage: (recipientDid: string, m: MessageData) => void
+  setDMMessages: (recipientDid: string, msgs: MessageData[]) => void
+  updateDMMessage: (recipientDid: string, messageId: string, newContent: string) => void
+  removeDMMessage: (recipientDid: string, messageId: string) => void
+  markDMRead: (recipientDid: string) => void
+  showDMView: () => boolean
+  setShowDMView: (s: boolean) => void
+  showNewDMModal: () => boolean
+  setShowNewDMModal: (s: boolean) => void
+  dmTypingUsers: () => string[]
 
   // Theme
   theme: () => 'dark' | 'light'
@@ -172,7 +187,115 @@ export function createAppStore(): AppStore {
   }
   const [messages, setMessages] = createSignal<MessageData[]>([])
   const [members, setMembers] = createSignal<MemberData[]>([])
-  const [dmConversations] = createSignal<DMConversationInfo[]>([])
+  const [dmConversations, setDMConversations] = createSignal<DMConversationInfo[]>([])
+  const [activeDMRecipient, setActiveDMRecipient] = createSignal<string | null>(null)
+  const [showDMView, setShowDMView] = createSignal(false)
+  const [showNewDMModal, setShowNewDMModal] = createSignal(false)
+  const dmMessageCache = new Map<string, MessageData[]>()
+  // DM typing: recipientDid -> Map<did, { displayName, timestamp }>
+  const dmTypingMap = new Map<string, Map<string, { displayName: string; timestamp: number }>>()
+  const [dmTypingVersion, setDMTypingVersion] = createSignal(0)
+
+  const addDMConversation = (c: DMConversationInfo) => {
+    const existing = dmConversations()
+    if (existing.some((e) => e.participantDid === c.participantDid)) return
+    setDMConversations([c, ...existing])
+  }
+
+  const dmMessages = (recipientDid: string): MessageData[] => {
+    return dmMessageCache.get(recipientDid) ?? []
+  }
+
+  const addDMMessage = (recipientDid: string, m: MessageData) => {
+    const existing = dmMessageCache.get(recipientDid) ?? []
+    if (existing.some((e) => e.id === m.id)) return
+    dmMessageCache.set(recipientDid, [...existing, m])
+    // Update conversation list
+    const convos = dmConversations()
+    const idx = convos.findIndex((c) => c.participantDid === recipientDid)
+    if (idx >= 0) {
+      const updated = [...convos]
+      updated[idx] = {
+        ...updated[idx],
+        lastMessage: m.content,
+        lastMessageAt: m.timestamp,
+        unreadCount: updated[idx].unreadCount + (m.authorDid !== did() ? 1 : 0)
+      }
+      setDMConversations(updated)
+    } else {
+      setDMConversations([
+        {
+          id: `dm:${recipientDid}`,
+          participantDid: recipientDid,
+          participantName: recipientDid.substring(0, 16),
+          lastMessage: m.content,
+          lastMessageAt: m.timestamp,
+          unreadCount: m.authorDid !== did() ? 1 : 0
+        },
+        ...convos
+      ])
+    }
+  }
+
+  const setDMMessages = (recipientDid: string, msgs: MessageData[]) => {
+    dmMessageCache.set(recipientDid, msgs)
+  }
+
+  const updateDMMessage = (recipientDid: string, messageId: string, newContent: string) => {
+    const msgs = dmMessageCache.get(recipientDid)
+    if (msgs) {
+      const idx = msgs.findIndex((m) => m.id === messageId)
+      if (idx >= 0) {
+        msgs[idx] = { ...msgs[idx], content: newContent, edited: true }
+        dmMessageCache.set(recipientDid, [...msgs])
+      }
+    }
+  }
+
+  const removeDMMessage = (recipientDid: string, messageId: string) => {
+    const msgs = dmMessageCache.get(recipientDid)
+    if (msgs) {
+      dmMessageCache.set(
+        recipientDid,
+        msgs.filter((m) => m.id !== messageId)
+      )
+    }
+  }
+
+  const markDMRead = (recipientDid: string) => {
+    const convos = dmConversations()
+    const idx = convos.findIndex((c) => c.participantDid === recipientDid)
+    if (idx >= 0) {
+      const updated = [...convos]
+      updated[idx] = { ...updated[idx], unreadCount: 0 }
+      setDMConversations(updated)
+    }
+  }
+
+  const setDMTypingUser = (recipientDid: string, senderDid: string, displayName: string) => {
+    if (!dmTypingMap.has(recipientDid)) dmTypingMap.set(recipientDid, new Map())
+    dmTypingMap.get(recipientDid)!.set(senderDid, { displayName, timestamp: Date.now() })
+    setDMTypingVersion((v) => v + 1)
+    setTimeout(() => {
+      const m = dmTypingMap.get(recipientDid)
+      if (m) {
+        const entry = m.get(senderDid)
+        if (entry && Date.now() - entry.timestamp >= 2900) {
+          m.delete(senderDid)
+          setDMTypingVersion((v) => v + 1)
+        }
+      }
+    }, 3000)
+  }
+
+  const dmTypingUsers = (): string[] => {
+    dmTypingVersion() // track reactivity
+    const recipient = activeDMRecipient()
+    if (!recipient) return []
+    const m = dmTypingMap.get(recipient) ?? new Map()
+    return Array.from(m.values()).map((v) => v.displayName)
+  }
+
   const [connectionState, setConnectionState] = createSignal<'connected' | 'disconnected' | 'reconnecting'>(
     'disconnected'
   )
@@ -452,11 +575,19 @@ export function createAppStore(): AppStore {
     })
 
     client.on('typing', (...args: unknown[]) => {
-      const event = args[0] as { channelId?: string; communityId?: string } & Record<string, unknown>
-      const senderDID = (event as any).senderDID ?? (event as any).did ?? ''
+      const event = args[0] as { channelId?: string; communityId?: string; senderDID?: string; did?: string } & Record<
+        string,
+        unknown
+      >
+      const senderDID = event.senderDID ?? event.did ?? ''
       const channelId = event?.channelId
       if (channelId && senderDID && senderDID !== did()) {
-        setTypingUser(channelId, senderDID, senderDID.substring(0, 12))
+        // Check if this is a DM typing indicator (channelId starts with 'dm:')
+        if (channelId.startsWith('dm:')) {
+          setDMTypingUser(senderDID, senderDID, senderDID.substring(0, 12))
+        } else {
+          setTypingUser(channelId, senderDID, senderDID.substring(0, 12))
+        }
       }
     })
 
@@ -473,6 +604,42 @@ export function createAppStore(): AppStore {
       if (event?.messageId) {
         const chId = event.channelId ?? activeChannelId()
         if (chId) removeMessage(chId, event.messageId)
+      }
+    })
+
+    client.on('dm', (...args: unknown[]) => {
+      const event = args[0] as {
+        id: string
+        channelId?: string
+        authorDID: string
+        content: { text?: string }
+        timestamp: string
+      }
+      if (event) {
+        const senderDid = event.authorDID
+        const data: MessageData = {
+          id: event.id,
+          content: event.content?.text ?? '[encrypted]',
+          authorDid: senderDid,
+          authorName: senderDid.substring(0, 16),
+          timestamp: event.timestamp,
+          reactions: []
+        }
+        addDMMessage(senderDid, data)
+      }
+    })
+
+    client.on('dm.edited' as any, (...args: unknown[]) => {
+      const event = args[0] as { messageId?: string; newText?: string; senderDID?: string }
+      if (event?.messageId && event?.newText && event?.senderDID) {
+        updateDMMessage(event.senderDID, event.messageId, event.newText)
+      }
+    })
+
+    client.on('dm.deleted' as any, (...args: unknown[]) => {
+      const event = args[0] as { messageId?: string; senderDID?: string }
+      if (event?.messageId && event?.senderDID) {
+        removeDMMessage(event.senderDID, event.messageId)
       }
     })
   }
@@ -571,6 +738,21 @@ export function createAppStore(): AppStore {
     members,
     setMembers,
     dmConversations,
+    setDMConversations,
+    addDMConversation,
+    activeDMRecipient,
+    setActiveDMRecipient,
+    dmMessages,
+    addDMMessage,
+    setDMMessages,
+    updateDMMessage,
+    removeDMMessage,
+    markDMRead,
+    showDMView,
+    setShowDMView,
+    showNewDMModal,
+    setShowNewDMModal,
+    dmTypingUsers,
     connectionState,
     setConnectionState,
     connectionError,

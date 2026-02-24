@@ -37,10 +37,18 @@ export const ServerListBar: Component = () => {
     <div class="w-[var(--server-bar-width)] bg-[var(--bg-primary)] flex flex-col items-center py-3 gap-2 shrink-0 overflow-y-auto">
       {/* Home / DMs button */}
       <button
-        class="w-12 h-12 rounded-2xl bg-[var(--bg-tertiary)] hover:bg-[var(--accent)] hover:rounded-xl transition-all flex items-center justify-center text-xl"
-        title="Home"
+        onClick={() => {
+          store.setShowDMView(!store.showDMView())
+          if (!store.showDMView()) store.setActiveDMRecipient(null)
+        }}
+        class="w-12 h-12 rounded-2xl flex items-center justify-center text-xl transition-all"
+        classList={{
+          'bg-[var(--accent)] rounded-xl text-white': store.showDMView(),
+          'bg-[var(--bg-tertiary)] hover:bg-[var(--accent)] hover:rounded-xl': !store.showDMView()
+        }}
+        title={t('DM_SECTION_TITLE')}
       >
-        🎵
+        💬
       </button>
 
       <div class="w-8 h-0.5 bg-[var(--border)] rounded-full my-1" />
@@ -95,7 +103,10 @@ export const ServerListBar: Component = () => {
                 }}
               />
               <button
-                onClick={() => store.setActiveCommunityId(community.id)}
+                onClick={() => {
+                  store.setActiveCommunityId(community.id)
+                  store.setShowDMView(false)
+                }}
                 class="w-12 h-12 flex items-center justify-center text-sm font-semibold transition-all"
                 classList={{
                   'rounded-xl bg-[var(--accent)] text-white': isActive(),

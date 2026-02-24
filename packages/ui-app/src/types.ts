@@ -372,6 +372,13 @@ export interface RoleData {
   color?: string
   permissions: string[]
 }
+export interface RoleInfo {
+  id: string
+  name: string
+  color?: string
+  permissions: string[]
+  position: number
+}
 export interface AuditEntry {
   id: string
   action: string

@@ -175,6 +175,31 @@ export const en = {
   // Migration — hosting
   MIGRATION_HOSTING_DESC: 'Your migrated Discord community needs a Harmony server. Choose where to host it.',
 
+  // Roles
+  ROLE_MANAGER_TITLE: 'Manage Roles',
+  ROLE_CREATE: 'Create Role',
+  ROLE_EDIT: 'Edit Role',
+  ROLE_DELETE: 'Delete Role',
+  ROLE_DELETE_CONFIRM: 'Are you sure you want to delete the role "{name}"?',
+  ROLE_NAME: 'Role name',
+  ROLE_NAME_PLACEHOLDER: 'New role',
+  ROLE_COLOR: 'Color',
+  ROLE_PERMISSIONS: 'Permissions',
+  ROLE_SAVE: 'Save',
+  ROLE_CANCEL: 'Cancel',
+  ROLE_MOVE_UP: 'Move up',
+  ROLE_MOVE_DOWN: 'Move down',
+  ROLE_PERM_SEND_MESSAGES: 'Send Messages',
+  ROLE_PERM_MANAGE_CHANNELS: 'Manage Channels',
+  ROLE_PERM_MANAGE_ROLES: 'Manage Roles',
+  ROLE_PERM_KICK_MEMBERS: 'Kick Members',
+  ROLE_PERM_BAN_MEMBERS: 'Ban Members',
+  ROLE_PERM_MANAGE_COMMUNITY: 'Manage Community',
+  ROLE_ASSIGN: 'Assign role',
+  ROLE_REMOVE: 'Remove role',
+  ROLE_NO_ROLES: 'No roles defined',
+  ROLE_MEMBER_MENU_TITLE: 'Manage Roles for {name}',
+
   // Shared
   OFFLINE_BANNER: 'You are offline',
   RECONNECTING: 'Reconnecting...',

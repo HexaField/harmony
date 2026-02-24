@@ -3,7 +3,7 @@ import type { KeyPair } from '@harmony/crypto'
 import type { Identity } from '@harmony/identity'
 import { HarmonyClient, LocalStoragePersistence } from '@harmony/client'
 import type { ServerConnection } from '@harmony/client'
-import type { CommunityInfo, ChannelInfo, MessageData, MemberData, DMConversationInfo } from './types.js'
+import type { CommunityInfo, ChannelInfo, MessageData, MemberData, DMConversationInfo, RoleInfo } from './types.js'
 
 export interface AppStore {
   // Identity
@@ -110,6 +110,15 @@ export interface AppStore {
 
   // Search
   searchMessages: (query: string) => MessageData[]
+
+  // Roles
+  roles: () => RoleInfo[]
+  setRoles: (r: RoleInfo[]) => void
+  addRole: (r: RoleInfo) => void
+  updateRole: (id: string, r: Partial<RoleInfo>) => void
+  removeRole: (id: string) => void
+  showRoleManager: () => boolean
+  setShowRoleManager: (s: boolean) => void
 }
 
 // ── localStorage persistence helpers ──────────────────────────────
@@ -308,6 +317,21 @@ export function createAppStore(): AppStore {
   const [showCreateChannel, setShowCreateChannel] = createSignal(false)
   const [displayName, _setDisplayName] = createSignal(savedDisplayName)
   const [editingMessageId, setEditingMessageId] = createSignal<string | null>(null)
+  const [showRoleManager, setShowRoleManager] = createSignal(false)
+  const [roles, _setRoles] = createSignal<RoleInfo[]>([])
+
+  const setRoles = (r: RoleInfo[]) => _setRoles([...r].sort((a, b) => a.position - b.position))
+  const addRole = (r: RoleInfo) => _setRoles((prev) => [...prev, r].sort((a, b) => a.position - b.position))
+  const storeUpdateRole = (id: string, partial: Partial<RoleInfo>) => {
+    _setRoles((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, ...partial } : r)).sort((a, b) => a.position - b.position)
+    )
+  }
+  const removeRole = (id: string) => {
+    _setRoles((prev) => prev.filter((r) => r.id !== id))
+    // Remove from members too
+    setMembers(members().map((m) => ({ ...m, roles: m.roles.filter((r) => r !== id) })))
+  }
 
   // Typing indicators: channelId -> Map<did, { displayName, timestamp }>
   const typingUsersMap = new Map<string, Map<string, { displayName: string; timestamp: number }>>()
@@ -642,6 +666,57 @@ export function createAppStore(): AppStore {
         removeDMMessage(event.senderDID, event.messageId)
       }
     })
+
+    client.on('role.created' as any, (...args: unknown[]) => {
+      const event = args[0] as {
+        roleId?: string
+        name?: string
+        color?: string
+        permissions?: string[]
+        position?: number
+      }
+      if (event?.roleId && event?.name) {
+        addRole({
+          id: event.roleId,
+          name: event.name,
+          color: event.color,
+          permissions: event.permissions ?? [],
+          position: event.position ?? 0
+        })
+      }
+    })
+
+    client.on('role.updated' as any, (...args: unknown[]) => {
+      const event = args[0] as {
+        roleId?: string
+        name?: string
+        color?: string
+        permissions?: string[]
+        position?: number
+      }
+      if (event?.roleId) {
+        storeUpdateRole(event.roleId, {
+          name: event.name,
+          color: event.color,
+          permissions: event.permissions,
+          position: event.position
+        })
+      }
+    })
+
+    client.on('role.deleted' as any, (...args: unknown[]) => {
+      const event = args[0] as { roleId?: string }
+      if (event?.roleId) {
+        removeRole(event.roleId)
+      }
+    })
+
+    client.on('community.member.updated' as any, (...args: unknown[]) => {
+      const event = args[0] as { memberDID?: string; roles?: string[] }
+      if (event?.memberDID && event?.roles) {
+        setMembers(members().map((m) => (m.did === event.memberDID ? { ...m, roles: event.roles! } : m)))
+      }
+    })
   }
 
   function updateConnectionStateFromClient(client: HarmonyClient) {
@@ -779,7 +854,14 @@ export function createAppStore(): AppStore {
     setEditingMessageId,
     updateMessage,
     removeMessage,
-    searchMessages
+    searchMessages,
+    roles,
+    setRoles,
+    addRole,
+    updateRole: storeUpdateRole,
+    removeRole,
+    showRoleManager,
+    setShowRoleManager
   }
 }
 

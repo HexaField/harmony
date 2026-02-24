@@ -8,6 +8,7 @@ import { MemberSidebarView } from './MemberSidebarView.tsx'
 import { SearchOverlayView } from './SearchOverlayView.tsx'
 import { EmptyStateView } from './EmptyStateView.tsx'
 import { CreateCommunityModal } from './CreateCommunityModal.tsx'
+import { CreateChannelModal } from './CreateChannelModal.tsx'
 
 export const MainLayout: Component = () => {
   const store = useAppStore()
@@ -80,6 +81,11 @@ export const MainLayout: Component = () => {
       {/* Create community modal */}
       <Show when={store.showCreateCommunity()}>
         <CreateCommunityModal />
+      </Show>
+
+      {/* Create channel modal */}
+      <Show when={store.showCreateChannel()}>
+        <CreateChannelModal />
       </Show>
     </>
   )

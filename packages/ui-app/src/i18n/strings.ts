@@ -181,6 +181,45 @@ export const en = {
   CREDENTIAL_DETAIL: 'Credential details',
   CREDENTIAL_ISSUE: 'Issue credential',
 
+  // Invite
+  INVITE_GENERATE: 'Generate invite link',
+  INVITE_LINK_COPIED: 'Invite link copied!',
+  INVITE_JOIN_TITLE: 'Join Community',
+  INVITE_JOIN_DESCRIPTION: 'You have been invited to join this community.',
+  INVITE_JOIN_CONFIRM: 'Join',
+  INVITE_JOIN_CANCEL: 'Cancel',
+
+  // Channel creation
+  CHANNEL_CREATE_NAME: 'Channel name',
+  CHANNEL_CREATE_NAME_PLACEHOLDER: 'new-channel',
+  CHANNEL_CREATE_TYPE: 'Channel type',
+  CHANNEL_CREATE_SUBMIT: 'Create Channel',
+  CHANNEL_CREATE_CANCEL: 'Cancel',
+  CHANNEL_CREATE_ERROR: 'Failed to create channel: {error}',
+
+  // Message actions
+  MESSAGE_EDIT_SAVE: 'Save',
+  MESSAGE_EDIT_CANCEL: 'Cancel',
+  MESSAGE_DELETE_CONFIRM: 'Are you sure you want to delete this message?',
+  MESSAGE_DELETE_YES: 'Delete',
+  MESSAGE_DELETE_NO: 'Cancel',
+  MESSAGE_EDITED_LABEL: '(edited)',
+
+  // Reactions
+  REACTION_ADD: 'Add reaction',
+  REACTION_PICKER_TITLE: 'Pick a reaction',
+
+  // Typing
+  TYPING_SINGLE: '{user} is typing...',
+  TYPING_MULTIPLE: '{count} people are typing...',
+
+  // Settings persistence
+  SETTINGS_DISPLAY_NAME_SAVED: 'Display name updated',
+  SETTINGS_DISPLAY_NAME_SAVE: 'Save',
+
+  // Search
+  SEARCH_RESULTS_COUNT: '{count} results found',
+
   // Bots
   BOT_STORE: 'Bot store',
   BOT_SETTINGS: 'Bot settings',

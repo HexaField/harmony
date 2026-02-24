@@ -76,8 +76,25 @@ export interface AppStore {
   setShowCreateCommunity: (s: boolean) => void
   showSettings: () => boolean
   setShowSettings: (s: boolean) => void
+  showCreateChannel: () => boolean
+  setShowCreateChannel: (s: boolean) => void
   displayName: () => string
   setDisplayName: (n: string) => void
+
+  // Typing indicators
+  typingUsers: () => Map<string, { displayName: string; timestamp: number }>
+  setTypingUser: (channelId: string, did: string, displayName: string) => void
+  clearTypingUser: (channelId: string, did: string) => void
+  activeChannelTypingUsers: () => string[]
+
+  // Message editing
+  editingMessageId: () => string | null
+  setEditingMessageId: (id: string | null) => void
+  updateMessage: (channelId: string, messageId: string, newContent: string) => void
+  removeMessage: (channelId: string, messageId: string) => void
+
+  // Search
+  searchMessages: (query: string) => MessageData[]
 }
 
 // ── localStorage persistence helpers ──────────────────────────────
@@ -165,7 +182,41 @@ export function createAppStore(): AppStore {
   const [showSearch, setShowSearch] = createSignal(false)
   const [showCreateCommunity, setShowCreateCommunity] = createSignal(false)
   const [showSettings, setShowSettings] = createSignal(false)
+  const [showCreateChannel, setShowCreateChannel] = createSignal(false)
   const [displayName, _setDisplayName] = createSignal(savedDisplayName)
+  const [editingMessageId, setEditingMessageId] = createSignal<string | null>(null)
+
+  // Typing indicators: channelId -> Map<did, { displayName, timestamp }>
+  const typingUsersMap = new Map<string, Map<string, { displayName: string; timestamp: number }>>()
+  const [typingVersion, setTypingVersion] = createSignal(0)
+  const typingUsers = () => {
+    typingVersion() // track reactivity
+    const channelId = activeChannelId()
+    return typingUsersMap.get(channelId) ?? new Map()
+  }
+  const setTypingUser = (channelId: string, did: string, dn: string) => {
+    if (!typingUsersMap.has(channelId)) typingUsersMap.set(channelId, new Map())
+    typingUsersMap.get(channelId)!.set(did, { displayName: dn, timestamp: Date.now() })
+    setTypingVersion((v) => v + 1)
+    setTimeout(() => {
+      const m = typingUsersMap.get(channelId)
+      if (m) {
+        const entry = m.get(did)
+        if (entry && Date.now() - entry.timestamp >= 2900) {
+          m.delete(did)
+          setTypingVersion((v) => v + 1)
+        }
+      }
+    }, 3000)
+  }
+  const clearTypingUser = (channelId: string, did: string) => {
+    typingUsersMap.get(channelId)?.delete(did)
+    setTypingVersion((v) => v + 1)
+  }
+  const activeChannelTypingUsers = (): string[] => {
+    const m = typingUsers()
+    return Array.from(m.values()).map((v) => v.displayName)
+  }
 
   // Persisted setters — write to signal + localStorage
   const setDid = (d: string) => {
@@ -204,6 +255,44 @@ export function createAppStore(): AppStore {
 
   const setChannelMessages = (channelId: string, msgs: MessageData[]) => {
     channelMessageCache.set(channelId, msgs)
+  }
+
+  const updateMessage = (channelId: string, messageId: string, newContent: string) => {
+    const msgs = channelMessageCache.get(channelId)
+    if (msgs) {
+      const idx = msgs.findIndex((m) => m.id === messageId)
+      if (idx >= 0) {
+        msgs[idx] = { ...msgs[idx], content: newContent, edited: true }
+        channelMessageCache.set(channelId, [...msgs])
+      }
+    }
+    // Also update global messages
+    setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, content: newContent, edited: true } : m)))
+  }
+
+  const removeMessage = (channelId: string, messageId: string) => {
+    const msgs = channelMessageCache.get(channelId)
+    if (msgs) {
+      channelMessageCache.set(
+        channelId,
+        msgs.filter((m) => m.id !== messageId)
+      )
+    }
+    setMessages((prev) => prev.filter((m) => m.id !== messageId))
+  }
+
+  const searchMessages = (query: string): MessageData[] => {
+    if (!query.trim()) return []
+    const q = query.toLowerCase()
+    const results: MessageData[] = []
+    for (const [, msgs] of channelMessageCache) {
+      for (const m of msgs) {
+        if (m.content.toLowerCase().includes(q) || m.authorName.toLowerCase().includes(q)) {
+          results.push(m)
+        }
+      }
+    }
+    return results
   }
 
   const refreshServers = () => {
@@ -361,6 +450,31 @@ export function createAppStore(): AppStore {
       const err = args[0] as { message?: string }
       setConnectionError(err?.message ?? 'Unknown error')
     })
+
+    client.on('typing', (...args: unknown[]) => {
+      const event = args[0] as { channelId?: string; communityId?: string } & Record<string, unknown>
+      const senderDID = (event as any).senderDID ?? (event as any).did ?? ''
+      const channelId = event?.channelId
+      if (channelId && senderDID && senderDID !== did()) {
+        setTypingUser(channelId, senderDID, senderDID.substring(0, 12))
+      }
+    })
+
+    client.on('message.edited', (...args: unknown[]) => {
+      const event = args[0] as { messageId?: string; newText?: string; channelId?: string }
+      if (event?.messageId && event?.newText) {
+        const chId = event.channelId ?? activeChannelId()
+        if (chId) updateMessage(chId, event.messageId, event.newText)
+      }
+    })
+
+    client.on('message.deleted', (...args: unknown[]) => {
+      const event = args[0] as { messageId?: string; channelId?: string }
+      if (event?.messageId) {
+        const chId = event.channelId ?? activeChannelId()
+        if (chId) removeMessage(chId, event.messageId)
+      }
+    })
   }
 
   function updateConnectionStateFromClient(client: HarmonyClient) {
@@ -471,8 +585,19 @@ export function createAppStore(): AppStore {
     setShowCreateCommunity,
     showSettings,
     setShowSettings,
+    showCreateChannel,
+    setShowCreateChannel,
     displayName,
-    setDisplayName
+    setDisplayName,
+    typingUsers,
+    setTypingUser,
+    clearTypingUser,
+    activeChannelTypingUsers,
+    editingMessageId,
+    setEditingMessageId,
+    updateMessage,
+    removeMessage,
+    searchMessages
   }
 }
 

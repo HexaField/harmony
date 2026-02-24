@@ -78,13 +78,26 @@ export const SettingsView: Component = () => {
           {/* Display Name */}
           <div class="bg-[var(--bg-surface)] p-4 rounded-lg mb-4">
             <label class="text-sm text-[var(--text-muted)]">{t('SETTINGS_DISPLAY_NAME')}</label>
-            <input
-              type="text"
-              value={store.displayName()}
-              onInput={(e) => store.setDisplayName(e.currentTarget.value)}
-              class="w-full mt-1 p-2 rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm"
-              placeholder={t('SETTINGS_DISPLAY_NAME_PLACEHOLDER')}
-            />
+            <div class="flex gap-2 mt-1">
+              <input
+                type="text"
+                value={store.displayName()}
+                onInput={(e) => store.setDisplayName(e.currentTarget.value)}
+                class="flex-1 p-2 rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm"
+                placeholder={t('SETTINGS_DISPLAY_NAME_PLACEHOLDER')}
+              />
+              <button
+                onClick={() => {
+                  const client = store.client()
+                  if (client?.isConnected()) {
+                    client.setPresence('online', store.displayName()).catch(() => {})
+                  }
+                }}
+                class="px-4 py-2 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-sm font-semibold transition-colors"
+              >
+                {t('SETTINGS_DISPLAY_NAME_SAVE')}
+              </button>
+            </div>
           </div>
 
           {/* Mnemonic */}

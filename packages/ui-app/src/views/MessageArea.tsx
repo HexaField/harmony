@@ -5,59 +5,45 @@ import { RelativeTime } from '../components/Shared/index.js'
 import { t } from '../i18n/strings.js'
 import type { MessageData } from '../types.js'
 
+const COMMON_EMOJI = ['👍', '❤️', '😂', '🎉', '😮', '😢', '🔥', '👀']
+
 export const MessageArea: Component = () => {
   const store = useAppStore()
   const [inputContent, setInputContent] = createSignal('')
   const [loadingHistory, setLoadingHistory] = createSignal(false)
+  const [editContent, setEditContent] = createSignal('')
+  const [showEmojiPicker, setShowEmojiPicker] = createSignal<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = createSignal<string | null>(null)
   let messagesEndRef: HTMLDivElement | undefined
+  let typingTimeout: ReturnType<typeof setTimeout> | undefined
 
   const activeChannel = () => store.channels().find((c) => c.id === store.activeChannelId())
 
-  // Use per-channel message cache + current messages signal
   const channelMessages = () => {
     const channelId = store.activeChannelId()
     if (!channelId) return []
-    // Combine cached messages with any in the global messages signal for this channel
     const cached = store.channelMessages(channelId)
     const global = store.messages()
-    // If we have cached messages, prefer those; otherwise fall back to global
     return cached.length > 0 ? cached : global
   }
 
-  // When active channel changes, load history
   createEffect(
     on(
       () => store.activeChannelId(),
       (channelId) => {
         if (!channelId) return
-
         const client = store.client()
         const communityId = store.activeCommunityId()
-
         if (client?.isConnected() && communityId) {
-          // Request message history via sync
           setLoadingHistory(true)
           client
             .syncChannel(communityId, channelId, { limit: 50 })
-            .catch(() => {
-              // Sync failed silently — messages from subscription will still appear
-            })
-            .finally(() => {
-              setLoadingHistory(false)
-            })
+            .catch(() => {})
+            .finally(() => setLoadingHistory(false))
         }
-
-        // Load cached messages into the messages signal for display
         const cached = store.channelMessages(channelId)
-        if (cached.length > 0) {
-          store.setMessages(cached)
-        } else {
-          store.setMessages([])
-        }
-
-        requestAnimationFrame(() => {
-          messagesEndRef?.scrollIntoView({ behavior: 'instant' })
-        })
+        store.setMessages(cached.length > 0 ? cached : [])
+        requestAnimationFrame(() => messagesEndRef?.scrollIntoView({ behavior: 'instant' }))
       }
     )
   )
@@ -65,15 +51,12 @@ export const MessageArea: Component = () => {
   async function sendMessage() {
     const text = inputContent().trim()
     if (!text) return
-
     const client = store.client()
     const communityId = store.activeCommunityId()
     const channelId = store.activeChannelId()
-
     if (client?.isConnected() && communityId && channelId) {
       try {
         const msgId = await client.sendMessage(communityId, channelId, text)
-
         const msg: MessageData = {
           id: msgId,
           content: text,
@@ -85,10 +68,7 @@ export const MessageArea: Component = () => {
         store.addMessage(msg)
         store.addChannelMessage(channelId, msg)
         setInputContent('')
-
-        requestAnimationFrame(() => {
-          messagesEndRef?.scrollIntoView({ behavior: 'smooth' })
-        })
+        requestAnimationFrame(() => messagesEndRef?.scrollIntoView({ behavior: 'smooth' }))
       } catch (err) {
         console.error('Failed to send message:', err)
         addLocalMessage(text)
@@ -109,14 +89,9 @@ export const MessageArea: Component = () => {
       reactions: []
     }
     store.addMessage(msg)
-    if (channelId) {
-      store.addChannelMessage(channelId, msg)
-    }
+    if (channelId) store.addChannelMessage(channelId, msg)
     setInputContent('')
-
-    requestAnimationFrame(() => {
-      messagesEndRef?.scrollIntoView({ behavior: 'smooth' })
-    })
+    requestAnimationFrame(() => messagesEndRef?.scrollIntoView({ behavior: 'smooth' }))
   }
 
   function handleKeyDown(e: KeyboardEvent) {
@@ -126,7 +101,86 @@ export const MessageArea: Component = () => {
     }
   }
 
+  function handleInputForTyping() {
+    const client = store.client()
+    const communityId = store.activeCommunityId()
+    const channelId = store.activeChannelId()
+    if (!client?.isConnected() || !communityId || !channelId) return
+    if (typingTimeout) clearTimeout(typingTimeout)
+    const sub = client.subscribeChannel(communityId, channelId)
+    sub.sendTyping()
+    sub.unsubscribe()
+    typingTimeout = setTimeout(() => {
+      typingTimeout = undefined
+    }, 2000)
+  }
+
+  // Edit message
+  function startEdit(msg: MessageData) {
+    store.setEditingMessageId(msg.id)
+    setEditContent(msg.content)
+  }
+
+  async function saveEdit(msgId: string) {
+    const newText = editContent().trim()
+    if (!newText) return
+    const client = store.client()
+    const communityId = store.activeCommunityId()
+    const channelId = store.activeChannelId()
+    if (client && communityId && channelId) {
+      try {
+        await client.editMessage(communityId, channelId, msgId, newText)
+        store.updateMessage(channelId, msgId, newText)
+      } catch (err) {
+        console.error('Failed to edit:', err)
+      }
+    }
+    store.setEditingMessageId(null)
+  }
+
+  function cancelEdit() {
+    store.setEditingMessageId(null)
+  }
+
+  // Delete message
+  async function handleDelete(msgId: string) {
+    const client = store.client()
+    const communityId = store.activeCommunityId()
+    const channelId = store.activeChannelId()
+    if (client && communityId && channelId) {
+      try {
+        await client.deleteMessage(communityId, channelId, msgId)
+        store.removeMessage(channelId, msgId)
+      } catch (err) {
+        console.error('Failed to delete:', err)
+      }
+    }
+    setConfirmDelete(null)
+  }
+
+  // Reactions
+  async function toggleReaction(msgId: string, emoji: string) {
+    const client = store.client()
+    const communityId = store.activeCommunityId()
+    const channelId = store.activeChannelId()
+    if (!client || !communityId || !channelId) return
+    try {
+      const msgs = channelMessages()
+      const msg = msgs.find((m) => m.id === msgId)
+      const existing = msg?.reactions?.find((r) => r.emoji === emoji)
+      if (existing?.userReacted) {
+        await client.removeReaction(communityId, channelId, msgId, emoji)
+      } else {
+        await client.addReaction(communityId, channelId, msgId, emoji)
+      }
+    } catch (err) {
+      console.error('Reaction failed:', err)
+    }
+    setShowEmojiPicker(null)
+  }
+
   const isDisconnected = () => store.connectionState() === 'disconnected'
+  const isOwnMessage = (msg: MessageData) => msg.authorDid === store.did()
 
   return (
     <div class="flex flex-col flex-1 min-h-0">
@@ -169,14 +223,14 @@ export const MessageArea: Component = () => {
                 new Date(msg.timestamp).getTime() - new Date(prev.timestamp).getTime() < 300000
               )
             }
-
             const md = MarkdownRenderer({ content: msg.content })
             const timeInfo = RelativeTime({ timestamp: msg.timestamp })
             const initials = (msg.authorName ?? msg.authorDid).substring(0, 2).toUpperCase()
+            const isEditing = () => store.editingMessageId() === msg.id
 
             return (
               <div
-                class="group flex px-2 py-0.5 hover:bg-[var(--bg-surface)]/30 rounded transition-colors"
+                class="group flex px-2 py-0.5 hover:bg-[var(--bg-surface)]/30 rounded transition-colors relative"
                 classList={{ 'mt-4': !isGrouped(), 'mt-0': isGrouped() }}
               >
                 <Show
@@ -198,31 +252,68 @@ export const MessageArea: Component = () => {
                     <div class="flex items-baseline gap-2">
                       <span class="font-semibold text-sm hover:underline cursor-pointer">{msg.authorName}</span>
                       <span class="text-xs text-[var(--text-muted)]">{timeInfo.display}</span>
+                      <Show when={msg.edited}>
+                        <span class="text-xs text-[var(--text-muted)] italic">{t('MESSAGE_EDITED_LABEL')}</span>
+                      </Show>
                     </div>
                   </Show>
-                  <div class="text-sm text-[var(--text-primary)] leading-relaxed break-words">
-                    <For each={md.segments}>
-                      {(seg) => {
-                        if (seg.type === 'code-block')
-                          return (
-                            <pre class="bg-[var(--bg-input)] p-2 rounded my-1 text-xs overflow-x-auto">
-                              <code>{seg.content}</code>
-                            </pre>
-                          )
-                        if (seg.type === 'code')
-                          return <code class="bg-[var(--bg-input)] px-1 py-0.5 rounded text-xs">{seg.content}</code>
-                        if (seg.type === 'bold') return <strong>{seg.content.replace(/\*\*/g, '')}</strong>
-                        if (seg.type === 'heading') return <strong class="text-base">{seg.content}</strong>
-                        return <span>{seg.content}</span>
-                      }}
-                    </For>
-                  </div>
-                  {/* Reactions */}
+
+                  {/* Message content or edit form */}
+                  <Show
+                    when={isEditing()}
+                    fallback={
+                      <div class="text-sm text-[var(--text-primary)] leading-relaxed break-words">
+                        <For each={md.segments}>
+                          {(seg) => {
+                            if (seg.type === 'code-block')
+                              return (
+                                <pre class="bg-[var(--bg-input)] p-2 rounded my-1 text-xs overflow-x-auto">
+                                  <code>{seg.content}</code>
+                                </pre>
+                              )
+                            if (seg.type === 'code')
+                              return <code class="bg-[var(--bg-input)] px-1 py-0.5 rounded text-xs">{seg.content}</code>
+                            if (seg.type === 'bold') return <strong>{seg.content.replace(/\*\*/g, '')}</strong>
+                            if (seg.type === 'heading') return <strong class="text-base">{seg.content}</strong>
+                            return <span>{seg.content}</span>
+                          }}
+                        </For>
+                      </div>
+                    }
+                  >
+                    <div class="space-y-1">
+                      <textarea
+                        value={editContent()}
+                        onInput={(e) => setEditContent(e.currentTarget.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault()
+                            saveEdit(msg.id)
+                          }
+                          if (e.key === 'Escape') cancelEdit()
+                        }}
+                        class="w-full p-2 rounded bg-[var(--bg-input)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm resize-none"
+                        rows={2}
+                        autofocus
+                      />
+                      <div class="flex gap-2 text-xs">
+                        <button onClick={() => saveEdit(msg.id)} class="text-[var(--accent)] hover:underline">
+                          {t('MESSAGE_EDIT_SAVE')}
+                        </button>
+                        <button onClick={cancelEdit} class="text-[var(--text-muted)] hover:underline">
+                          {t('MESSAGE_EDIT_CANCEL')}
+                        </button>
+                      </div>
+                    </div>
+                  </Show>
+
+                  {/* Reactions display */}
                   <Show when={msg.reactions && msg.reactions.length > 0}>
-                    <div class="flex gap-1 mt-1">
+                    <div class="flex gap-1 mt-1 flex-wrap">
                       <For each={msg.reactions}>
                         {(reaction) => (
                           <button
+                            onClick={() => toggleReaction(msg.id, reaction.emoji)}
                             class="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-colors"
                             classList={{
                               'bg-[var(--accent)]/20 border border-[var(--accent)]': reaction.userReacted,
@@ -237,12 +328,95 @@ export const MessageArea: Component = () => {
                     </div>
                   </Show>
                 </div>
+
+                {/* Hover actions */}
+                <div class="absolute right-2 top-0 opacity-0 group-hover:opacity-100 transition-opacity flex gap-0.5 bg-[var(--bg-surface)] rounded border border-[var(--border)] shadow-sm">
+                  {/* Reaction button */}
+                  <button
+                    onClick={() => setShowEmojiPicker(showEmojiPicker() === msg.id ? null : msg.id)}
+                    class="p-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                    title={t('REACTION_ADD')}
+                  >
+                    😀
+                  </button>
+                  {/* Edit (own messages only) */}
+                  <Show when={isOwnMessage(msg)}>
+                    <button
+                      onClick={() => startEdit(msg)}
+                      class="p-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                      title={t('MESSAGE_EDIT')}
+                    >
+                      ✏️
+                    </button>
+                  </Show>
+                  {/* Delete (own messages only) */}
+                  <Show when={isOwnMessage(msg)}>
+                    <button
+                      onClick={() => setConfirmDelete(msg.id)}
+                      class="p-1 text-xs text-[var(--text-muted)] hover:text-[var(--error)] transition-colors"
+                      title={t('MESSAGE_DELETE')}
+                    >
+                      🗑️
+                    </button>
+                  </Show>
+                </div>
+
+                {/* Emoji picker popup */}
+                <Show when={showEmojiPicker() === msg.id}>
+                  <div class="absolute right-2 top-8 bg-[var(--bg-surface)] rounded-lg border border-[var(--border)] shadow-lg p-2 z-10">
+                    <div class="grid grid-cols-4 gap-1">
+                      <For each={COMMON_EMOJI}>
+                        {(emoji) => (
+                          <button
+                            onClick={() => toggleReaction(msg.id, emoji)}
+                            class="p-1 text-lg hover:bg-[var(--bg-input)] rounded transition-colors"
+                          >
+                            {emoji}
+                          </button>
+                        )}
+                      </For>
+                    </div>
+                  </div>
+                </Show>
+
+                {/* Delete confirmation */}
+                <Show when={confirmDelete() === msg.id}>
+                  <div class="absolute right-2 top-8 bg-[var(--bg-surface)] rounded-lg border border-[var(--border)] shadow-lg p-3 z-10 text-sm">
+                    <p class="mb-2 text-[var(--text-primary)]">{t('MESSAGE_DELETE_CONFIRM')}</p>
+                    <div class="flex gap-2 justify-end">
+                      <button
+                        onClick={() => setConfirmDelete(null)}
+                        class="px-2 py-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                      >
+                        {t('MESSAGE_DELETE_NO')}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(msg.id)}
+                        class="px-2 py-1 text-xs bg-[var(--error)] text-white rounded hover:opacity-80"
+                      >
+                        {t('MESSAGE_DELETE_YES')}
+                      </button>
+                    </div>
+                  </div>
+                </Show>
               </div>
             )
           }}
         </For>
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Typing indicator */}
+      <Show when={store.activeChannelTypingUsers().length > 0}>
+        <div class="px-4 py-1 text-xs text-[var(--text-muted)] italic">
+          <Show when={store.activeChannelTypingUsers().length === 1}>
+            {t('TYPING_SINGLE', { user: store.activeChannelTypingUsers()[0] })}
+          </Show>
+          <Show when={store.activeChannelTypingUsers().length > 1}>
+            {t('TYPING_MULTIPLE', { count: store.activeChannelTypingUsers().length })}
+          </Show>
+        </div>
+      </Show>
 
       {/* Message input */}
       <div class="px-4 pb-6 pt-2 shrink-0">
@@ -252,7 +426,10 @@ export const MessageArea: Component = () => {
           </button>
           <textarea
             value={inputContent()}
-            onInput={(e) => setInputContent(e.currentTarget.value)}
+            onInput={(e) => {
+              setInputContent(e.currentTarget.value)
+              handleInputForTyping()
+            }}
             onKeyDown={handleKeyDown}
             rows={1}
             class="flex-1 py-3 bg-transparent text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none resize-none text-sm"

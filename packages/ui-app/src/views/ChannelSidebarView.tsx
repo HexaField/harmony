@@ -1,9 +1,10 @@
-import { For, Show, type Component } from 'solid-js'
+import { For, Show, createSignal, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 
 export const ChannelSidebarView: Component = () => {
   const store = useAppStore()
+  const [showInviteCopied, setShowInviteCopied] = createSignal(false)
 
   const activeCommunity = () => store.communities().find((c) => c.id === store.activeCommunityId())
 
@@ -18,15 +19,58 @@ export const ChannelSidebarView: Component = () => {
       {/* Community header */}
       <div class="h-12 flex items-center px-4 border-b border-[var(--border)] font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-input)] cursor-pointer transition-colors">
         <span class="truncate">{activeCommunity()?.name ?? 'Harmony'}</span>
-        <span class="ml-auto text-[var(--text-muted)]">▾</span>
+        <div class="ml-auto flex items-center gap-1">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              const community = activeCommunity()
+              if (community) {
+                const serverUrl = community.serverUrl ?? 'ws://localhost:4000'
+                const inviteUrl = `${serverUrl}/invite/${community.id}`
+                navigator.clipboard
+                  .writeText(inviteUrl)
+                  .then(() => {
+                    setShowInviteCopied(true)
+                    setTimeout(() => setShowInviteCopied(false), 2000)
+                  })
+                  .catch(() => {})
+              }
+            }}
+            class="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors p-1"
+            title={t('INVITE_GENERATE')}
+          >
+            {showInviteCopied() ? '✓' : '🔗'}
+          </button>
+          <span class="text-[var(--text-muted)]">▾</span>
+        </div>
       </div>
 
       {/* Channel list */}
       <div class="flex-1 overflow-y-auto py-2">
+        {/* Add channel button when no channels exist */}
+        <Show when={textChannels().length === 0 && voiceChannels().length === 0}>
+          <div class="px-3 py-1 flex items-center justify-between">
+            <h3 class="text-xs font-semibold uppercase text-[var(--text-muted)] tracking-wider mb-1">Channels</h3>
+            <button
+              onClick={() => store.setShowCreateChannel(true)}
+              class="text-[var(--text-muted)] hover:text-[var(--text-primary)] text-sm transition-colors"
+              title={t('CHANNEL_CREATE')}
+            >
+              +
+            </button>
+          </div>
+        </Show>
         {/* Text channels */}
         <Show when={textChannels().length > 0}>
-          <div class="px-3 py-1">
+          <div class="px-3 py-1 flex items-center justify-between">
             <h3 class="text-xs font-semibold uppercase text-[var(--text-muted)] tracking-wider mb-1">Text Channels</h3>
+            <button
+              onClick={() => store.setShowCreateChannel(true)}
+              class="text-[var(--text-muted)] hover:text-[var(--text-primary)] text-sm transition-colors"
+              title={t('CHANNEL_CREATE')}
+            >
+              +
+            </button>
           </div>
           <For each={textChannels()}>
             {(channel) => {

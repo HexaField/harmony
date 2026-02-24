@@ -113,10 +113,46 @@ export function createAppStore(): AppStore {
   const [keyPair, setKeyPair] = createSignal<KeyPair | null>(null)
   const [_client, _setClient] = createSignal<HarmonyClient | null>(null)
   const [servers, setServers] = createSignal<ServerConnection[]>([])
-  const [communities, setCommunities] = createSignal<CommunityInfo[]>([])
-  const [activeCommunityId, setActiveCommunityId] = createSignal('')
-  const [channels, setChannels] = createSignal<ChannelInfo[]>([])
-  const [activeChannelId, setActiveChannelId] = createSignal('')
+  const savedCommunities: CommunityInfo[] = (() => {
+    try {
+      const raw = localStorage.getItem('harmony:communities')
+      return raw ? JSON.parse(raw) : []
+    } catch {
+      return []
+    }
+  })()
+  const savedChannels: ChannelInfo[] = (() => {
+    try {
+      const raw = localStorage.getItem('harmony:channels')
+      return raw ? JSON.parse(raw) : []
+    } catch {
+      return []
+    }
+  })()
+  const savedActiveCommunity = localStorage.getItem('harmony:activeCommunityId') ?? ''
+  const savedActiveChannel = localStorage.getItem('harmony:activeChannelId') ?? ''
+
+  const [communities, _setCommunities] = createSignal<CommunityInfo[]>(savedCommunities)
+  const [activeCommunityId, _setActiveCommunityId] = createSignal(savedActiveCommunity)
+  const [channels, _setChannels] = createSignal<ChannelInfo[]>(savedChannels)
+  const [activeChannelId, _setActiveChannelId] = createSignal(savedActiveChannel)
+
+  function setCommunities(c: CommunityInfo[]) {
+    _setCommunities(c)
+    localStorage.setItem('harmony:communities', JSON.stringify(c))
+  }
+  function setActiveCommunityId(id: string) {
+    _setActiveCommunityId(id)
+    localStorage.setItem('harmony:activeCommunityId', id)
+  }
+  function setChannels(c: ChannelInfo[]) {
+    _setChannels(c)
+    localStorage.setItem('harmony:channels', JSON.stringify(c))
+  }
+  function setActiveChannelId(id: string) {
+    _setActiveChannelId(id)
+    localStorage.setItem('harmony:activeChannelId', id)
+  }
   const [messages, setMessages] = createSignal<MessageData[]>([])
   const [members, setMembers] = createSignal<MemberData[]>([])
   const [dmConversations] = createSignal<DMConversationInfo[]>([])

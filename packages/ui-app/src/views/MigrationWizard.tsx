@@ -27,7 +27,7 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
   const [step, setStep] = createSignal<MigrationStep>('intro')
   const [hostingMode, setHostingMode] = createSignal<HostingMode | null>(null)
   const [remoteUrl, setRemoteUrl] = createSignal('')
-  const portalUrl = () => import.meta.env.VITE_PORTAL_URL || 'http://localhost:3001'
+  const portalUrl = () => import.meta.env.VITE_PORTAL_URL || 'http://localhost:3000'
   const [botToken, setBotToken] = createSignal('')
   const [discordServerId, setDiscordServerId] = createSignal('')
   const [exportProgress, setExportProgress] = createSignal(0)

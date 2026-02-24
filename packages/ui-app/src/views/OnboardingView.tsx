@@ -1,4 +1,4 @@
-import { createSignal, For, Show, type Component } from 'solid-js'
+import { createSignal, For, Show, onMount, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 import { createCryptoProvider } from '@harmony/crypto'
@@ -7,9 +7,38 @@ import { HarmonyClient } from '@harmony/client'
 
 type OnboardingStep = 'welcome' | 'mnemonic-display' | 'mnemonic-confirm' | 'recover'
 
+const STORAGE_PREFIX = 'harmony:'
+
+function persistOnboarding(key: string, value: string | null) {
+  try {
+    if (value === null) localStorage.removeItem(STORAGE_PREFIX + 'onboarding:' + key)
+    else localStorage.setItem(STORAGE_PREFIX + 'onboarding:' + key, value)
+  } catch {
+    /* quota / SSR */
+  }
+}
+
+function restoreOnboarding(key: string): string | null {
+  try {
+    return localStorage.getItem(STORAGE_PREFIX + 'onboarding:' + key)
+  } catch {
+    return null
+  }
+}
+
+function clearOnboardingState() {
+  try {
+    for (const key of ['step', 'mnemonic']) {
+      localStorage.removeItem(STORAGE_PREFIX + 'onboarding:' + key)
+    }
+  } catch {
+    /* SSR */
+  }
+}
+
 export const OnboardingView: Component = () => {
   const store = useAppStore()
-  const [step, setStep] = createSignal<OnboardingStep>('welcome')
+  const [step, _setStep] = createSignal<OnboardingStep>('welcome')
   const [generatedMnemonic, setGeneratedMnemonic] = createSignal('')
   const [recoverInput, setRecoverInput] = createSignal('')
   const [error, setError] = createSignal('')
@@ -25,6 +54,45 @@ export const OnboardingView: Component = () => {
   let pendingIdentity: import('@harmony/identity').Identity | null = null
   let pendingKeyPair: import('@harmony/crypto').KeyPair | null = null
   let pendingMnemonic = ''
+
+  // Persisted step setter
+  const setStep = (s: OnboardingStep) => {
+    _setStep(s)
+    persistOnboarding('step', s)
+  }
+
+  // Restore onboarding state on mount
+  onMount(async () => {
+    const savedStep = restoreOnboarding('step') as OnboardingStep | null
+    const savedMnemonic = restoreOnboarding('mnemonic')
+
+    if (savedMnemonic && savedStep && savedStep !== 'welcome') {
+      // Re-derive identity from saved mnemonic
+      try {
+        const crypto = createCryptoProvider()
+        const idMgr = new IdentityManager(crypto)
+        const result = await idMgr.createFromMnemonic(savedMnemonic)
+        pendingIdentity = result.identity
+        pendingKeyPair = result.keyPair
+        pendingMnemonic = savedMnemonic
+        setGeneratedMnemonic(savedMnemonic)
+
+        if (savedStep === 'mnemonic-confirm') {
+          const indices = pickQuizIndices()
+          setQuizIndices(indices)
+          setQuizAnswers({})
+          _setStep('mnemonic-confirm')
+        } else {
+          _setStep(savedStep)
+        }
+      } catch {
+        // Corrupted state — start fresh
+        clearOnboardingState()
+      }
+    } else if (savedStep) {
+      _setStep(savedStep)
+    }
+  })
 
   function initClient() {
     const client = new HarmonyClient({
@@ -54,6 +122,7 @@ export const OnboardingView: Component = () => {
       pendingIdentity = result.identity
       pendingKeyPair = result.keyPair
       pendingMnemonic = result.mnemonic
+      persistOnboarding('mnemonic', result.mnemonic)
       setStep('mnemonic-display')
     } catch (err) {
       setError(String(err))
@@ -88,6 +157,7 @@ export const OnboardingView: Component = () => {
       store.setIdentity(pendingIdentity)
       store.setKeyPair(pendingKeyPair)
     }
+    clearOnboardingState()
     initClient()
     // Identity is now set in store — App.tsx will show MainLayout
   }
@@ -119,6 +189,7 @@ export const OnboardingView: Component = () => {
       store.setMnemonic(words)
       store.setIdentity(result.identity)
       store.setKeyPair(result.keyPair)
+      clearOnboardingState()
       initClient()
     } catch (err) {
       setError(String(err))

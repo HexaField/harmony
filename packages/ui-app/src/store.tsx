@@ -88,9 +88,35 @@ export interface AppStore {
   setDisplayName: (n: string) => void
 }
 
+// ── localStorage persistence helpers ──────────────────────────────
+const STORAGE_PREFIX = 'harmony:'
+
+function persist(key: string, value: string | null) {
+  try {
+    if (value === null) localStorage.removeItem(STORAGE_PREFIX + key)
+    else localStorage.setItem(STORAGE_PREFIX + key, value)
+  } catch {
+    /* quota / SSR */
+  }
+}
+
+function restore(key: string): string | null {
+  try {
+    return localStorage.getItem(STORAGE_PREFIX + key)
+  } catch {
+    return null
+  }
+}
+
 export function createAppStore(): AppStore {
-  const [did, setDid] = createSignal('')
-  const [mnemonic, setMnemonic] = createSignal('')
+  // Restore persisted state
+  const savedDid = restore('did') ?? ''
+  const savedMnemonic = restore('mnemonic') ?? ''
+  const savedDisplayName = restore('displayName') ?? ''
+  const savedTheme = (restore('theme') as 'dark' | 'light') ?? 'dark'
+
+  const [did, _setDid] = createSignal(savedDid)
+  const [mnemonic, _setMnemonic] = createSignal(savedMnemonic)
   const [identity, setIdentity] = createSignal<Identity | null>(null)
   const [keyPair, setKeyPair] = createSignal<KeyPair | null>(null)
   const [client, setClient] = createSignal<HarmonyClient | null>(null)
@@ -106,12 +132,30 @@ export function createAppStore(): AppStore {
     'disconnected'
   )
   const [connectionError, setConnectionError] = createSignal('')
-  const [theme, setTheme] = createSignal<'dark' | 'light'>('dark')
+  const [theme, _setTheme] = createSignal<'dark' | 'light'>(savedTheme)
   const [showMemberSidebar, setShowMemberSidebar] = createSignal(true)
   const [showSearch, setShowSearch] = createSignal(false)
   const [showCreateCommunity, setShowCreateCommunity] = createSignal(false)
   const [showSettings, setShowSettings] = createSignal(false)
-  const [displayName, setDisplayName] = createSignal('')
+  const [displayName, _setDisplayName] = createSignal(savedDisplayName)
+
+  // Persisted setters — write to signal + localStorage
+  const setDid = (d: string) => {
+    _setDid(d)
+    persist('did', d || null)
+  }
+  const setMnemonic = (m: string) => {
+    _setMnemonic(m)
+    persist('mnemonic', m || null)
+  }
+  const setDisplayName = (n: string) => {
+    _setDisplayName(n)
+    persist('displayName', n || null)
+  }
+  const setTheme = (t: 'dark' | 'light') => {
+    _setTheme(t)
+    persist('theme', t)
+  }
 
   const addMessage = (m: MessageData) => {
     setMessages((prev) => [...prev, m])

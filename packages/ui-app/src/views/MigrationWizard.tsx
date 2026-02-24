@@ -329,6 +329,9 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
               </p>
               <p>{t('MIGRATION_BOT_SETUP_STEP2')}</p>
               <p>{t('MIGRATION_BOT_SETUP_STEP3')}</p>
+              <p>{t('MIGRATION_BOT_SETUP_STEP4')}</p>
+              <p>{t('MIGRATION_BOT_SETUP_STEP5')}</p>
+              <p>{t('MIGRATION_BOT_SETUP_STEP6')}</p>
             </div>
 
             <div class="space-y-3 mt-4">

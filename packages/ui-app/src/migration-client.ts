@@ -27,7 +27,13 @@ export interface ImportResult {
 
 /** Convert a ws:// or wss:// URL to the HTTP health/API base URL (port + 1) */
 export function toApiBase(serverUrl: string): string {
-  const url = new URL(serverUrl.replace('ws://', 'http://').replace('wss://', 'https://'))
+  if (!serverUrl) throw new Error('No server URL configured')
+  let normalized = serverUrl.trim()
+  // Add protocol if missing
+  if (!normalized.match(/^(ws|wss|http|https):\/\//)) {
+    normalized = 'ws://' + normalized
+  }
+  const url = new URL(normalized.replace('ws://', 'http://').replace('wss://', 'https://'))
   const port = parseInt(url.port || '4000', 10)
   return `${url.protocol}//${url.hostname}:${port + 1}`
 }

@@ -223,9 +223,15 @@ export const en = {
   MIGRATION_BOT_SETUP_TITLE: 'Set up the migration bot',
   MIGRATION_BOT_SETUP_STEP1_LINK: 'Open the Discord Developer Portal',
   MIGRATION_BOT_SETUP_STEP1_SUFFIX: 'and create a new application.',
-  MIGRATION_BOT_SETUP_STEP2: '2. Under "Bot", click "Add Bot", then copy the bot token.',
+  MIGRATION_BOT_SETUP_STEP2: '2. Go to the "Bot" tab and click "Reset Token" to get your bot token. Copy it.',
   MIGRATION_BOT_SETUP_STEP3:
-    '3. Invite the bot to your server with "Read Message History" and "View Channels" permissions.',
+    '3. Enable "Server Members Intent" and "Message Content Intent" under Privileged Gateway Intents, then save.',
+  MIGRATION_BOT_SETUP_STEP4:
+    '4. Go to "OAuth2" → "URL Generator". Select the "bot" scope, then select "Read Message History" and "View Channels" permissions.',
+  MIGRATION_BOT_SETUP_STEP5:
+    '5. Copy the generated URL at the bottom and open it in your browser to invite the bot to your server.',
+  MIGRATION_BOT_SETUP_STEP6:
+    '6. Find your server ID: enable Developer Mode in Discord settings (App Settings → Advanced), then right-click your server name and click "Copy Server ID".',
   MIGRATION_BOT_TOKEN: 'Bot token',
   MIGRATION_BOT_TOKEN_PLACEHOLDER: 'Paste your bot token here',
   MIGRATION_DISCORD_SERVER_ID: 'Discord server ID',

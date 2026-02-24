@@ -1,4 +1,4 @@
-import { createSignal, Show, For, onCleanup, type Component } from 'solid-js'
+import { createSignal, Show, For, onCleanup, onMount, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 import { createServerProvider, type HostingMode } from '../server-provider.js'
@@ -35,6 +35,20 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
   const [error, setError] = createSignal('')
   const [, setExportId] = createSignal('')
   const [, setServerUrl] = createSignal('')
+  const [discordLinked, setDiscordLinked] = createSignal(false)
+  const [linkedUsername, setLinkedUsername] = createSignal('')
+
+  // Listen for OAuth popup completion
+  onMount(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === 'harmony:oauth-complete' && event.data.provider === 'discord') {
+        setDiscordLinked(true)
+        if (event.data.discordUsername) setLinkedUsername(event.data.discordUsername)
+      }
+    }
+    window.addEventListener('message', handler)
+    onCleanup(() => window.removeEventListener('message', handler))
+  })
 
   let pollTimer: ReturnType<typeof setInterval> | undefined
 
@@ -414,31 +428,43 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
               <p class="font-mono text-xs text-[var(--text-muted)] break-all">{store.did()}</p>
             </div>
 
-            <button
-              onClick={async () => {
-                setError('')
-                try {
-                  const res = await fetch(`${portalUrl()}/api/identity/link`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      provider: 'discord',
-                      userDID: store.did()
-                    })
-                  })
-                  if (!res.ok) throw new Error(`Portal returned ${res.status}`)
-                  const data = await res.json()
-                  if (data.redirectUrl) {
-                    window.open(data.redirectUrl, '_blank', 'width=500,height=700')
-                  }
-                } catch (err) {
-                  setError(t('ERROR_CONNECTION_FAILED', { url: portalUrl() }))
-                }
-              }}
-              class="w-full py-3 rounded-lg bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold transition-colors"
+            <Show
+              when={discordLinked()}
+              fallback={
+                <button
+                  onClick={async () => {
+                    setError('')
+                    try {
+                      const res = await fetch(`${portalUrl()}/api/identity/link`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          provider: 'discord',
+                          userDID: store.did()
+                        })
+                      })
+                      if (!res.ok) throw new Error(`Portal returned ${res.status}`)
+                      const data = await res.json()
+                      if (data.redirectUrl) {
+                        window.open(data.redirectUrl, '_blank', 'width=500,height=700')
+                      }
+                    } catch (err) {
+                      setError(t('ERROR_CONNECTION_FAILED', { url: portalUrl() }))
+                    }
+                  }}
+                  class="w-full py-3 rounded-lg bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold transition-colors"
+                >
+                  {t('MIGRATION_LINK_DISCORD_BUTTON')}
+                </button>
+              }
             >
-              {t('MIGRATION_LINK_DISCORD_BUTTON')}
-            </button>
+              <div class="p-4 rounded-lg bg-green-900/30 border border-green-700/50 text-center">
+                <div class="text-2xl mb-1">✅</div>
+                <p class="text-sm font-semibold text-green-400">
+                  Discord linked{linkedUsername() ? ` as ${linkedUsername()}` : ''}
+                </p>
+              </div>
+            </Show>
 
             <div class="flex gap-3 mt-2">
               <button
@@ -449,9 +475,9 @@ export const MigrationWizard: Component<{ onClose: () => void }> = (props) => {
               </button>
               <button
                 onClick={() => setStep('complete')}
-                class="flex-1 py-3 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)] font-semibold transition-colors"
+                class={`flex-1 py-3 rounded-lg font-semibold transition-colors ${discordLinked() ? "bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white" : "bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)]"}`}
               >
-                {t('MIGRATION_SKIP_LINKING')}
+                {discordLinked() ? t('MIGRATION_COMPLETE_CONTINUE') : t('MIGRATION_SKIP_LINKING')}
               </button>
             </div>
           </div>

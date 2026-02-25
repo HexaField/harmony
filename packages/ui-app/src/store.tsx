@@ -914,6 +914,10 @@ export function createAppStore(): AppStore {
         channels?: Array<{ id: string; name: string; type: string }>
       }
       if (event?.communityId) {
+        // Skip if community already exists in store
+        const existing = communities().find((c) => c.id === event.communityId)
+        if (existing) return
+
         // Add community to store
         const communityInfo: CommunityInfo = {
           id: event.communityId,

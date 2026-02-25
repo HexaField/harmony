@@ -38,6 +38,11 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
   const [, setServerUrl] = createSignal('')
   const [discordLinked, setDiscordLinked] = createSignal(false)
   const [linkedUsername, setLinkedUsername] = createSignal('')
+  const [importStats, setImportStats] = createSignal<{
+    channels: number
+    members: number
+    communityName: string
+  } | null>(null)
 
   // Listen for OAuth completion (popup postMessage or desktop deep link)
   function handleOAuthResult(data: any) {
@@ -243,11 +248,14 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
         communityName: bundle?.metadata?.sourceServerName || 'Imported Community',
         adminKeyPair
       })
+      const communityName = bundle?.metadata?.sourceServerName || 'Imported Community'
       console.log('[Migration] Import result', {
         communityId: result.communityId,
         channels: result.channels?.length,
-        members: result.members?.length
+        members: result.members?.length,
+        communityName
       })
+      setImportStats({ channels: result.channels?.length || 0, members: result.members?.length || 0, communityName })
       // Populate the store with the imported community
       const existing = store.communities()
       store.setCommunities([
@@ -293,7 +301,7 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
         store.setConnectionState('disconnected')
       }
 
-      setStep('linking')
+      setStep(discordLinked() ? 'complete' : 'linking')
     } catch (err: any) {
       setError(t('MIGRATION_EXPORT_ERROR', { error: err.message || String(err) }))
       setStep('bot-running') // allow retry
@@ -612,6 +620,24 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
             <div class="text-5xl mb-2">✅</div>
             <h3 class="text-lg font-semibold">{t('MIGRATION_COMPLETE_TITLE')}</h3>
             <p class="text-sm text-[var(--text-secondary)]">{t('MIGRATION_COMPLETE_DESC')}</p>
+            <Show when={importStats()}>
+              {(stats) => (
+                <div class="bg-[var(--bg-input)] rounded-lg p-4 text-left space-y-2">
+                  <p class="text-sm">
+                    <span class="text-[var(--text-muted)]">Community:</span>{' '}
+                    <span class="font-medium">{stats().communityName}</span>
+                  </p>
+                  <p class="text-sm">
+                    <span class="text-[var(--text-muted)]">Channels:</span>{' '}
+                    <span class="font-medium">{stats().channels}</span>
+                  </p>
+                  <p class="text-sm">
+                    <span class="text-[var(--text-muted)]">Members:</span>{' '}
+                    <span class="font-medium">{stats().members}</span>
+                  </p>
+                </div>
+              )}
+            </Show>
             <button
               onClick={props.onClose}
               class="w-full py-3 mt-4 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-semibold transition-colors"

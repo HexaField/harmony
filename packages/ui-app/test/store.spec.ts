@@ -258,30 +258,37 @@ describe('AppStore', () => {
   })
 })
 
-describe('localStorage Persistence', () => {
-  const testCommunities = [{ id: 'c1', name: 'Test Community', memberCount: 5 }]
-  const testChannels = [{ id: 'ch1', name: 'general', communityId: 'c1' }]
-
-  it('MUST persist communities to localStorage when setCommunities is called', () => {
+describe('Persistence Architecture', () => {
+  it('communities are NOT persisted to localStorage (server is source of truth)', () => {
     createRoot((dispose) => {
       const store = createAppStore()
-      store.setCommunities(testCommunities)
-      const stored = JSON.parse(localStorage.getItem('harmony:communities')!)
-      expect(stored).toEqual(testCommunities)
+      store.setCommunities([{ id: 'c1', name: 'Test Community', memberCount: 5 }])
+      expect(localStorage.getItem('harmony:communities')).toBeNull()
       dispose()
     })
   })
 
-  it('MUST restore communities from localStorage on creation', () => {
-    localStorage.setItem('harmony:communities', JSON.stringify(testCommunities))
+  it('channels are NOT persisted to localStorage (server is source of truth)', () => {
     createRoot((dispose) => {
       const store = createAppStore()
-      expect(store.communities()).toEqual(testCommunities)
+      store.setChannels([{ id: 'ch1', name: 'general', communityId: 'c1' }])
+      expect(localStorage.getItem('harmony:channels')).toBeNull()
       dispose()
     })
   })
 
-  it('MUST persist activeCommunityId', () => {
+  it('identity (did, mnemonic) is NOT persisted to localStorage (backend config on disk)', () => {
+    createRoot((dispose) => {
+      const store = createAppStore()
+      store.setDid('did:key:z6MkTest')
+      store.setMnemonic('word1 word2 word3')
+      expect(localStorage.getItem('harmony:did')).toBeNull()
+      expect(localStorage.getItem('harmony:mnemonic')).toBeNull()
+      dispose()
+    })
+  })
+
+  it('MUST persist activeCommunityId to localStorage (UI preference)', () => {
     createRoot((dispose) => {
       const store = createAppStore()
       store.setActiveCommunityId('c1')
@@ -290,35 +297,7 @@ describe('localStorage Persistence', () => {
     })
   })
 
-  it('MUST restore activeCommunityId on creation', () => {
-    localStorage.setItem('harmony:activeCommunityId', 'c1')
-    createRoot((dispose) => {
-      const store = createAppStore()
-      expect(store.activeCommunityId()).toBe('c1')
-      dispose()
-    })
-  })
-
-  it('MUST persist channels to localStorage', () => {
-    createRoot((dispose) => {
-      const store = createAppStore()
-      store.setChannels(testChannels)
-      const stored = JSON.parse(localStorage.getItem('harmony:channels')!)
-      expect(stored).toEqual(testChannels)
-      dispose()
-    })
-  })
-
-  it('MUST restore channels from localStorage on creation', () => {
-    localStorage.setItem('harmony:channels', JSON.stringify(testChannels))
-    createRoot((dispose) => {
-      const store = createAppStore()
-      expect(store.channels()).toEqual(testChannels)
-      dispose()
-    })
-  })
-
-  it('MUST persist activeChannelId', () => {
+  it('MUST persist activeChannelId to localStorage (UI preference)', () => {
     createRoot((dispose) => {
       const store = createAppStore()
       store.setActiveChannelId('ch1')
@@ -327,41 +306,24 @@ describe('localStorage Persistence', () => {
     })
   })
 
-  it('MUST persist did, mnemonic, displayName, theme', () => {
+  it('MUST persist theme to localStorage (UI preference)', () => {
     createRoot((dispose) => {
       const store = createAppStore()
-      store.setDid('did:key:z6MkTest')
-      store.setMnemonic('word1 word2 word3')
-      store.setDisplayName('Alice')
       store.setTheme('light')
-      expect(localStorage.getItem('harmony:did')).toBe('did:key:z6MkTest')
-      expect(localStorage.getItem('harmony:mnemonic')).toBe('word1 word2 word3')
-      expect(localStorage.getItem('harmony:displayName')).toBe('Alice')
       expect(localStorage.getItem('harmony:theme')).toBe('light')
       dispose()
     })
   })
 
-  it('MUST restore did, mnemonic, displayName, theme on creation', () => {
-    localStorage.setItem('harmony:did', 'did:key:z6MkRestored')
-    localStorage.setItem('harmony:mnemonic', 'restore words here')
-    localStorage.setItem('harmony:displayName', 'Bob')
+  it('MUST restore UI preferences from localStorage on creation', () => {
+    localStorage.setItem('harmony:activeCommunityId', 'c1')
+    localStorage.setItem('harmony:activeChannelId', 'ch1')
     localStorage.setItem('harmony:theme', 'light')
     createRoot((dispose) => {
       const store = createAppStore()
-      expect(store.did()).toBe('did:key:z6MkRestored')
-      expect(store.mnemonic()).toBe('restore words here')
-      expect(store.displayName()).toBe('Bob')
+      expect(store.activeCommunityId()).toBe('c1')
+      expect(store.activeChannelId()).toBe('ch1')
       expect(store.theme()).toBe('light')
-      dispose()
-    })
-  })
-
-  it('MUST handle corrupted localStorage gracefully', () => {
-    localStorage.setItem('harmony:communities', '{not valid json!!')
-    createRoot((dispose) => {
-      const store = createAppStore()
-      expect(store.communities()).toEqual([])
       dispose()
     })
   })

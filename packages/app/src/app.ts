@@ -15,6 +15,18 @@ export function getDataDir(): string {
   return join(homedir(), '.local', 'share', 'harmony')
 }
 
+/** Persisted config on disk */
+export interface HarmonyConfig {
+  version: number
+  identity?: {
+    did: string
+    mnemonic: string
+    displayName?: string
+    createdAt: string
+  }
+  servers?: Array<{ url: string; label?: string }>
+}
+
 export interface AppState {
   running: boolean
   serverPort: number
@@ -58,19 +70,21 @@ export interface AutoUpdater {
 export class HarmonyApp {
   private runtime: ServerRuntime | null = null
   private dataDir: string
+  private _config: HarmonyConfig
   private state: AppState
   private migrationState: MigrationState = { step: 'idle' }
   private trayState: TrayState
   private restartCount = 0
   private maxRestarts = 3
 
-  constructor(dataDir?: string) {
+  constructor(dataDir?: string, options?: { port?: number }) {
     this.dataDir = dataDir ?? getDataDir()
     mkdirSync(this.dataDir, { recursive: true })
+    this._config = this.loadConfig()
 
     this.state = {
       running: false,
-      serverPort: 4515,
+      serverPort: options?.port ?? 4515,
       communities: [],
       connectionState: 'disconnected',
       offlineMode: false
@@ -148,6 +162,7 @@ export class HarmonyApp {
     const { identity, mnemonic } = await idMgr.create()
 
     this.state.identity = { did: identity.did, createdAt: new Date().toISOString() }
+    this._config.identity = { did: identity.did, mnemonic, createdAt: new Date().toISOString() }
     this.saveConfig()
 
     return { did: identity.did, mnemonic }
@@ -159,6 +174,7 @@ export class HarmonyApp {
     const { identity } = await idMgr.createFromMnemonic(mnemonic)
 
     this.state.identity = { did: identity.did, createdAt: new Date().toISOString() }
+    this._config.identity = { did: identity.did, mnemonic, createdAt: new Date().toISOString() }
     this.saveConfig()
 
     return { did: identity.did }
@@ -287,29 +303,38 @@ export class HarmonyApp {
   }
 
   // Persistence
+  /** Save full config to disk */
   private saveConfig(): void {
     const configPath = join(this.dataDir, 'config.json')
-    writeFileSync(
-      configPath,
-      JSON.stringify(
-        {
-          identity: this.state.identity,
-          serverPort: this.state.serverPort
-        },
-        null,
-        2
-      )
-    )
+    writeFileSync(configPath, JSON.stringify(this._config, null, 2))
+  }
+
+  /** Load config from disk */
+  private loadConfig(): HarmonyConfig {
+    const configPath = join(this.dataDir, 'config.json')
+    if (!existsSync(configPath)) return { version: 1 }
+    try {
+      return JSON.parse(readFileSync(configPath, 'utf-8')) as HarmonyConfig
+    } catch {
+      return { version: 1 }
+    }
+  }
+
+  /** Get the full persisted config (for renderer) */
+  getConfig(): HarmonyConfig {
+    return { ...this._config }
+  }
+
+  /** Patch config and save to disk */
+  updateConfig(patch: Partial<HarmonyConfig>): void {
+    Object.assign(this._config, patch)
+    this.saveConfig()
   }
 
   private loadIdentityConfig(): { did?: string; mnemonic?: string } {
-    const configPath = join(this.dataDir, 'config.json')
-    if (!existsSync(configPath)) return {}
-    try {
-      const config = JSON.parse(readFileSync(configPath, 'utf-8'))
-      return { did: config.identity?.did }
-    } catch {
-      return {}
+    return {
+      did: this._config.identity?.did,
+      mnemonic: this._config.identity?.mnemonic
     }
   }
 }

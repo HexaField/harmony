@@ -9,8 +9,42 @@ import { IdentityManager } from '@harmony/identity'
 export const App: Component = () => {
   const store = createAppStore()
 
-  // Re-derive identity from persisted mnemonic on boot
+  // Load identity from backend config (disk) and auto-connect
   onMount(async () => {
+    // Desktop mode: load persisted identity from disk
+    if (window.__HARMONY_DESKTOP__?.getConfig) {
+      try {
+        const config = await window.__HARMONY_DESKTOP__.getConfig()
+        if (config?.identity?.did && config?.identity?.mnemonic) {
+          const crypto = createCryptoProvider()
+          const idMgr = new IdentityManager(crypto)
+          const result = await idMgr.createFromMnemonic(config.identity.mnemonic)
+          store.setDid(result.identity.did)
+          store.setMnemonic(config.identity.mnemonic)
+          store.setIdentity(result.identity)
+          store.setKeyPair(result.keyPair)
+          if (config.identity.displayName) {
+            store.setDisplayName(config.identity.displayName)
+          }
+
+          // Init client and connect to server
+          await store.initClient(result.identity, result.keyPair)
+
+          // Wait for embedded server and add it
+          const serverUrl = window.__HARMONY_DESKTOP__.waitForServer
+            ? await window.__HARMONY_DESKTOP__.waitForServer()
+            : await window.__HARMONY_DESKTOP__.getServerUrl()
+          if (serverUrl) {
+            store.addServer(serverUrl)
+          }
+          return
+        }
+      } catch {
+        // Config load failed — fall through to onboarding
+      }
+    }
+
+    // Non-desktop fallback: use localStorage mnemonic (browser mode)
     const m = store.mnemonic()
     if (m && store.isOnboarded() && !store.identity()) {
       try {
@@ -19,30 +53,8 @@ export const App: Component = () => {
         const result = await idMgr.createFromMnemonic(m)
         store.setIdentity(result.identity)
         store.setKeyPair(result.keyPair)
-
-        // Init the single HarmonyClient — it auto-connects to persisted servers
         await store.initClient(result.identity, result.keyPair)
-
-        // Desktop mode: ensure local server is running and added
-        if (window.__HARMONY_DESKTOP__) {
-          try {
-            // Wait for server to be ready (handles race with async launch)
-            const serverUrl = window.__HARMONY_DESKTOP__.waitForServer
-              ? await window.__HARMONY_DESKTOP__.waitForServer()
-              : await (async () => {
-                  const running = await window.__HARMONY_DESKTOP__.isServerRunning()
-                  if (running) return await window.__HARMONY_DESKTOP__.getServerUrl()
-                  return null
-                })()
-            if (serverUrl) {
-              store.addServer(serverUrl)
-            }
-          } catch {
-            // Desktop bridge not available or failed — continue without local server
-          }
-        }
       } catch {
-        // Corrupted mnemonic — reset to onboarding
         store.setDid('')
         store.setMnemonic('')
       }

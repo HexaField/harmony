@@ -12,7 +12,7 @@ let dataDir: string
 beforeEach(() => {
   dataDir = join(tmpdir(), 'harmony-app-test-' + randomBytes(4).toString('hex'))
   mkdirSync(dataDir, { recursive: true })
-  app = new HarmonyApp(dataDir)
+  app = new HarmonyApp(dataDir, { port: 4000 + Math.floor(Math.random() * 1000) })
 })
 
 afterEach(async () => {
@@ -255,7 +255,7 @@ describe('Electron App', () => {
   it('T29: recoverIdentity from mnemonic returns same DID', async () => {
     const created = await app.createIdentity()
     // Create a fresh app instance to recover into
-    const app2 = new HarmonyApp(dataDir + '-recover')
+    const app2 = new HarmonyApp(dataDir + '-recover', { port: 4000 + Math.floor(Math.random() * 1000) })
     const recovered = await app2.recoverIdentity(created.mnemonic)
     expect(recovered.did).toBe(created.did)
   })

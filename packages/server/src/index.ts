@@ -400,6 +400,19 @@ export class CommunityManager {
     for (const q of quads) await this.store.remove(q)
   }
 
+  async listAll(): Promise<CommunityInfo[]> {
+    const typeQuads = await this.store.match({
+      predicate: RDFPredicate.type,
+      object: HarmonyType.Community
+    })
+    const results: CommunityInfo[] = []
+    for (const q of typeQuads) {
+      const info = await this.getInfo(q.subject)
+      if (info) results.push(info)
+    }
+    return results
+  }
+
   async getInfo(communityId: string): Promise<CommunityInfo | null> {
     const typeQuads = await this.store.match({
       subject: communityId,
@@ -862,6 +875,9 @@ export class HarmonyServer {
       case 'community.info':
         await this.handleCommunityInfo(conn, msg)
         break
+      case 'community.list':
+        await this.handleCommunityList(conn, msg)
+        break
       case 'community.member.reconciled' as any:
         await this.handleReconciliation(conn, msg)
         break
@@ -1168,6 +1184,17 @@ export class HarmonyServer {
         conn.id
       )
     }
+  }
+
+  private async handleCommunityList(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const communities = await this.communityManager.listAll()
+    this.sendToConnection(conn, {
+      id: `list-${Date.now()}`,
+      type: 'community.list.response' as any,
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: { communities }
+    })
   }
 
   private async handleCommunityInfo(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {

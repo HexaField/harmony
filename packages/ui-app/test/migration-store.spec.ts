@@ -83,20 +83,19 @@ describe('Migration Store — hasClaimedData', () => {
     })
   })
 
-  it('persists to localStorage', () => {
+  it('does not persist to localStorage (server is source of truth)', () => {
     createRoot((dispose) => {
       const store = createAppStore()
       store.setHasClaimedData(true)
-      expect(localStorage.getItem('harmony:hasClaimedData')).toBe('true')
+      expect(localStorage.getItem('harmony:hasClaimedData')).toBeNull()
       dispose()
     })
   })
 
-  it('restores from localStorage', () => {
-    localStorage.setItem('harmony:hasClaimedData', 'true')
+  it('defaults to false on fresh store', () => {
     createRoot((dispose) => {
       const store = createAppStore()
-      expect(store.hasClaimedData()).toBe(true)
+      expect(store.hasClaimedData()).toBe(false)
       dispose()
     })
   })
@@ -120,12 +119,12 @@ describe('Migration Store — claimedDataMeta', () => {
     })
   })
 
-  it('persists to localStorage', () => {
+  it('does not persist to localStorage (server is source of truth)', () => {
     createRoot((dispose) => {
       const store = createAppStore()
       const meta = { messageCount: 10, channelCount: 1, serverCount: 1, dateRange: null }
       store.setClaimedDataMeta(meta)
-      expect(JSON.parse(localStorage.getItem('harmony:claimedDataMeta')!)).toEqual(meta)
+      expect(localStorage.getItem('harmony:claimedDataMeta')).toBeNull()
       dispose()
     })
   })

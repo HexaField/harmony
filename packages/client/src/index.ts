@@ -1226,6 +1226,9 @@ export class HarmonyClient {
       case 'community.info.response':
         this.handleCommunityInfoResponse(msg)
         break
+      case 'community.list.response':
+        this.emitter.emit('community.list', msg.payload)
+        break
       case 'thread.created':
         this.emitter.emit('message', msg.payload)
         break
@@ -1467,6 +1470,16 @@ export class HarmonyClient {
       if (member) member.presence = payload
     }
     this.emitter.emit('presence', { did: msg.sender, ...payload })
+  }
+
+  requestCommunityList(): void {
+    this.send({
+      id: `list-req-${Date.now()}`,
+      type: 'community.list' as any,
+      timestamp: new Date().toISOString(),
+      sender: this._did,
+      payload: {}
+    })
   }
 
   requestCommunityInfo(communityId: string): void {

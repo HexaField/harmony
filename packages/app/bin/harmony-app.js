@@ -147,6 +147,13 @@ function registerIPC() {
   ipcMain.handle('harmony:server-running', () => harmonyApp.getState().running)
 
   ipcMain.handle('harmony:open-external', (_e, url) => shell.openExternal(url))
+
+  // Config persistence (on-disk, not localStorage)
+  ipcMain.handle('harmony:config-get', () => harmonyApp.getConfig())
+  ipcMain.handle('harmony:config-update', (_e, patch) => {
+    harmonyApp.updateConfig(patch)
+    return harmonyApp.getConfig()
+  })
 }
 
 app.whenReady().then(async () => {

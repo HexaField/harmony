@@ -17,6 +17,8 @@ const desktopBridge = {
   openExternal: (url) => ipcRenderer.invoke('harmony:open-external', url),
   onOAuthResult: (callback) => ipcRenderer.on('harmony:oauth-result', (_event, data) => callback(data)),
   onServerStarted: (callback) => ipcRenderer.on('harmony:server-started', (_event, data) => callback(data)),
+  getConfig: () => ipcRenderer.invoke('harmony:config-get'),
+  updateConfig: (patch) => ipcRenderer.invoke('harmony:config-update', patch),
   waitForServer: () =>
     new Promise((resolve) => {
       ipcRenderer.invoke('harmony:server-running').then((running) => {

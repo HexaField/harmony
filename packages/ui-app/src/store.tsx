@@ -198,10 +198,10 @@ export interface AppStore {
   setShowDataBrowser: (s: boolean) => void
 }
 
-// ── localStorage persistence helpers ──────────────────────────────
+// ── localStorage persistence helpers (UI preferences ONLY) ──────────────
 const STORAGE_PREFIX = 'harmony:'
 
-function persist(key: string, value: string | null) {
+function persistUI(key: string, value: string | null) {
   try {
     if (value === null) localStorage.removeItem(STORAGE_PREFIX + key)
     else localStorage.setItem(STORAGE_PREFIX + key, value)
@@ -210,7 +210,7 @@ function persist(key: string, value: string | null) {
   }
 }
 
-function restore(key: string): string | null {
+function restoreUI(key: string): string | null {
   try {
     return localStorage.getItem(STORAGE_PREFIX + key)
   } catch {
@@ -218,72 +218,52 @@ function restore(key: string): string | null {
   }
 }
 
-export function createAppStore(): AppStore {
-  // Restore persisted state
-  const savedDid = restore('did') ?? ''
-  const savedMnemonic = restore('mnemonic') ?? ''
-  const savedDisplayName = restore('displayName') ?? ''
-  const savedTheme = (restore('theme') as 'dark' | 'light') ?? 'dark'
+/** Save identity + servers to Electron backend (disk) */
+async function persistToBackend(patch: Record<string, unknown>): Promise<void> {
+  if (window.__HARMONY_DESKTOP__?.updateConfig) {
+    await window.__HARMONY_DESKTOP__.updateConfig(patch as any)
+  }
+}
 
-  const [did, _setDid] = createSignal(savedDid)
-  const [mnemonic, _setMnemonic] = createSignal(savedMnemonic)
+export function createAppStore(): AppStore {
+  // UI preferences from localStorage (safe — these are ephemeral display prefs)
+  const savedTheme = (restoreUI('theme') as 'dark' | 'light') ?? 'dark'
+  const savedActiveCommunity = restoreUI('activeCommunityId') ?? ''
+  const savedActiveChannel = restoreUI('activeChannelId') ?? ''
+
+  // Identity and data signals — populated from backend config on mount
+  const [did, _setDid] = createSignal('')
+  const [mnemonic, _setMnemonic] = createSignal('')
+  const [displayName, _setDisplayName] = createSignal('')
   const [identity, setIdentity] = createSignal<Identity | null>(null)
   const [keyPair, setKeyPair] = createSignal<KeyPair | null>(null)
   const [_client, _setClient] = createSignal<HarmonyClient | null>(null)
   const [servers, setServers] = createSignal<ServerConnection[]>([])
-  const savedCommunities: CommunityInfo[] = (() => {
-    try {
-      const raw = localStorage.getItem('harmony:communities')
-      return raw ? JSON.parse(raw) : []
-    } catch {
-      return []
-    }
-  })()
-  const savedChannels: ChannelInfo[] = (() => {
-    try {
-      const raw = localStorage.getItem('harmony:channels')
-      return raw ? JSON.parse(raw) : []
-    } catch {
-      return []
-    }
-  })()
-  const savedActiveCommunity = localStorage.getItem('harmony:activeCommunityId') ?? ''
-  const savedActiveChannel = localStorage.getItem('harmony:activeChannelId') ?? ''
 
-  const [communities, _setCommunities] = createSignal<CommunityInfo[]>(savedCommunities)
+  // Data signals — populated from server on connect, NOT persisted to localStorage
+  const [communities, _setCommunities] = createSignal<CommunityInfo[]>([])
   const [activeCommunityId, _setActiveCommunityId] = createSignal(savedActiveCommunity)
-  const [channels, _setChannels] = createSignal<ChannelInfo[]>(savedChannels)
+  const [channels, _setChannels] = createSignal<ChannelInfo[]>([])
   const [activeChannelId, _setActiveChannelId] = createSignal(savedActiveChannel)
 
   function setCommunities(c: CommunityInfo[]) {
     _setCommunities(c)
-    localStorage.setItem('harmony:communities', JSON.stringify(c))
   }
   function setActiveCommunityId(id: string) {
     _setActiveCommunityId(id)
-    localStorage.setItem('harmony:activeCommunityId', id)
+    persistUI('activeCommunityId', id)
   }
   function setChannels(c: ChannelInfo[]) {
     _setChannels(c)
-    localStorage.setItem('harmony:channels', JSON.stringify(c))
   }
   function setActiveChannelId(id: string) {
     _setActiveChannelId(id)
-    localStorage.setItem('harmony:activeChannelId', id)
+    persistUI('activeChannelId', id)
   }
   const [messages, setMessages] = createSignal<MessageData[]>([])
-  const savedMembers: MemberData[] = (() => {
-    try {
-      const raw = localStorage.getItem('harmony:members')
-      return raw ? JSON.parse(raw) : []
-    } catch {
-      return []
-    }
-  })()
-  const [members, _setMembers] = createSignal<MemberData[]>(savedMembers)
+  const [members, _setMembers] = createSignal<MemberData[]>([])
   function setMembers(m: MemberData[]) {
     _setMembers(m)
-    localStorage.setItem('harmony:members', JSON.stringify(m))
   }
   const [dmConversations, setDMConversations] = createSignal<DMConversationInfo[]>([])
   const [activeDMRecipient, setActiveDMRecipient] = createSignal<string | null>(null)
@@ -404,7 +384,6 @@ export function createAppStore(): AppStore {
   const [showCreateCommunity, setShowCreateCommunity] = createSignal(false)
   const [showSettings, setShowSettings] = createSignal(false)
   const [showCreateChannel, setShowCreateChannel] = createSignal(false)
-  const [displayName, _setDisplayName] = createSignal(savedDisplayName)
   const [editingMessageId, setEditingMessageId] = createSignal<string | null>(null)
   const [showRoleManager, setShowRoleManager] = createSignal(false)
 
@@ -463,15 +442,8 @@ export function createAppStore(): AppStore {
     channelCount: number
     serverCount: number
     dateRange: { earliest: string; latest: string } | null
-  } | null = (() => {
-    try {
-      const raw = restore('claimedDataMeta')
-      return raw ? JSON.parse(raw) : null
-    } catch {
-      return null
-    }
-  })()
-  const [hasClaimedData, setHasClaimedData] = createSignal(restore('hasClaimedData') === 'true')
+  } | null = null
+  const [hasClaimedData, setHasClaimedData] = createSignal(false)
   const [claimedDataMeta, setClaimedDataMeta] = createSignal<{
     messageCount: number
     channelCount: number
@@ -481,10 +453,9 @@ export function createAppStore(): AppStore {
   const [showDataClaim, setShowDataClaim] = createSignal(false)
   const [showDataBrowser, setShowDataBrowser] = createSignal(false)
 
-  // Wrap setters to persist
+  // Wrap setters (no localStorage — claimed data state comes from server)
   const _setHasClaimedData = (v: boolean) => {
     setHasClaimedData(v)
-    persist('hasClaimedData', String(v))
   }
   const _setClaimedDataMeta = (
     m: {
@@ -495,7 +466,6 @@ export function createAppStore(): AppStore {
     } | null
   ) => {
     setClaimedDataMeta(m)
-    persist('claimedDataMeta', m ? JSON.stringify(m) : null)
   }
 
   const [roles, _setRoles] = createSignal<RoleInfo[]>([])
@@ -545,22 +515,22 @@ export function createAppStore(): AppStore {
     return Array.from(m.values()).map((v) => v.displayName)
   }
 
-  // Persisted setters — write to signal + localStorage
+  // Persisted setters — identity persists to backend (disk), UI prefs to localStorage
   const setDid = (d: string) => {
     _setDid(d)
-    persist('did', d || null)
+    // DID saved as part of identity in backend config
   }
   const setMnemonic = (m: string) => {
     _setMnemonic(m)
-    persist('mnemonic', m || null)
+    // Mnemonic saved as part of identity in backend config
   }
   const setDisplayName = (n: string) => {
     _setDisplayName(n)
-    persist('displayName', n || null)
+    persistToBackend({ identity: { did: did(), mnemonic: mnemonic(), displayName: n, createdAt: '' } })
   }
   const setTheme = (t: 'dark' | 'light') => {
     _setTheme(t)
-    persist('theme', t)
+    persistUI('theme', t)
   }
 
   const addMessage = (m: MessageData) => {
@@ -657,7 +627,9 @@ export function createAppStore(): AppStore {
           /* ignore sync errors */
         })
       }
-      // Request community info for member/presence data
+      // Request community list from server (source of truth)
+      client.requestCommunityList()
+      // Also request info for any communities we already know about
       for (const c of communities()) {
         client.requestCommunityInfo(c.id)
       }
@@ -729,6 +701,54 @@ export function createAppStore(): AppStore {
         // If this is the active channel, update displayed messages too
         if (event.channelId === activeChannelId()) {
           setMessages(mapped)
+        }
+      }
+    })
+
+    // Handle community list from server — populate communities and channels from server data
+    client.on('community.list' as any, (...args: unknown[]) => {
+      const event = args[0] as {
+        communities: Array<{
+          id: string
+          name: string
+          channels?: Array<{ id: string; name: string; type: string }>
+        }>
+      }
+      if (event?.communities) {
+        const communityInfos: CommunityInfo[] = event.communities.map((c) => ({
+          id: c.id,
+          name: c.name,
+          icon: '',
+          memberCount: 0
+        }))
+        setCommunities(communityInfos)
+
+        // Collect channels from all communities
+        const allChannels: ChannelInfo[] = []
+        for (const c of event.communities) {
+          if (c.channels) {
+            for (const ch of c.channels) {
+              allChannels.push({ id: ch.id, name: ch.name, type: ch.type as any, communityId: c.id })
+            }
+          }
+          // Request full member info for each community
+          client.requestCommunityInfo(c.id)
+        }
+        if (allChannels.length > 0) setChannels(allChannels)
+
+        // Auto-select first community/channel if none active
+        if (!activeCommunityId() && communityInfos.length > 0) {
+          setActiveCommunityId(communityInfos[0].id)
+          if (allChannels.length > 0) {
+            const firstChannel = allChannels.find((ch) => ch.communityId === communityInfos[0].id)
+            if (firstChannel) {
+              setActiveChannelId(firstChannel.id)
+              client.syncChannel(communityInfos[0].id, firstChannel.id).catch(() => {})
+            }
+          }
+        } else if (activeCommunityId() && activeChannelId()) {
+          // Re-sync active channel
+          client.syncChannel(activeCommunityId(), activeChannelId()).catch(() => {})
         }
       }
     })

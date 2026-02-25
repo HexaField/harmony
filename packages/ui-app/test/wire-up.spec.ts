@@ -309,11 +309,13 @@ describe('Settings Persistence', () => {
     expect(en.SETTINGS_DISPLAY_NAME_SAVE).toBeDefined()
   })
 
-  it('displayName persists to localStorage', () => {
+  it('displayName persists to backend config (not localStorage)', () => {
     createRoot((dispose) => {
       const store = createAppStore()
       store.setDisplayName('NewName')
-      expect(localStorage.getItem('harmony:displayName')).toBe('NewName')
+      // displayName should NOT be in localStorage — it's persisted via backend IPC
+      expect(localStorage.getItem('harmony:displayName')).toBeNull()
+      expect(store.displayName()).toBe('NewName')
       dispose()
     })
   })

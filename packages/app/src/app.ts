@@ -88,18 +88,12 @@ export class HarmonyApp {
   }
 
   async launch(): Promise<void> {
-    // Check for first run
-    const configPath = join(this.dataDir, 'config.json')
-    if (!existsSync(configPath)) {
-      // First run — identity needs to be created
-      this.state.running = false
-      return
-    }
-
+    // Always start the server — identity may not exist yet but that's OK
     await this.startServer()
   }
 
   async startServer(): Promise<void> {
+    if (this.state.running) return // Already running
     const dbPath = join(this.dataDir, 'harmony.db')
     const mediaPath = join(this.dataDir, 'media')
 

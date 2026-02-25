@@ -1483,6 +1483,7 @@ export class HarmonyClient {
     const payload = msg.payload as {
       communityId: string
       info: { id: string; name: string; channels?: Array<{ id: string; name: string; type: string }> } | null
+      members?: Array<{ did: string; displayName: string; status: string; linked: boolean }>
       onlineMembers: Array<{ did: string; status: string }>
     }
 
@@ -1494,8 +1495,23 @@ export class HarmonyClient {
       }
     }
 
-    // Update member presence
-    if (community && payload.onlineMembers) {
+    // Update members from full member list if available
+    if (community && payload.members) {
+      for (const m of payload.members) {
+        const existing = community.members.find((e) => e.did === m.did)
+        if (existing) {
+          existing.presence = { status: m.status as 'online' | 'idle' | 'dnd' | 'offline' }
+        } else {
+          community.members.push({
+            did: m.did,
+            roles: [],
+            joinedAt: '',
+            presence: { status: m.status as 'online' | 'idle' | 'dnd' | 'offline' }
+          })
+        }
+      }
+    } else if (community && payload.onlineMembers) {
+      // Legacy: only online members
       for (const om of payload.onlineMembers) {
         const existing = community.members.find((m) => m.did === om.did)
         if (existing) {

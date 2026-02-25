@@ -147,11 +147,21 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
     return remoteUrl() || import.meta.env.VITE_DEFAULT_SERVER_URL || 'ws://localhost:4000'
   }
 
-  function selectHosting(mode: HostingMode) {
+  async function selectHosting(mode: HostingMode) {
     setHostingMode(mode)
     setError('')
     if (mode === 'remote') {
       // Don't auto-advance — let user enter URL or accept default
+    } else if (mode === 'local') {
+      // Ensure the embedded server is running before proceeding
+      try {
+        const result = await provider.provision({ mode: 'local', name: 'Migration', ownerDID: store.did() })
+        if (result.serverUrl) setLocalServerUrl(result.serverUrl)
+      } catch (err: any) {
+        // Server may already be running — continue anyway
+        console.warn('Server provision during migration:', err.message)
+      }
+      setStep('bot-setup')
     } else {
       setStep('bot-setup')
     }

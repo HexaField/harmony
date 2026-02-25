@@ -51,6 +51,7 @@ export const en = {
   // Members
   MEMBER_ONLINE: 'Online',
   MEMBER_OFFLINE: 'Offline',
+  MEMBER_UNLINKED: 'Not Yet Migrated',
   MEMBER_PROFILE: 'View profile',
 
   // DM

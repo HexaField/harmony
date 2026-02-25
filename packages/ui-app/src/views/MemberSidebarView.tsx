@@ -148,6 +148,14 @@ export const MemberSidebarView: Component = () => {
           {memberData().offlineLabel} — {memberData().offline.length}
         </h3>
         <For each={memberData().offline}>{(member) => renderMember(member, false)}</For>
+
+        {/* Unlinked members (imported from Discord, not yet migrated) */}
+        <Show when={memberData().unlinked.length > 0}>
+          <h3 class="text-xs font-semibold uppercase text-[var(--text-muted)] tracking-wider mb-2 mt-4">
+            {memberData().unlinkedLabel} — {memberData().unlinked.length}
+          </h3>
+          <For each={memberData().unlinked}>{(member) => renderMember(member, false)}</For>
+        </Show>
       </div>
 
       {/* Role assignment context menu */}

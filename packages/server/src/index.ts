@@ -1174,17 +1174,48 @@ export class HarmonyServer {
     const payload = msg.payload as { communityId: string }
     const info = await this.communityManager.getInfo(payload.communityId)
 
-    // Also gather online presence from connected members
+    // Gather all members from quad store (imported members)
+    const allMembers: Array<{ did: string; displayName: string; status: string; linked: boolean }> = []
+    const memberQuads = await this.config.store.match({
+      predicate: RDFPredicate.type,
+      object: HarmonyType.Member,
+      graph: payload.communityId
+    })
+    for (const mq of memberQuads) {
+      const nameQuads = await this.config.store.match({
+        subject: mq.subject,
+        predicate: HarmonyPredicate.name,
+        graph: payload.communityId
+      })
+      const displayName = nameQuads.length
+        ? typeof nameQuads[0].object === 'string'
+          ? nameQuads[0].object
+          : nameQuads[0].object.value
+        : mq.subject
+      // Members with harmony:member: prefix are unlinked (imported from Discord, no real DID yet)
+      const linked = !mq.subject.startsWith('harmony:member:')
+      allMembers.push({ did: mq.subject, displayName, status: 'offline', linked })
+    }
+
+    // Update online presence from connected members
     const connIds = this.communitySubscriptions.get(payload.communityId)
-    const onlineMembers: Array<{ did: string; status: string; displayName?: string }> = []
+    const onlineDids = new Set<string>()
     if (connIds) {
       for (const cid of connIds) {
         const c = this._connections.get(cid)
         if (c) {
-          onlineMembers.push({
-            did: c.did,
-            status: c.presence?.status ?? 'online'
-          })
+          onlineDids.add(c.did)
+          const existing = allMembers.find((m) => m.did === c.did)
+          if (existing) {
+            existing.status = c.presence?.status ?? 'online'
+          } else {
+            allMembers.push({
+              did: c.did,
+              displayName: c.did,
+              status: c.presence?.status ?? 'online',
+              linked: true
+            })
+          }
         }
       }
     }
@@ -1197,7 +1228,8 @@ export class HarmonyServer {
       payload: {
         communityId: payload.communityId,
         info: info ?? null,
-        onlineMembers
+        members: allMembers,
+        onlineMembers: allMembers.filter((m) => m.status !== 'offline')
       }
     })
   }

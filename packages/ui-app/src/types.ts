@@ -350,6 +350,7 @@ export interface MemberData {
   roles: string[]
   status: 'online' | 'offline' | 'idle' | 'dnd'
   avatarUrl?: string
+  linked?: boolean
 }
 export interface VoiceParticipantInfo {
   did: string

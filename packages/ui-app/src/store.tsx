@@ -724,9 +724,32 @@ export function createAppStore(): AppStore {
     client.on('community.info', (...args: unknown[]) => {
       const event = args[0] as {
         communityId: string
+        members?: Array<{ did: string; displayName: string; status: string; linked: boolean }>
         onlineMembers?: Array<{ did: string; status: string }>
       }
-      if (event?.onlineMembers) {
+      if (event?.members) {
+        // Full member list from server — use it directly
+        const current = members()
+        const updated: typeof current = []
+        for (const m of event.members) {
+          const existing = current.find((e) => e.did === m.did)
+          updated.push({
+            did: m.did,
+            displayName: m.displayName || existing?.displayName || pseudonymFromDid(m.did),
+            roles: existing?.roles ?? [],
+            status: (m.status as 'online' | 'offline' | 'idle' | 'dnd') ?? 'offline',
+            linked: m.linked
+          })
+        }
+        // Keep any members not in server response (e.g. self)
+        for (const c of current) {
+          if (!updated.find((u) => u.did === c.did)) {
+            updated.push(c)
+          }
+        }
+        setMembers(updated)
+      } else if (event?.onlineMembers) {
+        // Legacy: only online members
         const current = members()
         const updated = [...current]
         for (const om of event.onlineMembers) {

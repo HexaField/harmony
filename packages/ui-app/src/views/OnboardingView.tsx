@@ -108,9 +108,8 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
     }
   })
 
-  // Listen for OAuth completion from popup window
-  function handleOAuthMessage(event: MessageEvent) {
-    const data = event.data
+  // Listen for OAuth completion from popup window or desktop deep link
+  function handleOAuthResult(data: any) {
     if (data?.type === 'harmony:oauth-complete' && data.provider === 'discord') {
       setDiscordLinked(true)
       if (data.discordUsername) {
@@ -125,8 +124,16 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
       }
     }
   }
+  function handleOAuthMessage(event: MessageEvent) {
+    handleOAuthResult(event.data)
+  }
   onMount(() => {
     window.addEventListener('message', handleOAuthMessage)
+    // Desktop: listen for OAuth deep link result via IPC
+    const desktop = (window as any).__HARMONY_DESKTOP__
+    if (desktop?.onOAuthResult) {
+      desktop.onOAuthResult(handleOAuthResult)
+    }
     // Check if Discord is already linked (e.g. page refresh after linking)
     checkDiscordLink()
   })
@@ -485,7 +492,11 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
                           const res = await fetch(`${portalUrl}/api/identity/link`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ provider: 'discord', userDID: did })
+                            body: JSON.stringify({
+                              provider: 'discord',
+                              userDID: did,
+                              source: (window as any).__HARMONY_DESKTOP__ ? 'desktop' : 'browser'
+                            })
                           })
                           const data = await res.json()
                           if (data.redirectUrl) {

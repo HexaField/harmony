@@ -200,19 +200,36 @@ export function oauthRoutes(portal: PortalService, reconciliationService?: Recon
         if (isDedup) redirectUrl.searchParams.set('existingDID', existingDID)
         res.redirect(redirectUrl.toString())
       } else {
-        // Return HTML that posts result to opener and closes the popup
+        const isDesktop = pending.source === 'desktop'
+        const oauthData = {
+          type: 'harmony:oauth-complete',
+          provider: 'discord',
+          userDID: isDedup ? existingDID : pending.userDID,
+          discordUsername: discordUser.username,
+          reconciledCommunities,
+          ...(isDedup ? { existingDID } : {})
+        }
+
+        let script: string
+        if (isDesktop) {
+          // Desktop: redirect via deep link, then close tab
+          const deepLink = `harmony://oauth-complete?${new URLSearchParams({ data: JSON.stringify(oauthData) }).toString()}`
+          script = `window.location.href = ${JSON.stringify(deepLink)}; setTimeout(() => { try { window.close(); } catch(e) {} }, 1000);`
+        } else {
+          // Browser: postMessage to opener, then close popup
+          script = `try { window.opener && window.opener.postMessage(${JSON.stringify(oauthData)}, '*'); } catch(e) {}
+setTimeout(() => { try { window.close(); } catch(e) {} setTimeout(() => { document.querySelector('p').textContent = 'You can close this tab now.'; }, 500); }, 2000);`
+        }
+
         const html = `<!DOCTYPE html>
 <html><head><title>Discord Linked</title></head>
 <body style="background:#1a1a2e;color:#e0e0e0;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
 <div style="text-align:center">
 <div style="font-size:3em;margin-bottom:0.5em">✅</div>
 <h2>Discord account linked!</h2>
-<p style="color:#888">This window will close automatically.</p>
+<p style="color:#888">Redirecting back to Harmony...</p>
 </div>
-<script>
-try { window.opener && window.opener.postMessage({ type: 'harmony:oauth-complete', provider: 'discord', userDID: ${JSON.stringify(isDedup ? existingDID : pending.userDID)}, discordUsername: ${JSON.stringify(discordUser.username)}, reconciledCommunities: ${JSON.stringify(reconciledCommunities)}${isDedup ? `, existingDID: ${JSON.stringify(existingDID)}` : ''} }, '*'); } catch(e) {}
-setTimeout(() => { try { window.close(); } catch(e) {} setTimeout(() => { document.querySelector('p').textContent = 'You can close this tab now.'; }, 500); }, 2000);
-</script>
+<script>${script}</script>
 </body></html>`
         res.status(200).type('html').send(html)
       }
@@ -245,7 +262,7 @@ setTimeout(() => { try { window.close(); } catch(e) {} setTimeout(() => { docume
       cleanExpiredStates()
 
       const state = generateState()
-      pendingStates.set(state, { userDID, createdAt: Date.now() })
+      pendingStates.set(state, { userDID, source: req.body.source || 'browser', createdAt: Date.now() })
 
       const params = new URLSearchParams({
         client_id: clientId,

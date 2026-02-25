@@ -33,7 +33,7 @@ async function createWindow() {
   // Load UI
   if (isDev) {
     await mainWindow.loadURL(uiDevUrl)
-    mainWindow.webContents.openDevTools({ mode: 'detach' })
+    // mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
     const uiDistPath = join(import.meta.dirname ?? __dirname, '..', '..', 'ui-app', 'dist', 'index.html')
     if (existsSync(uiDistPath)) {
@@ -94,6 +94,22 @@ function registerDeepLinks() {
   }
 
   app.on('open-url', (_event, url) => {
+    // Handle OAuth deep links: harmony://oauth-complete?data={...}
+    if (url.startsWith('harmony://oauth-complete')) {
+      try {
+        const u = new URL(url)
+        const dataStr = u.searchParams.get('data')
+        if (dataStr && mainWindow) {
+          const data = JSON.parse(dataStr)
+          mainWindow.webContents.send('harmony:oauth-result', data)
+          mainWindow.show()
+          return
+        }
+      } catch (e) {
+        console.error('Failed to parse OAuth deep link:', e)
+      }
+    }
+
     const result = harmonyApp.handleDeepLink(url)
     if (result && mainWindow) {
       mainWindow.webContents.send('deep-link', result)

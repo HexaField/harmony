@@ -39,15 +39,18 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
   const [discordLinked, setDiscordLinked] = createSignal(false)
   const [linkedUsername, setLinkedUsername] = createSignal('')
 
-  // Listen for OAuth popup completion
-  onMount(() => {
-    const handler = (event: MessageEvent) => {
-      if (event.data?.type === 'harmony:oauth-complete' && event.data.provider === 'discord') {
-        setDiscordLinked(true)
-        if (event.data.discordUsername) setLinkedUsername(event.data.discordUsername)
-      }
+  // Listen for OAuth completion (popup postMessage or desktop deep link)
+  function handleOAuthResult(data: any) {
+    if (data?.type === 'harmony:oauth-complete' && data.provider === 'discord') {
+      setDiscordLinked(true)
+      if (data.discordUsername) setLinkedUsername(data.discordUsername)
     }
+  }
+  onMount(() => {
+    const handler = (event: MessageEvent) => handleOAuthResult(event.data)
     window.addEventListener('message', handler)
+    const desktop = (window as any).__HARMONY_DESKTOP__
+    if (desktop?.onOAuthResult) desktop.onOAuthResult(handleOAuthResult)
     onCleanup(() => window.removeEventListener('message', handler))
   })
 
@@ -483,7 +486,8 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                           provider: 'discord',
-                          userDID: store.did()
+                          userDID: store.did(),
+                          source: (window as any).__HARMONY_DESKTOP__ ? 'desktop' : 'browser'
                         })
                       })
                       if (!res.ok) throw new Error(`Portal returned ${res.status}`)

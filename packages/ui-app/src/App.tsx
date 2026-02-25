@@ -48,6 +48,10 @@ export const App: Component = () => {
   return (
     <AppContext.Provider value={store}>
       <div class="h-screen flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
+        {/* Draggable title bar region for desktop app (hiddenInset) */}
+        <Show when={(window as any).__HARMONY_DESKTOP__}>
+          <div class="h-8 w-full flex-shrink-0" style={{ '-webkit-app-region': 'drag', 'padding-left': '78px' }} />
+        </Show>
         <Show when={store.isOnboarded()} fallback={<OnboardingView />}>
           <Show when={!store.needsSetup()} fallback={<OnboardingView startAtSetup={true} />}>
             <Show when={store.showSettings()} fallback={<MainLayout />}>

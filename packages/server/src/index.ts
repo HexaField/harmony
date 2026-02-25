@@ -1187,7 +1187,13 @@ export class HarmonyServer {
   }
 
   private async handleCommunityList(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const communities = await this.communityManager.listAll()
+    const infos = await this.communityManager.listAll()
+    const communities = await Promise.all(
+      infos.map(async (info) => {
+        const channels = await this.communityManager.getChannels(info.id)
+        return { ...info, channels: channels.map((ch) => ({ id: ch.id, name: ch.name, type: ch.type })) }
+      })
+    )
     this.sendToConnection(conn, {
       id: `list-${Date.now()}`,
       type: 'community.list.response' as any,

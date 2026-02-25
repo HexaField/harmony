@@ -516,17 +516,26 @@ export function createAppStore(): AppStore {
   }
 
   // Persisted setters — identity persists to backend (disk), UI prefs to localStorage
+  const persistIdentity = () => {
+    const d = did()
+    const m = mnemonic()
+    if (d && m) {
+      persistToBackend({
+        identity: { did: d, mnemonic: m, displayName: displayName(), createdAt: '' }
+      })
+    }
+  }
   const setDid = (d: string) => {
     _setDid(d)
-    // DID saved as part of identity in backend config
+    persistIdentity()
   }
   const setMnemonic = (m: string) => {
     _setMnemonic(m)
-    // Mnemonic saved as part of identity in backend config
+    persistIdentity()
   }
   const setDisplayName = (n: string) => {
     _setDisplayName(n)
-    persistToBackend({ identity: { did: did(), mnemonic: mnemonic(), displayName: n, createdAt: '' } })
+    persistIdentity()
   }
   const setTheme = (t: 'dark' | 'light') => {
     _setTheme(t)

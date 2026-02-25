@@ -308,6 +308,22 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
         const firstText = mappedChannels.find((c: any) => c.type === 'text')
         if (firstText) store.setActiveChannelId(firstText.id)
       }
+      // Populate members from import
+      if (result.members?.length) {
+        const existingMembers = store.members()
+        const existingDids = new Set(existingMembers.map((m) => m.did))
+        const newMembers = result.members
+          .filter((m: any) => !existingDids.has(m.did))
+          .map((m: any) => ({
+            did: m.did,
+            displayName: m.displayName || pseudonymFromDid(m.did),
+            roles: [] as string[],
+            status: 'offline' as const
+          }))
+        if (newMembers.length) {
+          store.setMembers([...existingMembers, ...newMembers])
+        }
+      }
       store.setActiveCommunityId(result.communityId)
 
       // Connect to the server

@@ -1533,9 +1533,11 @@ export class HarmonyClient {
       const p = m.payload as { clock?: LamportClock; channelId?: string; content?: EncryptedContent | DecryptedContent }
       const clock = p?.clock ?? { counter: 0, authorDID: m.sender }
 
-      // Extract text from content — may be plaintext { text } or encrypted { ciphertext }
+      // Extract text from content — may be plaintext { text }, encrypted { ciphertext }, or bare string
       let text = '[synced]'
-      if (p?.content) {
+      if (typeof p?.content === 'string') {
+        text = p.content
+      } else if (p?.content) {
         const c = p.content as unknown as Record<string, unknown>
         if (typeof c.text === 'string') {
           text = c.text

@@ -674,7 +674,10 @@ export function createAppStore(): AppStore {
           id: msg.id,
           content: msg.content.text,
           authorDid: msg.authorDID,
-          authorName: pseudonymFromDid(msg.authorDID),
+          authorName: (() => {
+            const member = members().find((mb) => mb.did === msg.authorDID)
+            return member?.displayName || pseudonymFromDid(msg.authorDID)
+          })(),
           timestamp: msg.timestamp,
           reactions: [] as Array<{ emoji: string; count: number; userReacted: boolean }>
         }
@@ -702,8 +705,11 @@ export function createAppStore(): AppStore {
             id: m.id,
             content: m.content.text ?? '',
             authorDid: m.authorDID,
-            authorName:
-              m.authorDID === did() ? displayName() || pseudonymFromDid(did()) : pseudonymFromDid(m.authorDID),
+            authorName: (() => {
+              if (m.authorDID === did()) return displayName() || pseudonymFromDid(did())
+              const member = members().find((mb) => mb.did === m.authorDID)
+              return member?.displayName || pseudonymFromDid(m.authorDID)
+            })(),
             timestamp: m.timestamp,
             reactions: [] as Array<{ emoji: string; count: number; userReacted: boolean }>
           }))
@@ -814,7 +820,10 @@ export function createAppStore(): AppStore {
           id: event.id,
           content: event.content?.text ?? '[encrypted]',
           authorDid: senderDid,
-          authorName: pseudonymFromDid(senderDid),
+          authorName: (() => {
+            const member = members().find((mb) => mb.did === senderDid)
+            return member?.displayName || pseudonymFromDid(senderDid)
+          })(),
           timestamp: event.timestamp,
           reactions: []
         }

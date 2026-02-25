@@ -389,7 +389,11 @@ export const MessageArea: Component = () => {
             }
             const md = MarkdownRenderer({ content: msg.content })
             const timeInfo = RelativeTime({ timestamp: msg.timestamp })
-            const initials = (msg.authorName ?? pseudonymFromDid(msg.authorDid)).substring(0, 2).toUpperCase()
+            const resolvedName = () => {
+              const member = store.members().find((m) => m.did === msg.authorDid)
+              return member?.displayName || msg.authorName || pseudonymFromDid(msg.authorDid)
+            }
+            const initials = () => resolvedName().substring(0, 2).toUpperCase()
             const isEditing = () => store.editingMessageId() === msg.id
 
             return (
@@ -408,13 +412,13 @@ export const MessageArea: Component = () => {
                   }
                 >
                   <div class="w-10 h-10 rounded-full bg-[var(--accent)] flex items-center justify-center text-xs font-bold text-white shrink-0 mt-0.5">
-                    {initials}
+                    {initials()}
                   </div>
                 </Show>
                 <div class="ml-3 min-w-0 flex-1">
                   <Show when={!isGrouped()}>
                     <div class="flex items-baseline gap-2">
-                      <span class="font-semibold text-sm hover:underline cursor-pointer">{msg.authorName}</span>
+                      <span class="font-semibold text-sm hover:underline cursor-pointer">{resolvedName()}</span>
                       <span class="text-xs text-[var(--text-muted)]">{timeInfo.display}</span>
                       <Show when={msg.edited}>
                         <span class="text-xs text-[var(--text-muted)] italic">{t('MESSAGE_EDITED_LABEL')}</span>

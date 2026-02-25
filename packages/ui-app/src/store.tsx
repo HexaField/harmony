@@ -272,7 +272,19 @@ export function createAppStore(): AppStore {
     localStorage.setItem('harmony:activeChannelId', id)
   }
   const [messages, setMessages] = createSignal<MessageData[]>([])
-  const [members, setMembers] = createSignal<MemberData[]>([])
+  const savedMembers: MemberData[] = (() => {
+    try {
+      const raw = localStorage.getItem('harmony:members')
+      return raw ? JSON.parse(raw) : []
+    } catch {
+      return []
+    }
+  })()
+  const [members, _setMembers] = createSignal<MemberData[]>(savedMembers)
+  function setMembers(m: MemberData[]) {
+    _setMembers(m)
+    localStorage.setItem('harmony:members', JSON.stringify(m))
+  }
   const [dmConversations, setDMConversations] = createSignal<DMConversationInfo[]>([])
   const [activeDMRecipient, setActiveDMRecipient] = createSignal<string | null>(null)
   const [showDMView, setShowDMView] = createSignal(false)

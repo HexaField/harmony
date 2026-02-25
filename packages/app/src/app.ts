@@ -70,7 +70,7 @@ export class HarmonyApp {
 
     this.state = {
       running: false,
-      serverPort: 4000 + Math.floor(Math.random() * 1000),
+      serverPort: 4515,
       communities: [],
       connectionState: 'disconnected',
       offlineMode: false

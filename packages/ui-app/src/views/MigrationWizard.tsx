@@ -57,6 +57,23 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
     const desktop = (window as any).__HARMONY_DESKTOP__
     if (desktop?.onOAuthResult) desktop.onOAuthResult(handleOAuthResult)
     onCleanup(() => window.removeEventListener('message', handler))
+
+    // Check if Discord is already linked (e.g. after mnemonic recovery)
+    const did = store.did()
+    if (did) {
+      const portalUrl = (import.meta as any).env?.VITE_PORTAL_URL || 'http://localhost:3000'
+      fetch(`${portalUrl}/api/identity/${encodeURIComponent(did)}/discord-profile`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.username) {
+            setDiscordLinked(true)
+            setLinkedUsername(data.username)
+          }
+        })
+        .catch(() => {
+          /* portal unavailable */
+        })
+    }
   })
 
   let pollTimer: ReturnType<typeof setInterval> | undefined

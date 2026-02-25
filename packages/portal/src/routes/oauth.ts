@@ -211,7 +211,7 @@ export function oauthRoutes(portal: PortalService, reconciliationService?: Recon
 </div>
 <script>
 try { window.opener && window.opener.postMessage({ type: 'harmony:oauth-complete', provider: 'discord', userDID: ${JSON.stringify(isDedup ? existingDID : pending.userDID)}, discordUsername: ${JSON.stringify(discordUser.username)}, reconciledCommunities: ${JSON.stringify(reconciledCommunities)}${isDedup ? `, existingDID: ${JSON.stringify(existingDID)}` : ''} }, '*'); } catch(e) {}
-setTimeout(() => window.close(), 2000);
+setTimeout(() => { try { window.close(); } catch(e) {} setTimeout(() => { document.querySelector('p').textContent = 'You can close this tab now.'; }, 500); }, 2000);
 </script>
 </body></html>`
         res.status(200).type('html').send(html)

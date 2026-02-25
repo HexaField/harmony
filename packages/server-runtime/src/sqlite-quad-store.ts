@@ -13,8 +13,8 @@ interface QuadRow {
   subject: string
   predicate: string
   object_value: string
-  object_datatype: string | null
-  object_language: string | null
+  object_datatype: string
+  object_language: string
   graph: string
 }
 
@@ -23,14 +23,14 @@ function objectToString(obj: string | TypedLiteral): string {
   return obj.value
 }
 
-function objectDatatype(obj: string | TypedLiteral): string | null {
+function objectDatatype(obj: string | TypedLiteral): string {
   if (typeof obj === 'object' && obj.datatype) return obj.datatype
-  return null
+  return ''
 }
 
-function objectLanguage(obj: string | TypedLiteral): string | null {
+function objectLanguage(obj: string | TypedLiteral): string {
   if (typeof obj === 'object' && obj.language) return obj.language
-  return null
+  return ''
 }
 
 function rowToQuad(row: QuadRow): Quad {
@@ -38,8 +38,8 @@ function rowToQuad(row: QuadRow): Quad {
     row.object_datatype || row.object_language
       ? {
           value: row.object_value,
-          datatype: row.object_datatype ?? undefined,
-          language: row.object_language ?? undefined
+          datatype: row.object_datatype || undefined,
+          language: row.object_language || undefined
         }
       : row.object_value
   return {
@@ -97,7 +97,7 @@ export class SQLiteQuadStore implements QuadStore {
       `INSERT OR IGNORE INTO quads (subject, predicate, object_value, object_datatype, object_language, graph) VALUES (?, ?, ?, ?, ?, ?)`
     )
     this.deleteStmt = this.db.prepare(
-      `DELETE FROM quads WHERE subject = ? AND predicate = ? AND object_value = ? AND (object_datatype IS ? OR (object_datatype = ?)) AND (object_language IS ? OR (object_language = ?)) AND graph = ?`
+      `DELETE FROM quads WHERE subject = ? AND predicate = ? AND object_value = ? AND object_datatype = ? AND object_language = ? AND graph = ?`
     )
     this.deleteGraphStmt = this.db.prepare(`DELETE FROM quads WHERE graph = ?`)
     this.countAllStmt = this.db.prepare(`SELECT COUNT(*) as cnt FROM quads`)
@@ -110,8 +110,8 @@ export class SQLiteQuadStore implements QuadStore {
         subject TEXT NOT NULL,
         predicate TEXT NOT NULL,
         object_value TEXT NOT NULL,
-        object_datatype TEXT,
-        object_language TEXT,
+        object_datatype TEXT NOT NULL DEFAULT '',
+        object_language TEXT NOT NULL DEFAULT '',
         graph TEXT NOT NULL,
         UNIQUE(subject, predicate, object_value, object_datatype, object_language, graph)
       );
@@ -179,7 +179,7 @@ export class SQLiteQuadStore implements QuadStore {
     const objVal = objectToString(quad.object)
     const objDt = objectDatatype(quad.object)
     const objLang = objectLanguage(quad.object)
-    const result = this.deleteStmt.run(quad.subject, quad.predicate, objVal, objDt, objDt, objLang, objLang, quad.graph)
+    const result = this.deleteStmt.run(quad.subject, quad.predicate, objVal, objDt, objLang, quad.graph)
     if (result.changes > 0) {
       this.notify({ type: 'remove', quad })
     }

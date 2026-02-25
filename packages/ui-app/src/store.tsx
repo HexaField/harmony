@@ -628,6 +628,12 @@ export function createAppStore(): AppStore {
       updateConnectionStateFromClient(client)
       refreshServers()
 
+      // Send display name to server so it knows our name for community.info responses
+      const name = displayName()
+      if (name) {
+        client.updateDisplayName(name)
+      }
+
       // Ensure current user appears in member list
       const myDid = did()
       if (myDid && !members().some((m) => m.did === myDid)) {
@@ -788,9 +794,16 @@ export function createAppStore(): AppStore {
         const updated: typeof current = []
         for (const m of event.members) {
           const existing = current.find((e) => e.did === m.did)
+          // If this member is the current user, prefer local display name
+          const isCurrentUser = m.did === did()
+          const resolvedName = isCurrentUser
+            ? displayName() || m.displayName || pseudonymFromDid(m.did)
+            : m.displayName && m.displayName !== m.did
+              ? m.displayName
+              : existing?.displayName || pseudonymFromDid(m.did)
           updated.push({
             did: m.did,
-            displayName: m.displayName || existing?.displayName || pseudonymFromDid(m.did),
+            displayName: resolvedName,
             roles: existing?.roles ?? [],
             status: (m.status as 'online' | 'offline' | 'idle' | 'dnd') ?? 'offline',
             linked: m.linked
@@ -1065,6 +1078,13 @@ export function createAppStore(): AppStore {
     // Start a loading timeout — if no community.list arrives within 3s, stop loading
     if (loadingTimerId) clearTimeout(loadingTimerId)
     loadingTimerId = setTimeout(() => _setLoading(false), 3000)
+
+    // If client already connected during create() (persistence adapter auto-connect),
+    // the 'connected' event fired before listeners were set up. Manually trigger
+    // community list request so communities load on page refresh.
+    if (client.isConnected()) {
+      client.requestCommunityList()
+    }
 
     // Ensure current user appears in member list when connected
     if (client.isConnected()) {

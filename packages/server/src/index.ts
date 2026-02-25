@@ -34,6 +34,7 @@ export interface RateLimitConfig {
 export interface ServerConnection {
   id: string
   did: string
+  displayName?: string
   authenticatedAt: string
   communities: string[]
   presence: PresenceUpdatePayload
@@ -884,6 +885,9 @@ export class HarmonyServer {
       case 'presence.update':
         await this.handlePresenceUpdate(conn, msg)
         break
+      case 'member.update':
+        await this.handleMemberUpdate(conn, msg)
+        break
       case 'sync.request':
         await this.handleSyncRequest(conn, msg)
         break
@@ -1182,6 +1186,44 @@ export class HarmonyServer {
     })
   }
 
+  private async handleMemberUpdate(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { displayName?: string }
+    if (payload.displayName) {
+      conn.displayName = payload.displayName
+
+      // Store display name in quad store for each community this member belongs to
+      for (const communityId of conn.communities) {
+        const memberSubject = `${communityId}:member:${conn.did}`
+        // Remove existing name quads
+        const existingNames = await this.config.store.match({
+          subject: memberSubject,
+          predicate: HarmonyPredicate.name,
+          graph: communityId
+        })
+        if (existingNames.length) {
+          await this.config.store.removeAll(existingNames)
+        }
+        // Add new name quad
+        await this.config.store.addAll([
+          { subject: memberSubject, predicate: HarmonyPredicate.name, object: payload.displayName, graph: communityId }
+        ])
+
+        // Broadcast to community
+        this.broadcastToCommunity(
+          communityId,
+          {
+            id: `member-update-${Date.now()}`,
+            type: 'community.member.updated',
+            timestamp: new Date().toISOString(),
+            sender: conn.did,
+            payload: { did: conn.did, displayName: payload.displayName }
+          },
+          conn.id
+        )
+      }
+    }
+  }
+
   private async handlePresenceUpdate(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
     const payload = msg.payload as PresenceUpdatePayload
     conn.presence = payload
@@ -1230,6 +1272,18 @@ export class HarmonyServer {
       graph: payload.communityId
     })
     for (const mq of memberQuads) {
+      // Get the actual DID from the author quad
+      const authorQuads = await this.config.store.match({
+        subject: mq.subject,
+        predicate: HarmonyPredicate.author,
+        graph: payload.communityId
+      })
+      const memberDid = authorQuads.length
+        ? typeof authorQuads[0].object === 'string'
+          ? authorQuads[0].object
+          : authorQuads[0].object.value
+        : mq.subject
+
       const nameQuads = await this.config.store.match({
         subject: mq.subject,
         predicate: HarmonyPredicate.name,
@@ -1239,10 +1293,10 @@ export class HarmonyServer {
         ? typeof nameQuads[0].object === 'string'
           ? nameQuads[0].object
           : nameQuads[0].object.value
-        : mq.subject
+        : memberDid
       // Members with harmony:member: prefix are unlinked (imported from Discord, no real DID yet)
       const linked = !mq.subject.startsWith('harmony:member:')
-      allMembers.push({ did: mq.subject, displayName, status: 'offline', linked })
+      allMembers.push({ did: memberDid, displayName, status: 'offline', linked })
     }
 
     // Update online presence from connected members
@@ -1259,7 +1313,7 @@ export class HarmonyServer {
           } else {
             allMembers.push({
               did: c.did,
-              displayName: c.did,
+              displayName: c.displayName || c.did,
               status: c.presence?.status ?? 'online',
               linked: true
             })

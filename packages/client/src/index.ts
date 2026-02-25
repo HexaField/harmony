@@ -1491,6 +1491,16 @@ export class HarmonyClient {
     })
   }
 
+  updateDisplayName(displayName: string): void {
+    this.send({
+      id: `member-update-${Date.now()}`,
+      type: 'member.update' as any,
+      timestamp: new Date().toISOString(),
+      sender: this._did,
+      payload: { displayName }
+    })
+  }
+
   requestCommunityInfo(communityId: string): void {
     this.send({
       id: `info-req-${Date.now()}`,

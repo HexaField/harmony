@@ -55,9 +55,11 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
   })
 
   let pollTimer: ReturnType<typeof setInterval> | undefined
+  let oauthPollTimer: ReturnType<typeof setInterval> | undefined
 
   onCleanup(() => {
     if (pollTimer) clearInterval(pollTimer)
+    if (oauthPollTimer) clearInterval(oauthPollTimer)
   })
 
   const availableModes = provider.availableModes()
@@ -66,6 +68,32 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
   const stepIndex = () => allSteps.indexOf(step())
 
   /** Resolve the server WebSocket URL based on the hosting mode */
+  function startMigrationOAuthPolling(portalBaseUrl: string, did: string) {
+    if (oauthPollTimer) clearInterval(oauthPollTimer)
+    let attempts = 0
+    oauthPollTimer = setInterval(async () => {
+      attempts++
+      if (attempts > 60) {
+        clearInterval(oauthPollTimer!)
+        oauthPollTimer = undefined
+        return
+      }
+      try {
+        const res = await fetch(`${portalBaseUrl}/api/oauth/result/${encodeURIComponent(did)}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.complete) {
+            clearInterval(oauthPollTimer!)
+            oauthPollTimer = undefined
+            handleOAuthResult(data)
+          }
+        }
+      } catch {
+        /* keep trying */
+      }
+    }, 2000)
+  }
+
   function resolveServerUrl(): string {
     const mode = hostingMode()
     if (mode === 'remote') return remoteUrl() || import.meta.env.VITE_DEFAULT_SERVER_URL || 'ws://localhost:4000'
@@ -494,6 +522,8 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
                       const data = await res.json()
                       if (data.redirectUrl) {
                         openExternal(data.redirectUrl)
+                        // Poll for completion
+                        startMigrationOAuthPolling(portalUrl(), store.did())
                       }
                     } catch (err) {
                       setError(t('ERROR_CONNECTION_FAILED', { url: portalUrl() }))

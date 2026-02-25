@@ -157,6 +157,38 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
     }
   }
 
+  let oauthPollTimer: ReturnType<typeof setInterval> | undefined
+  onCleanup(() => {
+    if (oauthPollTimer) clearInterval(oauthPollTimer)
+  })
+
+  function startOAuthPolling(portalUrl: string, did: string) {
+    if (oauthPollTimer) clearInterval(oauthPollTimer)
+    let attempts = 0
+    oauthPollTimer = setInterval(async () => {
+      attempts++
+      if (attempts > 60) {
+        // 2 minutes max
+        clearInterval(oauthPollTimer!)
+        oauthPollTimer = undefined
+        return
+      }
+      try {
+        const res = await fetch(`${portalUrl}/api/oauth/result/${encodeURIComponent(did)}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.complete) {
+            clearInterval(oauthPollTimer!)
+            oauthPollTimer = undefined
+            handleOAuthResult(data)
+          }
+        }
+      } catch {
+        // Portal unreachable — keep trying
+      }
+    }, 2000)
+  }
+
   async function handleDedup(existingDID: string) {
     // The user's Discord account is already linked to an existing Harmony identity.
     // Fetch that identity's mnemonic hint or prompt recovery — for now, if we have the
@@ -501,6 +533,8 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
                           const data = await res.json()
                           if (data.redirectUrl) {
                             openExternal(data.redirectUrl)
+                            // Poll portal for OAuth completion
+                            startOAuthPolling(portalUrl, did)
                           }
                         } catch (err) {
                           console.error('Discord link failed:', err)

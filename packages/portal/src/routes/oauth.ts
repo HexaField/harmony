@@ -3,7 +3,13 @@ import type { PortalService } from '../index.js'
 import type { ReconciliationService } from '../reconciliation.js'
 
 // In-memory state store for OAuth flows
-const pendingStates = new Map<string, { userDID: string; redirectUri?: string; createdAt: number }>()
+const pendingStates = new Map<string, { userDID: string; source?: string; redirectUri?: string; createdAt: number }>()
+
+// Completed OAuth results — keyed by userDID, expires after 5 minutes
+const completedResults = new Map<
+  string,
+  { discordUsername: string; reconciledCommunities: string[]; existingDID?: string; completedAt: number }
+>()
 
 // Clean expired states (older than 10 minutes)
 function cleanExpiredStates(): void {
@@ -11,6 +17,11 @@ function cleanExpiredStates(): void {
   for (const [state, entry] of pendingStates) {
     if (now - entry.createdAt > 10 * 60 * 1000) {
       pendingStates.delete(state)
+    }
+  }
+  for (const [did, entry] of completedResults) {
+    if (now - entry.completedAt > 5 * 60 * 1000) {
+      completedResults.delete(did)
     }
   }
 }
@@ -200,25 +211,24 @@ export function oauthRoutes(portal: PortalService, reconciliationService?: Recon
         if (isDedup) redirectUrl.searchParams.set('existingDID', existingDID)
         res.redirect(redirectUrl.toString())
       } else {
-        const isDesktop = pending.source === 'desktop'
+        // Store result for polling
+        const resultDID = isDedup ? existingDID : pending.userDID
+        completedResults.set(resultDID, {
+          discordUsername: discordUser.username,
+          reconciledCommunities,
+          ...(isDedup ? { existingDID } : {}),
+          completedAt: Date.now()
+        })
+
+        // Browser popup: postMessage to opener + auto-close
+        // Desktop (opened via shell.openExternal): app polls /api/oauth/result/:did instead
         const oauthData = {
           type: 'harmony:oauth-complete',
           provider: 'discord',
-          userDID: isDedup ? existingDID : pending.userDID,
+          userDID: resultDID,
           discordUsername: discordUser.username,
           reconciledCommunities,
           ...(isDedup ? { existingDID } : {})
-        }
-
-        let script: string
-        if (isDesktop) {
-          // Desktop: redirect via deep link, then close tab
-          const deepLink = `harmony://oauth-complete?${new URLSearchParams({ data: JSON.stringify(oauthData) }).toString()}`
-          script = `window.location.href = ${JSON.stringify(deepLink)}; setTimeout(() => { try { window.close(); } catch(e) {} }, 1000);`
-        } else {
-          // Browser: postMessage to opener, then close popup
-          script = `try { window.opener && window.opener.postMessage(${JSON.stringify(oauthData)}, '*'); } catch(e) {}
-setTimeout(() => { try { window.close(); } catch(e) {} setTimeout(() => { document.querySelector('p').textContent = 'You can close this tab now.'; }, 500); }, 2000);`
         }
 
         const html = `<!DOCTYPE html>
@@ -227,14 +237,37 @@ setTimeout(() => { try { window.close(); } catch(e) {} setTimeout(() => { docume
 <div style="text-align:center">
 <div style="font-size:3em;margin-bottom:0.5em">✅</div>
 <h2>Discord account linked!</h2>
-<p style="color:#888">Redirecting back to Harmony...</p>
+<p style="color:#888">You can close this tab.</p>
 </div>
-<script>${script}</script>
+<script>
+try { window.opener && window.opener.postMessage(${JSON.stringify(oauthData)}, '*'); } catch(e) {}
+setTimeout(() => { try { window.close(); } catch(e) {} }, 2000);
+</script>
 </body></html>`
         res.status(200).type('html').send(html)
       }
     } catch (err: any) {
       res.status(500).json({ error: err.message })
+    }
+  })
+
+  // GET /api/oauth/result/:did — Poll for OAuth completion (used by desktop app)
+  router.get('/oauth/result/:did', (req: Request, res: Response) => {
+    const did = decodeURIComponent(req.params.did)
+    const result = completedResults.get(did)
+    if (result) {
+      completedResults.delete(did) // one-time read
+      res.json({
+        complete: true,
+        type: 'harmony:oauth-complete',
+        provider: 'discord',
+        userDID: did,
+        discordUsername: result.discordUsername,
+        reconciledCommunities: result.reconciledCommunities,
+        ...(result.existingDID ? { existingDID: result.existingDID } : {})
+      })
+    } else {
+      res.json({ complete: false })
     }
   })
 

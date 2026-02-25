@@ -3,6 +3,7 @@ import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 import { createCryptoProvider } from '@harmony/crypto'
 import { IdentityManager } from '@harmony/identity'
+import { openExternal } from '../utils/open-external.js'
 import { MigrationWizard } from './MigrationWizard.tsx'
 import { FriendFinderView } from './FriendFinderView.tsx'
 // HarmonyClient is now managed by the store
@@ -488,7 +489,7 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
                           })
                           const data = await res.json()
                           if (data.redirectUrl) {
-                            window.open(data.redirectUrl, '_blank')
+                            openExternal(data.redirectUrl)
                           }
                         } catch {
                           // OAuth not configured — silently fail

@@ -13,7 +13,8 @@ const desktopBridge = {
   startMigration: () => ipcRenderer.invoke('harmony:start-migration'),
   setMigrationToken: (token) => ipcRenderer.invoke('harmony:set-migration-token', token),
   cancelMigration: () => ipcRenderer.invoke('harmony:cancel-migration'),
-  onDeepLink: (callback) => ipcRenderer.on('deep-link', (_event, data) => callback(data))
+  onDeepLink: (callback) => ipcRenderer.on('deep-link', (_event, data) => callback(data)),
+  openExternal: (url) => ipcRenderer.invoke('harmony:open-external', url)
 }
 
 contextBridge.exposeInMainWorld('__HARMONY_DESKTOP__', desktopBridge)

@@ -2,7 +2,7 @@
 // @harmony/app — Electron desktop application entrypoint
 // Starts ServerRuntime in main process, opens BrowserWindow with ui-app
 
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, protocol } from 'electron'
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, protocol, shell } from 'electron'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { HarmonyApp, getDataDir } from '../src/app.ts'
@@ -129,6 +129,8 @@ function registerIPC() {
   })
 
   ipcMain.handle('harmony:server-running', () => harmonyApp.getState().running)
+
+  ipcMain.handle('harmony:open-external', (_e, url) => shell.openExternal(url))
 }
 
 app.whenReady().then(async () => {

@@ -3,6 +3,7 @@ import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 import { createServerProvider, type HostingMode } from '../server-provider.js'
 import { startExport, pollExport, importBundle, type ExportProgress } from '../migration-client.js'
+import { openExternal } from '../utils/open-external.js'
 
 type MigrationStep = 'intro' | 'hosting' | 'bot-setup' | 'bot-running' | 'importing' | 'linking' | 'complete'
 
@@ -488,7 +489,7 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
                       if (!res.ok) throw new Error(`Portal returned ${res.status}`)
                       const data = await res.json()
                       if (data.redirectUrl) {
-                        window.open(data.redirectUrl, '_blank', 'width=500,height=700')
+                        openExternal(data.redirectUrl)
                       }
                     } catch (err) {
                       setError(t('ERROR_CONNECTION_FAILED', { url: portalUrl() }))

@@ -491,8 +491,9 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
                           if (data.redirectUrl) {
                             openExternal(data.redirectUrl)
                           }
-                        } catch {
-                          // OAuth not configured — silently fail
+                        } catch (err) {
+                          console.error('Discord link failed:', err)
+                          setError(String(err))
                         }
                       }}
                       class="py-2 px-4 rounded-lg bg-[#5865F2]/20 hover:bg-[#5865F2]/30 border border-[#5865F2]/30 text-[var(--text-primary)] text-sm font-semibold transition-colors"

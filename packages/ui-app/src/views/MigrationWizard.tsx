@@ -4,6 +4,7 @@ import { t } from '../i18n/strings.js'
 import { createServerProvider, type HostingMode } from '../server-provider.js'
 import { startExport, pollExport, importBundle, type ExportProgress } from '../migration-client.js'
 import { openExternal } from '../utils/open-external.js'
+import { pseudonymFromDid } from '../utils/pseudonym.js'
 
 type MigrationStep = 'intro' | 'hosting' | 'bot-setup' | 'bot-running' | 'importing' | 'linking' | 'complete'
 
@@ -318,6 +319,11 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
         store.setConnectionState('disconnected')
       }
 
+      // Ensure displayName is set so needsSetup() becomes false
+      if (!store.displayName()) {
+        store.setDisplayName(linkedUsername() || pseudonymFromDid(store.did()))
+      }
+
       setStep(discordLinked() ? 'complete' : 'linking')
     } catch (err: any) {
       setError(t('MIGRATION_EXPORT_ERROR', { error: err.message || String(err) }))
@@ -622,7 +628,12 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
                 {t('ONBOARDING_BACK')}
               </button>
               <button
-                onClick={() => setStep('complete')}
+                onClick={() => {
+                  if (!store.displayName()) {
+                    store.setDisplayName(linkedUsername() || pseudonymFromDid(store.did()))
+                  }
+                  setStep('complete')
+                }}
                 class={`flex-1 py-3 rounded-lg font-semibold transition-colors ${discordLinked() ? "bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white" : "bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)]"}`}
               >
                 {discordLinked() ? t('MIGRATION_COMPLETE_CONTINUE') : t('MIGRATION_SKIP_LINKING')}

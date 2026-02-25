@@ -7,6 +7,8 @@ interface HarmonyDesktopBridge {
   createIdentity(): Promise<{ did: string; mnemonic: string }>
   recoverIdentity(mnemonic: string): Promise<{ did: string }>
   onDeepLink(callback: (data: { action: string; params: Record<string, string> }) => void): void
+  onServerStarted?(callback: (data: { serverUrl: string }) => void): void
+  waitForServer?(): Promise<string>
 }
 
 declare global {

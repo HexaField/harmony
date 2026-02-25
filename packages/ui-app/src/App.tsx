@@ -26,12 +26,16 @@ export const App: Component = () => {
         // Desktop mode: ensure local server is running and added
         if (window.__HARMONY_DESKTOP__) {
           try {
-            const running = await window.__HARMONY_DESKTOP__.isServerRunning()
-            if (running) {
-              const serverUrl = await window.__HARMONY_DESKTOP__.getServerUrl()
-              if (serverUrl) {
-                store.addServer(serverUrl)
-              }
+            // Wait for server to be ready (handles race with async launch)
+            const serverUrl = window.__HARMONY_DESKTOP__.waitForServer
+              ? await window.__HARMONY_DESKTOP__.waitForServer()
+              : await (async () => {
+                  const running = await window.__HARMONY_DESKTOP__.isServerRunning()
+                  if (running) return await window.__HARMONY_DESKTOP__.getServerUrl()
+                  return null
+                })()
+            if (serverUrl) {
+              store.addServer(serverUrl)
             }
           } catch {
             // Desktop bridge not available or failed — continue without local server

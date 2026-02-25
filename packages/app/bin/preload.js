@@ -15,7 +15,18 @@ const desktopBridge = {
   cancelMigration: () => ipcRenderer.invoke('harmony:cancel-migration'),
   onDeepLink: (callback) => ipcRenderer.on('deep-link', (_event, data) => callback(data)),
   openExternal: (url) => ipcRenderer.invoke('harmony:open-external', url),
-  onOAuthResult: (callback) => ipcRenderer.on('harmony:oauth-result', (_event, data) => callback(data))
+  onOAuthResult: (callback) => ipcRenderer.on('harmony:oauth-result', (_event, data) => callback(data)),
+  onServerStarted: (callback) => ipcRenderer.on('harmony:server-started', (_event, data) => callback(data)),
+  waitForServer: () =>
+    new Promise((resolve) => {
+      ipcRenderer.invoke('harmony:server-running').then((running) => {
+        if (running) {
+          ipcRenderer.invoke('harmony:server-url').then((url) => resolve(url))
+        } else {
+          ipcRenderer.once('harmony:server-started', (_event, data) => resolve(data.serverUrl))
+        }
+      })
+    })
 }
 
 contextBridge.exposeInMainWorld('__HARMONY_DESKTOP__', desktopBridge)

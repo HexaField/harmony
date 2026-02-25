@@ -6,7 +6,7 @@ import { createCryptoProvider, type KeyPair } from '@harmony/crypto'
 import { MigrationBot, DiscordRESTAPI } from '@harmony/migration-bot'
 import { MigrationService, type EncryptedExportBundle } from '@harmony/migration'
 import type { ExportProgress } from '@harmony/migration-bot'
-import { HarmonyType, HarmonyPredicate, RDFPredicate } from '@harmony/vocab'
+import { HarmonyType, HarmonyPredicate, RDFPredicate, HARMONY, XSDDatatype } from '@harmony/vocab'
 import type { Quad } from '@harmony/quads'
 import type { HarmonyServer } from '@harmony/server'
 import type { SQLiteQuadStore } from './sqlite-quad-store.js'
@@ -33,10 +33,18 @@ export interface ImportMember {
   displayName: string
 }
 
+export interface ImportRole {
+  id: string
+  name: string
+  permissions: string[]
+}
+
 export interface ImportResult {
   communityId: string
   channels: ImportChannel[]
   members: ImportMember[]
+  roles: ImportRole[]
+  categories: ImportChannel[]
 }
 
 export class MigrationEndpoint {
@@ -68,6 +76,10 @@ export class MigrationEndpoint {
       communityId = communityQuad.subject
     }
 
+    // Helper to get literal value from quad object
+    const litVal = (obj: Quad['object']): string =>
+      typeof obj === 'object' ? obj.value : typeof obj === 'string' ? obj : 'unknown'
+
     // Find channels (Channel, Thread types — not Category)
     const channels: ImportChannel[] = []
     const channelQuads = quads.filter(
@@ -75,14 +87,19 @@ export class MigrationEndpoint {
     )
     for (const cq of channelQuads) {
       const nameQuad = quads.find((q) => q.subject === cq.subject && q.predicate === HarmonyPredicate.name)
-      const name =
-        nameQuad && typeof nameQuad.object === 'object'
-          ? nameQuad.object.value
-          : nameQuad && typeof nameQuad.object === 'string'
-            ? nameQuad.object
-            : 'unknown'
-      const type = cq.object === HarmonyType.Thread ? 'thread' : 'text'
+      const name = nameQuad ? litVal(nameQuad.object) : 'unknown'
+      const typeQuad = quads.find((q) => q.subject === cq.subject && q.predicate === `${HARMONY}channelType`)
+      const type = typeQuad ? litVal(typeQuad.object) : cq.object === HarmonyType.Thread ? 'thread' : 'text'
       channels.push({ id: cq.subject, name, type })
+    }
+
+    // Find categories
+    const categories: ImportChannel[] = []
+    const categoryQuads = quads.filter((q) => q.predicate === RDFPredicate.type && q.object === HarmonyType.Category)
+    for (const catQ of categoryQuads) {
+      const nameQuad = quads.find((q) => q.subject === catQ.subject && q.predicate === HarmonyPredicate.name)
+      const name = nameQuad ? litVal(nameQuad.object) : 'unknown'
+      categories.push({ id: catQ.subject, name, type: 'category' })
     }
 
     // Find members
@@ -90,16 +107,22 @@ export class MigrationEndpoint {
     const memberQuads = quads.filter((q) => q.predicate === RDFPredicate.type && q.object === HarmonyType.Member)
     for (const mq of memberQuads) {
       const nameQuad = quads.find((q) => q.subject === mq.subject && q.predicate === HarmonyPredicate.name)
-      const displayName =
-        nameQuad && typeof nameQuad.object === 'object'
-          ? nameQuad.object.value
-          : nameQuad && typeof nameQuad.object === 'string'
-            ? nameQuad.object
-            : 'unknown'
+      const displayName = nameQuad ? litVal(nameQuad.object) : 'unknown'
       members.push({ did: mq.subject, displayName })
     }
 
-    return { communityId, channels, members }
+    // Find roles
+    const roles: ImportRole[] = []
+    const roleQuads = quads.filter((q) => q.predicate === RDFPredicate.type && q.object === HarmonyType.Role)
+    for (const rq of roleQuads) {
+      const nameQuad = quads.find((q) => q.subject === rq.subject && q.predicate === HarmonyPredicate.name)
+      const name = nameQuad ? litVal(nameQuad.object) : 'unknown'
+      const permQuads = quads.filter((q) => q.subject === rq.subject && q.predicate === HarmonyPredicate.permission)
+      const permissions = permQuads.map((q) => litVal(q.object))
+      roles.push({ id: rq.subject, name, permissions })
+    }
+
+    return { communityId, channels, members, roles, categories }
   }
 
   async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
@@ -456,6 +479,38 @@ export class MigrationEndpoint {
       // Register community with live server so it's immediately accessible
       if (this.harmonyServer && importData.communityId) {
         this.harmonyServer.registerCommunity(importData.communityId)
+
+        // Populate MessageStore from imported message quads
+        const messageStore = this.harmonyServer.messageStoreInstance
+        const messageQuads = quads.filter((q) => q.predicate === RDFPredicate.type && q.object === HarmonyType.Message)
+
+        for (const mq of messageQuads) {
+          const subject = mq.subject
+          const contentQuad = quads.find((q) => q.subject === subject && q.predicate === HarmonyPredicate.content)
+          const authorQuad = quads.find((q) => q.subject === subject && q.predicate === HarmonyPredicate.author)
+          const tsQuad = quads.find((q) => q.subject === subject && q.predicate === HarmonyPredicate.timestamp)
+          const channelQuad = quads.find((q) => q.subject === subject && q.predicate === HarmonyPredicate.inChannel)
+
+          if (!contentQuad || !authorQuad || !tsQuad || !channelQuad) continue
+
+          const litVal = (obj: Quad['object']): string =>
+            typeof obj === 'object' ? obj.value : typeof obj === 'string' ? obj : ''
+
+          const content = litVal(contentQuad.object)
+          const author = litVal(authorQuad.object)
+          const timestamp = litVal(tsQuad.object)
+          const channelId = litVal(channelQuad.object)
+
+          const protocolMessage = {
+            id: subject,
+            type: 'channel.send' as const,
+            timestamp,
+            sender: author,
+            payload: { content, clock: { counter: 0, nodeId: author } }
+          }
+
+          await messageStore.storeMessage(importData.communityId, channelId, protocolMessage)
+        }
       }
 
       this.logger.info('Migration import complete', {

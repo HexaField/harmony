@@ -5,7 +5,7 @@ import type { VerifiableCredential } from '@harmony/vc'
 import { VCService } from '@harmony/vc'
 import type { Capability } from '@harmony/zcap'
 import { ZCAPService } from '@harmony/zcap'
-import { HarmonyType, HarmonyPredicate, RDFPredicate, XSDDatatype } from '@harmony/vocab'
+import { HarmonyType, HarmonyPredicate, RDFPredicate, XSDDatatype, HARMONY } from '@harmony/vocab'
 
 // Discord types
 export interface DiscordAccount {
@@ -201,6 +201,13 @@ export class MigrationService {
       } else {
         quads.push({ subject: channelURI, predicate: RDFPredicate.type, object: HarmonyType.Channel, graph: g })
       }
+      // Store channel type predicate for all channels
+      quads.push({
+        subject: channelURI,
+        predicate: `${HARMONY}channelType`,
+        object: { value: channel.type },
+        graph: g
+      })
       quads.push({ subject: channelURI, predicate: HarmonyPredicate.name, object: { value: channel.name }, graph: g })
       if (channel.categoryId) {
         quads.push({
@@ -287,6 +294,23 @@ export class MigrationService {
             object: `harmony:message:${msg.replyTo}`,
             graph: channelGraph
           })
+        }
+
+        if (msg.attachments) {
+          for (const attachment of msg.attachments) {
+            quads.push({
+              subject: msgURI,
+              predicate: `${HARMONY}attachment`,
+              object: { value: attachment.url },
+              graph: channelGraph
+            })
+            quads.push({
+              subject: msgURI,
+              predicate: HarmonyPredicate.filename,
+              object: { value: attachment.filename },
+              graph: channelGraph
+            })
+          }
         }
 
         if (msg.reactions) {

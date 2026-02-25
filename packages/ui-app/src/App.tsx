@@ -1,5 +1,5 @@
 import { Show, onMount, type Component } from 'solid-js'
-import { AppContext, createAppStore } from './store.tsx'
+import { AppContext, createAppStore, restoreIdentityFromLocalStorage } from './store.tsx'
 import { OnboardingView } from './views/OnboardingView.tsx'
 import { MainLayout } from './views/MainLayout.tsx'
 import { SettingsView } from './views/SettingsView.tsx'
@@ -44,7 +44,29 @@ export const App: Component = () => {
       }
     }
 
-    // Non-desktop fallback: use localStorage mnemonic (browser mode)
+    // Non-desktop fallback: load identity from localStorage (browser mode)
+    const savedIdentity = restoreIdentityFromLocalStorage()
+    if (savedIdentity && savedIdentity.did && savedIdentity.mnemonic) {
+      try {
+        const crypto = createCryptoProvider()
+        const idMgr = new IdentityManager(crypto)
+        const result = await idMgr.createFromMnemonic(savedIdentity.mnemonic)
+        store.setDid(result.identity.did)
+        store.setMnemonic(savedIdentity.mnemonic)
+        store.setIdentity(result.identity)
+        store.setKeyPair(result.keyPair)
+        if (savedIdentity.displayName) {
+          store.setDisplayName(savedIdentity.displayName)
+        }
+        await store.initClient(result.identity, result.keyPair)
+      } catch {
+        store.setDid('')
+        store.setMnemonic('')
+      }
+      return
+    }
+
+    // Legacy fallback: check in-memory mnemonic (shouldn't normally happen)
     const m = store.mnemonic()
     if (m && store.isOnboarded() && !store.identity()) {
       try {

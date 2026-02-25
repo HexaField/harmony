@@ -221,7 +221,7 @@ function restoreUI(key: string): string | null {
   }
 }
 
-/** Save identity + servers to Electron backend (disk) */
+/** Save identity + servers to Electron backend (disk), fallback to localStorage in browser */
 async function persistToBackend(patch: Record<string, unknown>): Promise<void> {
   if (window.__HARMONY_DESKTOP__?.updateConfig) {
     try {
@@ -229,7 +229,34 @@ async function persistToBackend(patch: Record<string, unknown>): Promise<void> {
     } catch (err) {
       console.error('[Harmony] Failed to persist config to backend:', err)
     }
+  } else if (patch.identity) {
+    // Browser-only fallback: persist identity to localStorage
+    try {
+      localStorage.setItem(STORAGE_PREFIX + 'identity', JSON.stringify(patch.identity))
+    } catch {
+      /* quota / SSR */
+    }
   }
+}
+
+/** Load identity from localStorage (browser-only fallback) */
+export function restoreIdentityFromLocalStorage(): {
+  did: string
+  mnemonic: string
+  displayName: string
+  createdAt: string
+} | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_PREFIX + 'identity')
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (parsed && typeof parsed.did === 'string' && typeof parsed.mnemonic === 'string') {
+      return parsed
+    }
+  } catch {
+    /* corrupt data / SSR */
+  }
+  return null
 }
 
 export function createAppStore(): AppStore {

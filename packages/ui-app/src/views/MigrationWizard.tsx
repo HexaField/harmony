@@ -274,19 +274,25 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
         communityName
       })
       setImportStats({ channels: result.channels?.length || 0, members: result.members?.length || 0, communityName })
-      // Populate the store with the imported community
+      // Populate the store — dedup by community ID (re-migration updates existing)
       const existing = store.communities()
-      store.setCommunities([
-        ...existing,
-        {
-          id: result.communityId,
-          name: bundle?.metadata?.sourceServerName || 'Imported Community',
-          description: '',
-          iconUrl: undefined,
-          serverUrl: url,
-          memberCount: result.members?.length || 0
-        }
-      ])
+      const existingIdx = existing.findIndex((c) => c.id === result.communityId)
+      const communityEntry = {
+        id: result.communityId,
+        name: communityName,
+        description: '',
+        iconUrl: undefined,
+        serverUrl: url,
+        memberCount: result.members?.length || 0
+      }
+      if (existingIdx >= 0) {
+        // Update existing community entry
+        const updated = [...existing]
+        updated[existingIdx] = { ...updated[existingIdx], ...communityEntry }
+        store.setCommunities(updated)
+      } else {
+        store.setCommunities([...existing, communityEntry])
+      }
       if (result.channels?.length) {
         const mappedChannels = result.channels.map((ch: any) => ({
           id: ch.id,
@@ -294,7 +300,9 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
           type: ch.type === 'thread' ? 'text' : ch.type || 'text',
           communityId: result.communityId
         }))
-        store.setChannels([...store.channels(), ...mappedChannels])
+        // Dedup channels by ID — update existing, add new
+        const existingChannels = store.channels().filter((c) => c.communityId !== result.communityId)
+        store.setChannels([...existingChannels, ...mappedChannels])
 
         // Select first text channel
         const firstText = mappedChannels.find((c: any) => c.type === 'text')

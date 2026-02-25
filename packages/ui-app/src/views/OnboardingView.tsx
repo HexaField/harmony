@@ -565,65 +565,6 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
               {t('SETUP_CONTINUE')}
             </button>
 
-            {/* Community actions */}
-            <div class="border-t border-[var(--border)] pt-4 mt-2">
-              <p class="text-sm text-[var(--text-secondary)] mb-3 text-center">{t('SETUP_WHATS_NEXT')}</p>
-              <div class="space-y-2">
-                <button
-                  onClick={() => {
-                    if (setupName().trim()) {
-                      store.setDisplayName(setupName().trim())
-                    }
-                    store.setShowCreateCommunity(true)
-                  }}
-                  class="w-full py-2 px-4 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)] text-sm font-semibold transition-colors"
-                >
-                  {t('COMMUNITY_CREATE')}
-                </button>
-
-                <Show
-                  when={showJoinInput()}
-                  fallback={
-                    <button
-                      onClick={() => setShowJoinInput(true)}
-                      class="w-full py-2 px-4 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)] text-sm font-semibold transition-colors"
-                    >
-                      {t('EMPTY_JOIN_COMMUNITY')}
-                    </button>
-                  }
-                >
-                  <div class="flex gap-2">
-                    <input
-                      value={inviteLink()}
-                      onInput={(e) => setInviteLink(e.currentTarget.value)}
-                      class="flex-1 py-2 px-3 rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm"
-                      placeholder={t('JOIN_COMMUNITY_URL_PLACEHOLDER')}
-                    />
-                    <button
-                      onClick={() => setShowJoinInput(false)}
-                      class="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                    >
-                      {t('JOIN_COMMUNITY_CANCEL')}
-                    </button>
-                  </div>
-                </Show>
-
-                <button
-                  onClick={() => setShowMigration(true)}
-                  class="w-full py-2 px-4 rounded-lg bg-[#5865F2]/20 hover:bg-[#5865F2]/30 border border-[#5865F2]/30 text-[var(--text-primary)] text-sm font-semibold transition-colors"
-                >
-                  {t('ONBOARDING_IMPORT_DISCORD')}
-                </button>
-
-                <button
-                  onClick={() => store.setShowFriendFinder(true)}
-                  class="w-full py-2 px-4 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)] text-sm font-semibold transition-colors"
-                >
-                  {t('FRIENDS_TITLE')}
-                </button>
-              </div>
-            </div>
-
             {/* Skip link */}
             <button
               onClick={skipSetup}
@@ -632,14 +573,6 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
               {t('SETUP_SKIP')}
             </button>
           </div>
-
-          <Show when={showMigration()}>
-            <MigrationWizard initialStep="hosting" onClose={() => setShowMigration(false)} />
-          </Show>
-
-          <Show when={store.showFriendFinder()}>
-            <FriendFinderView />
-          </Show>
         </Show>
       </div>
     </div>

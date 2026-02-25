@@ -212,6 +212,9 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
       pendingKeyPair = result.keyPair
       pendingMnemonic = result.mnemonic
       persistOnboarding('mnemonic', result.mnemonic)
+      setQuizIndices(pickQuizIndices())
+      setQuizAnswers({})
+      setQuizError(false)
       setStep('mnemonic-display')
     } catch (err) {
       setError(String(err))
@@ -221,11 +224,8 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
   }
 
   function handleMnemonicSaved() {
-    const indices = pickQuizIndices()
-    setQuizIndices(indices)
-    setQuizAnswers({})
-    setQuizError(false)
-    setStep('mnemonic-confirm')
+    // Quiz indices already set at creation time — verify inline
+    handleVerify()
   }
 
   function handleVerify() {
@@ -337,9 +337,9 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
         </Show>
 
         {/* Step 2: Mnemonic Display */}
-        <Show when={step() === 'mnemonic-display'}>
-          <div class="text-center">
-            <h2 class="text-2xl font-bold mb-2">{t('ONBOARDING_MNEMONIC_BACKUP')}</h2>
+        <Show when={step() === 'mnemonic-display' || step() === 'mnemonic-confirm'}>
+          <div>
+            <h2 class="text-2xl font-bold mb-2 text-center">{t('ONBOARDING_MNEMONIC_BACKUP')}</h2>
             <div class="bg-[var(--error)]/10 border border-[var(--error)]/30 rounded-lg p-3 mb-4">
               <p class="text-sm text-[var(--error)]">⚠️ {t('ONBOARDING_MNEMONIC_WARNING')}</p>
             </div>
@@ -353,30 +353,18 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
                 )}
               </For>
             </div>
-            <button
-              onClick={handleCopy}
-              class="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] mb-4 transition-colors"
-            >
-              {copied() ? `✓ ${t('ONBOARDING_MNEMONIC_COPIED')}` : `📋 ${t('ONBOARDING_MNEMONIC_COPY')}`}
-            </button>
-            <p class="text-xs text-[var(--text-muted)] mb-6">
-              {t('IDENTITY_LABEL')}: <span class="font-semibold">{store.displayName() || t('IDENTITY_ANONYMOUS')}</span>
-            </p>
-            <button
-              onClick={handleMnemonicSaved}
-              class="w-full py-3 px-6 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-semibold transition-colors"
-            >
-              {t('ONBOARDING_MNEMONIC_SAVED')}
-            </button>
-          </div>
-        </Show>
+            <div class="text-center mb-4">
+              <button
+                onClick={handleCopy}
+                class="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+              >
+                {copied() ? `✓ ${t('ONBOARDING_MNEMONIC_COPIED')}` : `📋 ${t('ONBOARDING_MNEMONIC_COPY')}`}
+              </button>
+            </div>
 
-        {/* Step 3: Mnemonic Confirmation */}
-        <Show when={step() === 'mnemonic-confirm'}>
-          <div>
-            <h2 class="text-2xl font-bold mb-2 text-center">{t('ONBOARDING_MNEMONIC_VERIFY_TITLE')}</h2>
-            <p class="text-[var(--text-secondary)] text-sm mb-6 text-center">{t('ONBOARDING_MNEMONIC_CONFIRM')}</p>
-            <div class="space-y-4 mb-6">
+            {/* Confirmation — 3 words */}
+            <p class="text-[var(--text-secondary)] text-sm mb-3 text-center">{t('ONBOARDING_MNEMONIC_CONFIRM')}</p>
+            <div class="space-y-3 mb-4">
               <For each={quizIndices()}>
                 {(idx) => (
                   <div>

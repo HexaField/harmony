@@ -94,11 +94,33 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
     }, 2000)
   }
 
+  const [localServerUrl, setLocalServerUrl] = createSignal('')
+
+  // Detect desktop embedded server URL on mount
+  onMount(async () => {
+    const desktop = (window as any).__HARMONY_DESKTOP__
+    if (desktop?.getServerUrl) {
+      try {
+        const url = await desktop.getServerUrl()
+        if (url) setLocalServerUrl(url)
+      } catch {
+        /* not available */
+      }
+    }
+  })
+
   function resolveServerUrl(): string {
     const mode = hostingMode()
+    if (mode === 'local') {
+      // Desktop: use actual embedded server URL
+      if (localServerUrl()) return localServerUrl()
+      // Fallback: check store for known server
+      const communities = store.communities()
+      const firstServerUrl = communities.length > 0 ? communities[0].serverUrl : undefined
+      if (firstServerUrl) return firstServerUrl
+      return import.meta.env.VITE_DEFAULT_SERVER_URL || 'ws://localhost:4000'
+    }
     if (mode === 'remote') return remoteUrl() || import.meta.env.VITE_DEFAULT_SERVER_URL || 'ws://localhost:4000'
-    if (mode === 'local') return 'ws://localhost:4000'
-    // cloud/other: fall back to remote URL or default
     return remoteUrl() || import.meta.env.VITE_DEFAULT_SERVER_URL || 'ws://localhost:4000'
   }
 
@@ -177,6 +199,11 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
           clearInterval(pollTimer!)
           pollTimer = undefined
           setExportProgress(100)
+          console.log('[Migration] Export complete', {
+            hasBundle: !!status.bundle,
+            hasKeyPair: !!status.adminKeyPair,
+            bundleMeta: status.bundle?.metadata
+          })
           await doImport(url, status.bundle, status.adminKeyPair)
         } else if (status.status === 'error') {
           clearInterval(pollTimer!)
@@ -194,13 +221,32 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
   async function doImport(url: string, bundle: any, adminKeyPair?: any) {
     setStep('importing')
     setPhaseText(t('MIGRATION_PHASE_IMPORTING'))
+
+    if (!bundle) {
+      setError('Export completed but returned no data bundle')
+      setStep('bot-running')
+      return
+    }
+
+    console.log('[Migration] Import starting', {
+      url,
+      hasBundle: !!bundle,
+      hasKeyPair: !!adminKeyPair,
+      bundleKeys: Object.keys(bundle)
+    })
+
     try {
       const result = await importBundle({
         serverUrl: url,
         bundle,
         adminDID: store.did(),
-        communityName: bundle?.metadata?.guild?.name || bundle?.guild?.name || 'Imported Community',
+        communityName: bundle?.metadata?.sourceServerName || 'Imported Community',
         adminKeyPair
+      })
+      console.log('[Migration] Import result', {
+        communityId: result.communityId,
+        channels: result.channels?.length,
+        members: result.members?.length
       })
       // Populate the store with the imported community
       const existing = store.communities()
@@ -208,7 +254,7 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
         ...existing,
         {
           id: result.communityId,
-          name: bundle?.metadata?.guild?.name || bundle?.guild?.name || 'Imported Community',
+          name: bundle?.metadata?.sourceServerName || 'Imported Community',
           description: '',
           iconUrl: undefined,
           serverUrl: url,

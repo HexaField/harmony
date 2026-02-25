@@ -7,6 +7,24 @@ import { createCryptoProvider } from '@harmony/crypto'
 import { IdentityManager } from '@harmony/identity'
 import { t } from './strings.js'
 
+/** Deep merge source into target, preserving existing nested keys */
+function deepMerge(target: Record<string, any>, source: Record<string, any>): void {
+  for (const key of Object.keys(source)) {
+    if (
+      source[key] !== null &&
+      typeof source[key] === 'object' &&
+      !Array.isArray(source[key]) &&
+      target[key] !== null &&
+      typeof target[key] === 'object' &&
+      !Array.isArray(target[key])
+    ) {
+      deepMerge(target[key], source[key])
+    } else {
+      target[key] = source[key]
+    }
+  }
+}
+
 // Platform-specific data directory
 export function getDataDir(): string {
   const plat = platform()
@@ -325,9 +343,9 @@ export class HarmonyApp {
     return { ...this._config }
   }
 
-  /** Patch config and save to disk */
+  /** Patch config and save to disk (deep merge for nested objects) */
   updateConfig(patch: Partial<HarmonyConfig>): void {
-    Object.assign(this._config, patch)
+    deepMerge(this._config, patch)
     this.saveConfig()
   }
 

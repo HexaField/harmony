@@ -112,6 +112,10 @@ class EventEmitter {
     return () => this.handlers.get(event)?.delete(handler)
   }
 
+  off(event: string, handler: EventHandler): void {
+    this.handlers.get(event)?.delete(handler)
+  }
+
   emit(event: string, ...args: unknown[]): void {
     const handlers = this.handlers.get(event)
     if (handlers) {
@@ -1027,6 +1031,11 @@ export class HarmonyClient {
     return this.emitter.on(event, handler)
   }
 
+  /** Remove a specific event handler. Alternative to using the Unsubscribe function returned by on(). */
+  off(event: ClientEvent, handler: (...args: unknown[]) => void): void {
+    this.emitter.off(event, handler)
+  }
+
   // ── Roles & Moderation ──
 
   async createRole(_communityId: string, params: RoleCreatePayload): Promise<void> {
@@ -1613,6 +1622,11 @@ export class HarmonyClient {
       channelId: payload.channelId,
       messages: log.entries().map((e) => e.data)
     })
+
+    // Also emit each synced message as a 'message' event for unified consumption
+    for (const entry of log.entries()) {
+      this.emitter.emit('message', entry.data)
+    }
   }
 
   // ── MLS / E2EE Methods ──

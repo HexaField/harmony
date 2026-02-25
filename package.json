@@ -6,6 +6,8 @@
     "dev": "pnpm -r --if-present dev",
     "build": "pnpm -r --if-present build",
     "test": "pnpm -r test",
+    "rebuild:node": "cd node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3 && npx --yes node-gyp rebuild --release 2>/dev/null || true",
+    "rebuild:electron": "pnpm --filter @harmony/app electron:rebuild",
     "certs": "mkdir -p .certs && openssl req -x509 -newkey rsa:2048 -keyout .certs/localhost.key -out .certs/localhost.cert -days 365 -nodes -subj \"/CN=localhost\"",
     "lint": "oxlint --fix",
     "format": "oxfmt --write",

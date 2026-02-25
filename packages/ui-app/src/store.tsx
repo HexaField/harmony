@@ -41,6 +41,9 @@ export interface AppStore {
   initClient: (identity: Identity, keyPair: KeyPair) => Promise<void>
   addServer: (url: string) => void
 
+  // Loading state — true until first community data arrives
+  loading: () => boolean
+
   // Connection state — derived from client
   connectionState: () => 'connected' | 'disconnected' | 'reconnecting'
   setConnectionState: (s: 'connected' | 'disconnected' | 'reconnecting') => void
@@ -221,7 +224,11 @@ function restoreUI(key: string): string | null {
 /** Save identity + servers to Electron backend (disk) */
 async function persistToBackend(patch: Record<string, unknown>): Promise<void> {
   if (window.__HARMONY_DESKTOP__?.updateConfig) {
-    await window.__HARMONY_DESKTOP__.updateConfig(patch as any)
+    try {
+      await window.__HARMONY_DESKTOP__.updateConfig(patch as any)
+    } catch (err) {
+      console.error('[Harmony] Failed to persist config to backend:', err)
+    }
   }
 }
 
@@ -240,6 +247,10 @@ export function createAppStore(): AppStore {
   const [_client, _setClient] = createSignal<HarmonyClient | null>(null)
   const [servers, setServers] = createSignal<ServerConnection[]>([])
 
+  // Loading state — true until first community.list response or timeout
+  const [loading, _setLoading] = createSignal(true)
+  let loadingTimerId: ReturnType<typeof setTimeout> | undefined
+
   // Data signals — populated from server on connect, NOT persisted to localStorage
   const [communities, _setCommunities] = createSignal<CommunityInfo[]>([])
   const [activeCommunityId, _setActiveCommunityId] = createSignal(savedActiveCommunity)
@@ -248,6 +259,9 @@ export function createAppStore(): AppStore {
 
   function setCommunities(c: CommunityInfo[]) {
     _setCommunities(c)
+    // Communities arrived — no longer loading
+    if (loadingTimerId) clearTimeout(loadingTimerId)
+    _setLoading(false)
   }
   function setActiveCommunityId(id: string) {
     _setActiveCommunityId(id)
@@ -610,7 +624,7 @@ export function createAppStore(): AppStore {
 
   /** Subscribe to client events to keep store in sync */
   function setupClientListeners(client: HarmonyClient) {
-    client.on('connected' as any, () => {
+    client.on('connected', () => {
       updateConnectionStateFromClient(client)
       refreshServers()
 
@@ -644,12 +658,12 @@ export function createAppStore(): AppStore {
       }
     })
 
-    client.on('disconnected' as any, () => {
+    client.on('disconnected', () => {
       updateConnectionStateFromClient(client)
       refreshServers()
     })
 
-    client.on('reconnecting' as any, () => {
+    client.on('reconnecting', () => {
       setConnectionState('reconnecting')
       refreshServers()
     })
@@ -679,7 +693,7 @@ export function createAppStore(): AppStore {
       }
     })
 
-    client.on('sync' as any, (...args: unknown[]) => {
+    client.on('sync', (...args: unknown[]) => {
       const event = args[0] as {
         communityId: string
         channelId: string
@@ -715,7 +729,7 @@ export function createAppStore(): AppStore {
     })
 
     // Handle community list from server — populate communities and channels from server data
-    client.on('community.list' as any, (...args: unknown[]) => {
+    client.on('community.list', (...args: unknown[]) => {
       const event = args[0] as {
         communities: Array<{
           id: string
@@ -895,21 +909,21 @@ export function createAppStore(): AppStore {
       }
     })
 
-    client.on('dm.edited' as any, (...args: unknown[]) => {
+    client.on('dm.edited', (...args: unknown[]) => {
       const event = args[0] as { messageId?: string; newText?: string; senderDID?: string }
       if (event?.messageId && event?.newText && event?.senderDID) {
         updateDMMessage(event.senderDID, event.messageId, event.newText)
       }
     })
 
-    client.on('dm.deleted' as any, (...args: unknown[]) => {
+    client.on('dm.deleted', (...args: unknown[]) => {
       const event = args[0] as { messageId?: string; senderDID?: string }
       if (event?.messageId && event?.senderDID) {
         removeDMMessage(event.senderDID, event.messageId)
       }
     })
 
-    client.on('role.created' as any, (...args: unknown[]) => {
+    client.on('role.created', (...args: unknown[]) => {
       const event = args[0] as {
         roleId?: string
         name?: string
@@ -928,7 +942,7 @@ export function createAppStore(): AppStore {
       }
     })
 
-    client.on('role.updated' as any, (...args: unknown[]) => {
+    client.on('role.updated', (...args: unknown[]) => {
       const event = args[0] as {
         roleId?: string
         name?: string
@@ -946,14 +960,14 @@ export function createAppStore(): AppStore {
       }
     })
 
-    client.on('role.deleted' as any, (...args: unknown[]) => {
+    client.on('role.deleted', (...args: unknown[]) => {
       const event = args[0] as { roleId?: string }
       if (event?.roleId) {
         removeRole(event.roleId)
       }
     })
 
-    client.on('community.member.updated' as any, (...args: unknown[]) => {
+    client.on('community.member.updated', (...args: unknown[]) => {
       const event = args[0] as { memberDID?: string; roles?: string[] }
       if (event?.memberDID && event?.roles) {
         setMembers(members().map((m) => (m.did === event.memberDID ? { ...m, roles: event.roles! } : m)))
@@ -979,7 +993,7 @@ export function createAppStore(): AppStore {
       setVoiceUsers([])
     })
 
-    client.on('community.auto-joined' as any, (...args: unknown[]) => {
+    client.on('community.auto-joined', (...args: unknown[]) => {
       const event = args[0] as {
         communityId: string
         communityName: string
@@ -1048,6 +1062,10 @@ export function createAppStore(): AppStore {
     updateConnectionStateFromClient(client)
     refreshServers()
 
+    // Start a loading timeout — if no community.list arrives within 3s, stop loading
+    if (loadingTimerId) clearTimeout(loadingTimerId)
+    loadingTimerId = setTimeout(() => _setLoading(false), 3000)
+
     // Ensure current user appears in member list when connected
     if (client.isConnected()) {
       const myDid = did()
@@ -1088,6 +1106,7 @@ export function createAppStore(): AppStore {
     setMnemonic,
     isOnboarded: () => did().length > 0,
     needsSetup: () => did().length > 0 && displayName().length === 0,
+    loading,
     identity,
     setIdentity,
     keyPair,

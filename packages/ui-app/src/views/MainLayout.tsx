@@ -33,11 +33,21 @@ export const MainLayout: Component = () => {
 
   return (
     <>
-      <Show when={store.communities().length === 0}>
+      {/* Loading state — show spinner while waiting for community data */}
+      <Show when={store.loading()}>
+        <div class="flex items-center justify-center h-screen bg-[var(--bg-primary)]">
+          <div class="text-center">
+            <div class="animate-spin w-8 h-8 border-2 border-[var(--accent)] border-t-transparent rounded-full mx-auto mb-4" />
+            <p class="text-[var(--text-muted)] text-sm">{t('LOADING_COMMUNITIES') ?? 'Loading…'}</p>
+          </div>
+        </div>
+      </Show>
+
+      <Show when={!store.loading() && store.communities().length === 0}>
         <EmptyStateView />
       </Show>
 
-      <Show when={store.communities().length > 0}>
+      <Show when={!store.loading() && store.communities().length > 0}>
         <div class="flex h-screen overflow-hidden">
           {/* Server list bar (left icon strip) */}
           <ServerListBar />

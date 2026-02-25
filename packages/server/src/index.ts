@@ -785,10 +785,25 @@ export class HarmonyServer {
     return Array.from(this.communitySubscriptions.keys())
   }
 
-  /** Register a community so it appears in the communities list (e.g. after import) */
-  registerCommunity(communityId: string): void {
+  /** Register a community so it appears in the communities list (e.g. after import).
+   *  Optionally notifies all connected clients about the new community. */
+  registerCommunity(communityId: string, options?: { notify?: boolean }): void {
     if (!this.communitySubscriptions.has(communityId)) {
       this.communitySubscriptions.set(communityId, new Set())
+    }
+    // Notify all connected clients so they refresh their community list
+    if (options?.notify !== false) {
+      for (const conn of this._connections.values()) {
+        this.handleCommunityList(conn, {
+          id: `list-refresh-${Date.now()}`,
+          type: 'community.list' as any,
+          timestamp: new Date().toISOString(),
+          sender: conn.did,
+          payload: {}
+        }).catch(() => {
+          /* ignore */
+        })
+      }
     }
   }
 

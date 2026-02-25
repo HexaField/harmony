@@ -144,10 +144,58 @@ export const SettingsView: Component = () => {
         {/* Servers */}
         <Show when={section() === 'servers'}>
           <h3 class="text-xl font-bold mb-6">{t('SETTINGS_SERVERS')}</h3>
-          <div class="bg-[var(--bg-surface)] p-4 rounded-lg mb-4">
-            <p class="text-sm text-[var(--text-muted)]">{t('SETTINGS_NO_SERVERS')}</p>
-          </div>
-          <button class="py-2 px-4 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-sm font-semibold transition-colors">
+          <Show
+            when={store.servers().length > 0}
+            fallback={
+              <div class="bg-[var(--bg-surface)] p-4 rounded-lg mb-4">
+                <p class="text-sm text-[var(--text-muted)]">{t('SETTINGS_NO_SERVERS')}</p>
+              </div>
+            }
+          >
+            <div class="space-y-3 mb-4">
+              <For each={store.servers()}>
+                {(server) => (
+                  <div class="bg-[var(--bg-surface)] p-4 rounded-lg flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                      <div
+                        class="w-3 h-3 rounded-full"
+                        classList={{
+                          'bg-green-500': server.connected,
+                          'bg-red-500': !server.connected
+                        }}
+                      />
+                      <div>
+                        <p class="text-sm font-medium text-[var(--text-primary)]">{server.url}</p>
+                        <p class="text-xs text-[var(--text-muted)]">
+                          {server.connected ? 'Connected' : 'Disconnected'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const c = store.client()
+                        if (c) {
+                          c.removeServer(server.url)
+                          // Also remove communities associated with this server
+                          store.setCommunities(store.communities().filter((cm) => cm.serverUrl !== server.url))
+                        }
+                      }}
+                      class="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-red-500/10 transition-colors"
+                    >
+                      {t('SETTINGS_REMOVE_SERVER')}
+                    </button>
+                  </div>
+                )}
+              </For>
+            </div>
+          </Show>
+          <button
+            onClick={() => {
+              const url = prompt('Server URL (e.g. ws://localhost:4000):')
+              if (url?.trim()) store.addServer(url.trim())
+            }}
+            class="py-2 px-4 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-sm font-semibold transition-colors"
+          >
             {t('SETTINGS_ADD_SERVER')}
           </button>
         </Show>

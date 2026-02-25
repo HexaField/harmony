@@ -109,6 +109,7 @@ export const en = {
     'Never share your recovery phrase. Anyone with these words can take control of your identity.',
   SETTINGS_MNEMONIC_HIDE: 'Hide',
   SETTINGS_ADD_SERVER: 'Add server',
+  SETTINGS_REMOVE_SERVER: 'Remove',
   SETTINGS_NO_SERVERS: 'No servers connected',
   SETTINGS_VERSION: 'Version',
   SETTINGS_LICENSE: 'License',

@@ -73,6 +73,9 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
 
   // Restore onboarding state on mount
   onMount(async () => {
+    // If we're explicitly starting at setup, don't restore prior state
+    if (props.startAtSetup) return
+
     const savedStep = restoreOnboarding('step') as OnboardingStep | null
     const savedMnemonic = restoreOnboarding('mnemonic')
 

@@ -338,8 +338,11 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
       store.setKeyPair(result.keyPair)
       clearOnboardingState()
       initClientFromStore()
-      // Transition to setup step
-      setStep('setup')
+      // Recovery means existing user — set a default display name to skip setup
+      // The server will provide the real display name via community.info
+      if (!store.displayName()) {
+        store.setDisplayName(result.identity.did.slice(-8))
+      }
     } catch (err) {
       setError(String(err))
     } finally {

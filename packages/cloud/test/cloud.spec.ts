@@ -767,4 +767,156 @@ describe('@harmony/cloud', () => {
       expect(nextCount).toBe(2) // different identities, both allowed
     })
   })
+
+  describe('Recovery Routes', () => {
+    it('MUST return unconfigured status for unknown DID', async () => {
+      const { createCloudApp } = await import('../src/index.js')
+      const { app } = await createCloudApp(crypto)
+      const { default: request } = await import('supertest')
+      const res = await request(app).get('/api/recovery/did%3Akey%3Aunknown/status')
+      expect(res.status).toBe(200)
+      expect(res.body.configured).toBe(false)
+    })
+
+    it('MUST return configured status after setup', async () => {
+      const { createCloudApp } = await import('../src/index.js')
+      const { app, services } = await createCloudApp(crypto)
+      const { default: request } = await import('supertest')
+
+      const keyPair = await crypto.generateSigningKeyPair()
+      const didProvider = new DIDKeyProvider(crypto)
+      const doc = await didProvider.create(keyPair)
+      const identity = { did: doc.id, document: doc, credentials: [] as any[], capabilities: [] as any[] }
+
+      await services.recoveryService.setupSocialRecovery({
+        identity,
+        trustedDIDs: ['did:key:trusted1', 'did:key:trusted2'],
+        threshold: 2,
+        keyPair
+      })
+
+      const statusRes = await request(app).get(`/api/recovery/${encodeURIComponent(doc.id)}/status`)
+      expect(statusRes.status).toBe(200)
+      expect(statusRes.body.configured).toBe(true)
+      expect(statusRes.body.threshold).toBe(2)
+      expect(statusRes.body.trustedDIDs).toHaveLength(2)
+    })
+
+    it('MUST reject setup with missing fields', async () => {
+      const { createCloudApp } = await import('../src/index.js')
+      const { app } = await createCloudApp(crypto)
+      const { default: request } = await import('supertest')
+
+      const res = await request(app).post('/api/recovery/setup').send({})
+      expect(res.status).toBe(400)
+    })
+
+    it('MUST complete full recovery flow via routes', async () => {
+      const { createCloudApp } = await import('../src/index.js')
+      const { app, services } = await createCloudApp(crypto)
+      const { default: request } = await import('supertest')
+      const { recoveryService } = services
+
+      const ownerKP = await crypto.generateSigningKeyPair()
+      const didProvider = new DIDKeyProvider(crypto)
+      const ownerDoc = await didProvider.create(ownerKP)
+      const ownerIdentity = {
+        did: ownerDoc.id,
+        document: ownerDoc,
+        credentials: [] as any[],
+        capabilities: [] as any[]
+      }
+
+      const trustedKP1 = await crypto.generateSigningKeyPair()
+      const trustedDoc1 = await didProvider.create(trustedKP1)
+
+      await recoveryService.setupSocialRecovery({
+        identity: ownerIdentity,
+        trustedDIDs: [trustedDoc1.id],
+        threshold: 1,
+        keyPair: ownerKP
+      })
+
+      const recovererKP = await crypto.generateSigningKeyPair()
+      const recoveryRequest = await recoveryService.initiateRecovery({
+        claimedDID: ownerDoc.id,
+        recovererKeyPair: recovererKP
+      })
+
+      const approveRes = await request(app).post('/api/recovery/approve').send({
+        requestId: recoveryRequest.id,
+        approverDID: trustedDoc1.id,
+        timestamp: new Date().toISOString()
+      })
+      expect(approveRes.status).toBe(200)
+      expect(approveRes.body.approved).toBe(true)
+    })
+
+    it('MUST enforce threshold on approvals', async () => {
+      const { createCloudApp } = await import('../src/index.js')
+      const { app, services } = await createCloudApp(crypto)
+      const { default: request } = await import('supertest')
+      const { recoveryService } = services
+
+      const ownerKP = await crypto.generateSigningKeyPair()
+      const didProvider = new DIDKeyProvider(crypto)
+      const ownerDoc = await didProvider.create(ownerKP)
+      const ownerIdentity = {
+        did: ownerDoc.id,
+        document: ownerDoc,
+        credentials: [] as any[],
+        capabilities: [] as any[]
+      }
+
+      const trustedKP1 = await crypto.generateSigningKeyPair()
+      const trustedDoc1 = await didProvider.create(trustedKP1)
+      const trustedKP2 = await crypto.generateSigningKeyPair()
+      const trustedDoc2 = await didProvider.create(trustedKP2)
+
+      await recoveryService.setupSocialRecovery({
+        identity: ownerIdentity,
+        trustedDIDs: [trustedDoc1.id, trustedDoc2.id],
+        threshold: 2,
+        keyPair: ownerKP
+      })
+
+      const recovererKP = await crypto.generateSigningKeyPair()
+      const req = await recoveryService.initiateRecovery({
+        claimedDID: ownerDoc.id,
+        recovererKeyPair: recovererKP
+      })
+
+      const approve1 = await request(app).post('/api/recovery/approve').send({
+        requestId: req.id,
+        approverDID: trustedDoc1.id,
+        timestamp: new Date().toISOString()
+      })
+      expect(approve1.status).toBe(200)
+      expect(approve1.body.approved).toBe(false)
+      expect(approve1.body.approvalsCount).toBe(1)
+
+      const approve2 = await request(app).post('/api/recovery/approve').send({
+        requestId: req.id,
+        approverDID: trustedDoc2.id,
+        timestamp: new Date().toISOString()
+      })
+      expect(approve2.status).toBe(200)
+      expect(approve2.body.approved).toBe(true)
+      expect(approve2.body.approvalsCount).toBe(2)
+    })
+
+    it('MUST handle invalid recovery request', async () => {
+      const { createCloudApp } = await import('../src/index.js')
+      const { app } = await createCloudApp(crypto)
+      const { default: request } = await import('supertest')
+
+      const res = await request(app).post('/api/recovery/approve').send({
+        requestId: 'nonexistent',
+        approverDID: 'did:key:z6Mk...',
+        timestamp: new Date().toISOString()
+      })
+      expect(res.status).toBe(400)
+      expect(res.body.error).toContain('not found')
+    })
+  })
 })

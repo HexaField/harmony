@@ -8,6 +8,7 @@ export { identityRoutes } from './routes/identity.js'
 export { hostingRoutes } from './routes/hosting.js'
 export { oauthRoutes } from './routes/oauth.js'
 export { storageRoutes } from './routes/storage.js'
+export { recoveryRoutes } from './routes/recovery.js'
 
 import express, { type Application, type Request, type Response } from 'express'
 import { type CryptoProvider } from '@harmony/crypto'
@@ -21,6 +22,7 @@ import { identityRoutes } from './routes/identity.js'
 import { hostingRoutes } from './routes/hosting.js'
 import { oauthRoutes } from './routes/oauth.js'
 import { storageRoutes } from './routes/storage.js'
+import { recoveryRoutes } from './routes/recovery.js'
 
 export interface CloudServices {
   identityService: CloudIdentityService
@@ -60,6 +62,7 @@ export async function createCloudApp(
   app.use('/api', hostingRoutes(hostingService))
   app.use('/api', oauthRoutes(discordLinkService))
   app.use('/api', storageRoutes(hostingService))
+  app.use('/api', recoveryRoutes(recoveryService))
   app.get('/health', (_req: Request, res: Response) => res.json({ status: 'ok' }))
 
   return { app, services: { identityService, hostingService, discordLinkService, recoveryService } }

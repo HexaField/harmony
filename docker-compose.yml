@@ -1,0 +1,57 @@
+# Harmony — Docker Compose
+# Quick start:  docker compose up -d
+# With bot:     docker compose --profile with-bot up -d
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: packages/docker/Dockerfile.server
+    ports:
+      - "${HARMONY_PORT:-4000}:4000"
+    volumes:
+      - harmony-data:/var/harmony/data
+      - ./harmony.config.yaml:/etc/harmony/config.yaml:ro
+    environment:
+      - HARMONY_CONFIG=/etc/harmony/config.yaml
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  ui:
+    build:
+      context: .
+      dockerfile: packages/docker/Dockerfile.ui
+    ports:
+      - "${HARMONY_UI_PORT:-8080}:8080"
+    environment:
+      - HARMONY_SERVER_URL=ws://server:4000
+      - HARMONY_PORTAL_URL=${HARMONY_PORTAL_URL:-https://portal.harmony.chat}
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+
+  bot:
+    build:
+      context: .
+      dockerfile: packages/docker/Dockerfile.bot
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - HARMONY_PORTAL_URL=${HARMONY_PORTAL_URL:-https://portal.harmony.chat}
+      - HARMONY_SERVER_URL=ws://server:4000
+    volumes:
+      - bot-data:/var/harmony/bot
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - with-bot
+
+volumes:
+  harmony-data:
+  bot-data:

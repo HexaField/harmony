@@ -202,21 +202,50 @@ export class MessageStore {
   async search(params: {
     communityId: string
     channelId?: string
+    channelIds?: string[]
     authorDID?: string
+    query?: string
     before?: string
     after?: string
     limit: number
   }): Promise<ProtocolMessage[]> {
+    // Single channel search
     if (params.channelId) {
-      const results = await this.getHistory({
+      let results = await this.getHistory({
         communityId: params.communityId,
         channelId: params.channelId,
-        limit: params.limit
+        limit: params.limit * 10
       })
       if (params.authorDID) {
-        return results.filter((m) => m.sender === params.authorDID).slice(0, params.limit)
+        results = results.filter((m) => m.sender === params.authorDID)
       }
-      return results
+      if (params.query) {
+        const q = params.query.toLowerCase()
+        results = results.filter((m) => {
+          const text = String((m.payload as any)?.text || (m.payload as any)?.content || '')
+          return text.toLowerCase().includes(q)
+        })
+      }
+      return results.slice(0, params.limit)
+    }
+    // Cross-channel search (caller provides channelIds)
+    if (params.query && params.channelIds) {
+      const allResults: ProtocolMessage[] = []
+      const q = params.query.toLowerCase()
+      for (const chId of params.channelIds) {
+        const msgs = await this.getHistory({
+          communityId: params.communityId,
+          channelId: chId,
+          limit: 100
+        })
+        for (const m of msgs) {
+          const text = String((m.payload as any)?.text || (m.payload as any)?.content || '')
+          if (text.toLowerCase().includes(q)) {
+            allResults.push(m)
+          }
+        }
+      }
+      return allResults.slice(0, params.limit)
     }
     return []
   }
@@ -1054,6 +1083,12 @@ export class HarmonyServer {
         break
       case 'media.delete':
         await this.handleMediaDelete(conn, msg)
+        break
+      case 'search.query':
+        await this.handleSearchQuery(conn, msg)
+        break
+      case 'channel.history':
+        await this.handleChannelHistory(conn, msg)
         break
       default:
         // Unknown message type — ignore
@@ -2846,7 +2881,7 @@ export class HarmonyServer {
     // Respond with upload complete
     this.sendToConnection(conn, {
       id: `muc-${Date.now()}`,
-      type: 'media.upload.complete' as MessageType,
+      type: 'media.upload.complete',
       timestamp: now,
       sender: 'server',
       payload: {
@@ -2859,6 +2894,27 @@ export class HarmonyServer {
         channelId: payload.channelId
       }
     })
+
+    // Broadcast to community so other members see the attachment
+    this.broadcastToCommunity(
+      payload.communityId,
+      {
+        id: `mub-${Date.now()}`,
+        type: 'media.upload.complete',
+        timestamp: now,
+        sender: conn.did,
+        payload: {
+          mediaId,
+          filename: payload.filename,
+          mimeType: payload.mimeType,
+          size: payload.size,
+          url: `/media/${mediaId}/${encodeURIComponent(payload.filename)}`,
+          communityId: payload.communityId,
+          channelId: payload.channelId
+        }
+      },
+      conn.id
+    ) // exclude sender (already notified)
   }
 
   private async handleMediaDelete(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
@@ -2892,10 +2948,76 @@ export class HarmonyServer {
 
     this.sendToConnection(conn, {
       id: `md-${Date.now()}`,
-      type: 'media.delete' as MessageType,
+      type: 'media.delete',
       timestamp: new Date().toISOString(),
       sender: 'server',
       payload: { mediaId: payload.mediaId, deleted: true }
+    })
+  }
+
+  private async handleSearchQuery(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { communityId: string; query: string; channelId?: string; limit?: number }
+
+    // Membership check
+    if (!conn.communities.includes(payload.communityId)) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'FORBIDDEN', message: 'Not a member of this community' }
+      })
+      return
+    }
+
+    // Get all channel IDs for cross-channel search
+    const channels = await this.communityManager.getChannels(payload.communityId)
+    const channelIds = channels.map((c) => c.id)
+
+    const results = await this.messageStore.search({
+      communityId: payload.communityId,
+      query: payload.query,
+      channelId: payload.channelId,
+      channelIds,
+      limit: payload.limit ?? 50
+    })
+
+    this.sendToConnection(conn, {
+      id: `sr-${Date.now()}`,
+      type: 'search.results',
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: { communityId: payload.communityId, query: payload.query, results }
+    })
+  }
+
+  private async handleChannelHistory(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { communityId: string; channelId: string; before?: string; limit?: number }
+
+    if (!conn.communities.includes(payload.communityId)) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'FORBIDDEN', message: 'Not a member of this community' }
+      })
+      return
+    }
+
+    const messages = await this.messageStore.getHistory({
+      communityId: payload.communityId,
+      channelId: payload.channelId,
+      before: payload.before,
+      limit: payload.limit ?? 50
+    })
+
+    this.sendToConnection(conn, {
+      id: `ch-${Date.now()}`,
+      type: 'channel.history.response',
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: { communityId: payload.communityId, channelId: payload.channelId, messages }
     })
   }
 

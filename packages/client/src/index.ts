@@ -1478,6 +1478,16 @@ export class HarmonyClient {
       case 'error':
         this.emitter.emit('error', msg.payload)
         break
+      case 'search.results':
+        this.emitter.emit('search.results', msg.payload)
+        break
+      case 'channel.history.response':
+        this.emitter.emit('channel.history.response', msg.payload)
+        break
+      case 'media.upload.complete':
+        this.emitter.emit('media.upload.complete', msg.payload)
+        this.emitter.emit('message', msg) // also emit as generic message for uploadMediaToServer handler
+        break
       case 'mls.welcome':
         this.handleMLSWelcome(msg)
         break
@@ -1502,9 +1512,6 @@ export class HarmonyClient {
         break
       case 'community.auto-joined':
         this.handleCommunityAutoJoined(msg)
-        break
-      case 'media.upload.complete' as any:
-        this.emitter.emit('message', msg)
         break
       default:
         // Emit unhandled server messages generically

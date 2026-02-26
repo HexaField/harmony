@@ -122,6 +122,22 @@ export type MessageType =
   | 'mls.welcome'
   | 'mls.commit'
   | 'mls.group.setup'
+  // Search & History
+  | 'search.query'
+  | 'search.results'
+  | 'channel.history'
+  | 'channel.history.response'
+  // Community management
+  | 'community.kick'
+  | 'community.list'
+  | 'community.list.response'
+  // Media
+  | 'media.upload.request'
+  | 'media.upload.complete'
+  | 'media.delete'
+  // DM
+  | 'dm.edited'
+  | 'dm.deleted'
   // Federation
   | 'federation.relay'
   | 'federation.sync'

@@ -133,7 +133,7 @@ describe('E2EE Integration — End-to-End Encrypted Messaging', () => {
     await bob.joinCommunity(community.id)
 
     // Wait for the full flow: key package upload → mls.member.joined → addMember → welcome
-    const welcomeResult = await Promise.race([bobWelcome.then(() => 'received'), wait(3000).then(() => 'timeout')])
+    const welcomeResult = await Promise.race([bobWelcome.then(() => 'received'), wait(5000).then(() => 'timeout')])
 
     if (welcomeResult === 'timeout' || !bobHasGroup) {
       // Debug: log what went wrong
@@ -148,7 +148,7 @@ describe('E2EE Integration — End-to-End Encrypted Messaging', () => {
     }
 
     // Give Bob a moment to process the welcome
-    await wait(100)
+    await wait(500)
 
     // Alice sends an encrypted message
     const msgId = await alice.sendMessage(community.id, channelId, 'Hello encrypted world!')

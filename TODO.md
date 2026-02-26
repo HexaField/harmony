@@ -13,27 +13,24 @@
 - ~~Server-side MLS key exchange~~ ✅ — Group creation, key package exchange, auto member addition, 11 integration tests
 - ~~Always-on E2EE~~ ✅ — Removed `enableE2EE()` toggle, MLS + DM providers auto-created in every client
 - ~~DM encryption~~ ✅ — X25519 key exchange, XChaCha20-Poly1305, auto-negotiated on first DM, 6 integration tests
-- ~~Un-skipped integration.spec.ts:289 + user-journeys.spec.ts:715~~ ✅
+
+## ~~Threads~~ ✅ Done (2026-02-26)
+
+- ~~Server handles thread.create and thread.send~~ ✅ — In-memory thread storage
+- ~~Thread view in UI~~ ✅ — Side panel, start thread on messages, reply count indicators
+- ~~Thread notification/unread tracking~~ ✅ — Reply counts on parent messages
+- 13 new tests (6 integration + 7 UI)
+
+## ~~Social Recovery~~ ✅ Done (2026-02-26)
+
+- ~~GET /recovery/pending/:approverDID endpoint~~ ✅
+- ~~Settings UI: recovery setup form, status display, pending approval list~~ ✅
+- ~~Onboarding: mnemonic/social recovery tab switcher, full initiate→approve→complete flow~~ ✅
+- 10 new tests (4 cloud + 6 UI)
 
 ---
 
 ## Pre-Launch — Required
-
-### Threads
-
-Protocol types defined (`thread.create`, `thread.send`, `thread.message`, `thread.created`) but no UI or server handler.
-
-- [ ] Server handles thread.create and thread.send
-- [ ] Thread view in UI (inline or side panel)
-- [ ] Thread notification/unread tracking
-
-### Social Recovery — Approval Flow
-
-Cloud API routes exist, Settings UI has setup, Onboarding has recovery entry point. Missing: UI for a trusted contact to approve someone else's recovery request.
-
-- [ ] Notification when someone requests recovery naming you as trusted contact
-- [ ] Approval UI (approve/deny with confirmation)
-- [ ] Status tracking (X of N approvals collected)
 
 ### Voice & Video
 
@@ -132,9 +129,9 @@ Addressed in POLISH.md pass — worth visual re-verification after all recent ch
 
 ## Stats Snapshot (2026-02-26)
 
-- **Tests:** 2212 passing, 68 skipped, 84 files
+- **Tests:** 2235 passing, 68 skipped, 88 files
 - **Packages:** 36
-- **UI:** 22 views, 15 component directories, ~9700 LOC
-- **Client:** ~1970 LOC
-- **Server:** ~1740 LOC
-- **Total estimated LOC:** ~26,000+
+- **UI:** 23 views, 15 component directories, ~10,000 LOC
+- **Client:** ~1980 LOC
+- **Server:** ~1800 LOC
+- **Total estimated LOC:** ~27,000+

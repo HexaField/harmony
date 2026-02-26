@@ -162,6 +162,15 @@ export const ServerListBar: Component = () => {
 
       <div class="flex-1" />
 
+      {/* Import from Discord button */}
+      <button
+        onClick={() => store.setShowMigrationWizard(true)}
+        class="w-12 h-12 rounded-2xl bg-[var(--bg-surface)] hover:bg-[var(--bg-tertiary)] hover:rounded-xl transition-all flex items-center justify-center text-xl text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+        title="Import from Discord"
+      >
+        📥
+      </button>
+
       {/* Settings button */}
       <button
         onClick={() => store.setShowSettings(true)}

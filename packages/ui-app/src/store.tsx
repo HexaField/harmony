@@ -113,6 +113,8 @@ export interface AppStore {
   setShowCommunitySettings: (s: boolean) => void
   showSettings: () => boolean
   setShowSettings: (s: boolean) => void
+  showMigrationWizard: () => boolean
+  setShowMigrationWizard: (s: boolean) => void
   showCreateChannel: () => boolean
   setShowCreateChannel: (s: boolean) => void
   displayName: () => string
@@ -494,6 +496,7 @@ export function createAppStore(): AppStore {
   const [showCreateCommunity, setShowCreateCommunity] = createSignal(false)
   const [showCommunitySettings, setShowCommunitySettings] = createSignal(false)
   const [showSettings, setShowSettings] = createSignal(false)
+  const [showMigrationWizard, setShowMigrationWizard] = createSignal(false)
   const [showCreateChannel, setShowCreateChannel] = createSignal(false)
   const [editingMessageId, setEditingMessageId] = createSignal<string | null>(null)
   const [showRoleManager, setShowRoleManager] = createSignal(false)
@@ -1490,6 +1493,8 @@ export function createAppStore(): AppStore {
     setShowCommunitySettings,
     showSettings,
     setShowSettings,
+    showMigrationWizard,
+    setShowMigrationWizard,
     showCreateChannel,
     setShowCreateChannel,
     displayName,

@@ -16,6 +16,7 @@ import { DMListView } from './DMListView.tsx'
 import { DMConversationView } from './DMConversationView.tsx'
 import { NewDMModal } from './NewDMModal.tsx'
 import { ThreadView } from './ThreadView.tsx'
+import { MigrationWizard } from '../components/Migration/index.tsx'
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = createSignal(typeof window !== 'undefined' && window.innerWidth < 768)
@@ -180,6 +181,11 @@ export const MainLayout: Component = () => {
 
       {/* Delegation view */}
       <DelegationView />
+
+      {/* Migration wizard */}
+      <Show when={store.showMigrationWizard()}>
+        <MigrationWizard onComplete={() => store.setShowMigrationWizard(false)} />
+      </Show>
     </>
   )
 }

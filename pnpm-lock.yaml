@@ -687,6 +687,9 @@ importers:
       '@harmony/migration':
         specifier: workspace:*
         version: link:../migration
+      '@harmony/migration-bot':
+        specifier: workspace:*
+        version: link:../migration-bot
       '@harmony/moderation':
         specifier: workspace:*
         version: link:../moderation
@@ -699,6 +702,9 @@ importers:
       '@harmony/server':
         specifier: workspace:*
         version: link:../server
+      '@harmony/server-runtime':
+        specifier: workspace:*
+        version: link:../server-runtime
       '@harmony/vc':
         specifier: workspace:*
         version: link:../vc

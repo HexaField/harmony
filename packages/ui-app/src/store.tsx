@@ -208,6 +208,12 @@ export interface AppStore {
     threshold?: number
   } | null
   setRecoveryStatus: (s: { configured: boolean; trustedDIDs?: string[]; threshold?: number } | null) => void
+
+  // Mobile
+  mobileApp: () => import('@harmony/mobile').MobileApp | null
+  setMobileApp: (app: import('@harmony/mobile').MobileApp | null) => void
+  biometricEnabled: () => boolean
+  setBiometricEnabled: (b: boolean) => void
   pendingRecoveryRequests: () => Array<{
     requestId: string
     claimedDID: string
@@ -615,6 +621,9 @@ export function createAppStore(): AppStore {
     }>
   >([])
 
+  // Mobile
+  const [mobileApp, setMobileApp] = createSignal<import('@harmony/mobile').MobileApp | null>(null)
+  const [biometricEnabled, setBiometricEnabled] = createSignal(false)
   // Wrap setters (no localStorage — claimed data state comes from server)
   const _setHasClaimedData = (v: boolean) => {
     setHasClaimedData(v)
@@ -1447,7 +1456,11 @@ export function createAppStore(): AppStore {
     recoveryStatus,
     setRecoveryStatus,
     pendingRecoveryRequests,
-    setPendingRecoveryRequests
+    setPendingRecoveryRequests,
+    mobileApp,
+    setMobileApp,
+    biometricEnabled,
+    setBiometricEnabled
   }
 }
 

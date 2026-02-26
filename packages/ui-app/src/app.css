@@ -50,3 +50,96 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
+
+/* Safe area support for notch/dynamic island */
+body {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* Mobile responsive */
+@media (max-width: 767px) {
+  :root {
+    --sidebar-width: 100vw;
+    --server-bar-width: 60px;
+    --member-bar-width: 100vw;
+  }
+
+  /* Mobile overlay for sidebars */
+  .mobile-sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .mobile-sidebar-drawer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 50;
+    display: flex;
+    max-width: 85vw;
+  }
+
+  .mobile-member-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    max-width: 85vw;
+  }
+
+  .mobile-thread-fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: var(--bg-primary);
+  }
+
+  /* Hamburger button */
+  .mobile-hamburger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: none;
+    color: var(--text-primary);
+    font-size: 1.25rem;
+    cursor: pointer;
+    touch-action: manipulation;
+    flex-shrink: 0;
+  }
+
+  /* Touch-friendly targets */
+  button,
+  a,
+  [role='button'] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Prevent horizontal scroll */
+  html,
+  body,
+  #root {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  /* Message input stays above keyboard */
+  .message-input-container {
+    position: sticky;
+    bottom: 0;
+    bottom: env(safe-area-inset-bottom);
+  }
+}
+
+@media (min-width: 768px) {
+  .mobile-hamburger {
+    display: none;
+  }
+}

@@ -1,4 +1,4 @@
-import { Show, type Component } from 'solid-js'
+import { Show, createSignal, onMount, onCleanup, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 import { ServerListBar } from './ServerListBar.tsx'
@@ -16,8 +16,22 @@ import { DMConversationView } from './DMConversationView.tsx'
 import { NewDMModal } from './NewDMModal.tsx'
 import { ThreadView } from './ThreadView.tsx'
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = createSignal(typeof window !== 'undefined' && window.innerWidth < 768)
+  onMount(() => {
+    const mq = window.matchMedia('(max-width: 767px)')
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    mq.addEventListener('change', handler)
+    onCleanup(() => mq.removeEventListener('change', handler))
+  })
+  return isMobile
+}
+
 export const MainLayout: Component = () => {
   const store = useAppStore()
+  const isMobile = useIsMobile()
+  const [showMobileSidebar, setShowMobileSidebar] = createSignal(false)
+  const [showMobileMembers, setShowMobileMembers] = createSignal(false)
 
   // Keyboard shortcut: Ctrl+K for search
   if (typeof window !== 'undefined') {
@@ -50,19 +64,34 @@ export const MainLayout: Component = () => {
 
       <Show when={!store.loading() && store.communities().length > 0}>
         <div class="flex h-screen overflow-hidden">
-          {/* Server list bar (left icon strip) */}
-          <ServerListBar />
+          {/* Desktop: inline sidebars. Mobile: hidden, shown via drawer */}
+          <Show when={!isMobile()}>
+            <ServerListBar />
+            <Show when={store.showDMView()} fallback={<ChannelSidebarView />}>
+              <DMListView />
+            </Show>
+          </Show>
 
-          {/* Channel sidebar or DM list */}
-          <Show when={store.showDMView()} fallback={<ChannelSidebarView />}>
-            <DMListView />
+          {/* Mobile sidebar drawer */}
+          <Show when={isMobile() && showMobileSidebar()}>
+            <div class="mobile-sidebar-overlay" onClick={() => setShowMobileSidebar(false)} />
+            <div class="mobile-sidebar-drawer">
+              <ServerListBar />
+              <Show when={store.showDMView()} fallback={<ChannelSidebarView />}>
+                <DMListView />
+              </Show>
+            </div>
           </Show>
 
           {/* Main content area */}
           <div class="flex flex-col flex-1 min-w-0">
             {/* Title bar */}
             <Show when={!store.showDMView()}>
-              <TitleBarView />
+              <TitleBarView
+                onHamburger={() => setShowMobileSidebar(!showMobileSidebar())}
+                onMembers={() => setShowMobileMembers(!showMobileMembers())}
+                isMobile={isMobile()}
+              />
             </Show>
 
             {/* Connection state banner */}
@@ -88,14 +117,26 @@ export const MainLayout: Component = () => {
             </Show>
           </div>
 
-          {/* Member sidebar (right) */}
-          <Show when={store.showMemberSidebar() && !store.activeThread()}>
+          {/* Member sidebar — desktop inline, mobile drawer */}
+          <Show when={!isMobile() && store.showMemberSidebar() && !store.activeThread()}>
             <MemberSidebarView />
           </Show>
 
-          {/* Thread panel (right) */}
+          {/* Mobile member drawer */}
+          <Show when={isMobile() && showMobileMembers()}>
+            <div class="mobile-sidebar-overlay" onClick={() => setShowMobileMembers(false)} />
+            <div class="mobile-member-drawer">
+              <MemberSidebarView />
+            </div>
+          </Show>
+
+          {/* Thread panel — desktop side panel, mobile fullscreen */}
           <Show when={store.activeThread()}>
-            <ThreadView />
+            <Show when={isMobile()} fallback={<ThreadView />}>
+              <div class="mobile-thread-fullscreen">
+                <ThreadView />
+              </div>
+            </Show>
           </Show>
 
           {/* Search overlay */}
@@ -129,13 +170,18 @@ export const MainLayout: Component = () => {
   )
 }
 
-const TitleBarView: Component = () => {
+const TitleBarView: Component<{ onHamburger?: () => void; onMembers?: () => void; isMobile?: boolean }> = (props) => {
   const store = useAppStore()
 
   const activeChannel = () => store.channels().find((c) => c.id === store.activeChannelId())
 
   return (
     <div class="h-12 flex items-center px-4 bg-[var(--bg-secondary)] border-b border-[var(--border)] shrink-0">
+      <Show when={props.isMobile}>
+        <button class="mobile-hamburger" onClick={props.onHamburger} aria-label="Toggle sidebar">
+          ☰
+        </button>
+      </Show>
       <span class="text-[var(--text-muted)] mr-2">#</span>
       <span class="font-semibold">{activeChannel()?.name ?? ''}</span>
       <Show when={activeChannel()?.topic}>
@@ -151,7 +197,10 @@ const TitleBarView: Component = () => {
         🔍
       </button>
       <button
-        onClick={() => store.setShowMemberSidebar(!store.showMemberSidebar())}
+        onClick={() => {
+          if (props.isMobile && props.onMembers) props.onMembers()
+          else store.setShowMemberSidebar(!store.showMemberSidebar())
+        }}
         class="p-2 rounded hover:bg-[var(--bg-input)] text-[var(--text-muted)] text-sm ml-1"
         title={t('COMMUNITY_MEMBERS')}
       >

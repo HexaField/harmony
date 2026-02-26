@@ -496,6 +496,25 @@ Click a voice channel to join. Controls appear at the bottom of the screen:
 
 Voice requires a LiveKit server. Community admins configure this in their server settings. If voice isn't set up, voice channels won't appear.
 
+#### Self-Hosted LiveKit
+
+1. Install LiveKit server: https://docs.livekit.io/home/self-hosting/local/
+2. Configure in your server settings:
+   ```yaml
+   voice:
+     enabled: true
+     livekit:
+       host: ws://localhost:7880
+       apiKey: your-api-key
+       apiSecret: your-api-secret
+   ```
+3. Voice channels will automatically use LiveKit for media routing.
+4. Video and screen sharing are supported — controls appear in the voice bar when connected.
+
+#### Without LiveKit
+
+Voice channels will show as available but connecting will show an error. Voice, video, and screen sharing all require a running LiveKit server.
+
 ### Direct messages
 
 Click the DM icon to see your conversations. Start a new one by clicking a user's name anywhere in the app and choosing "Message."

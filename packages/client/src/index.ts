@@ -438,6 +438,20 @@ export class HarmonyClient {
     })
   }
 
+  /**
+   * Enable E2EE at runtime with an MLS provider and optional DM provider.
+   * Can be called after construction to activate encryption for subsequent operations.
+   */
+  enableE2EE(options: { mlsProvider?: MLSProvider; dmProvider?: DMProvider }): void {
+    if (options.mlsProvider) this.mlsProvider = options.mlsProvider
+    if (options.dmProvider) this._dmProvider = options.dmProvider
+  }
+
+  /** Check if E2EE is enabled */
+  get e2eeEnabled(): boolean {
+    return this.mlsProvider !== null || this._dmProvider !== null
+  }
+
   async disconnect(): Promise<void> {
     for (const [, sc] of this._servers) {
       if (sc.reconnectTimer) {

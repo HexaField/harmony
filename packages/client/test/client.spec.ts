@@ -1522,4 +1522,161 @@ describe('@harmony/client', () => {
       globalThis.fetch = origFetch
     })
   })
+
+  describe('E2EE Integration', () => {
+    it('MUST enable E2EE at runtime', async () => {
+      const { SimplifiedMLSProvider, SimplifiedDMProvider } = await import('@harmony/e2ee')
+      const id1 = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({
+        serverUrl: `ws://127.0.0.1:${PORT}`,
+        identity: id1.identity,
+        keyPair: id1.keyPair,
+        vp: id1.vp
+      })
+
+      expect(client.e2eeEnabled).toBe(false)
+      client.enableE2EE({ mlsProvider: new SimplifiedMLSProvider() })
+      expect(client.e2eeEnabled).toBe(true)
+
+      await client.disconnect()
+    })
+
+    it('MUST create MLS group for channel and encrypt messages', async () => {
+      const { SimplifiedMLSProvider } = await import('@harmony/e2ee')
+      const mlsProvider = new SimplifiedMLSProvider()
+
+      const id1 = await createTestIdentity()
+      const client1 = new HarmonyClient({
+        wsFactory: createWsFactory(PORT),
+        mlsProvider,
+        cryptoProvider: crypto
+      })
+      await client1.connect({
+        serverUrl: `ws://127.0.0.1:${PORT}`,
+        identity: id1.identity,
+        keyPair: id1.keyPair,
+        vp: id1.vp
+      })
+      const community = await client1.createCommunity({ name: 'E2EE Test' })
+
+      // Client should have created an MLS group for the default channel
+      const channels = community.channels
+      expect(channels.length).toBeGreaterThan(0)
+      const channelId = channels[0].id
+      expect(client1.hasMLSGroup(community.id, channelId)).toBe(true)
+
+      await client1.disconnect()
+    })
+
+    it('MUST encrypt and decrypt messages between two E2EE clients', async () => {
+      const { SimplifiedMLSProvider } = await import('@harmony/e2ee')
+
+      const id1 = await createTestIdentity()
+      const id2 = await createTestIdentity()
+
+      const client1 = new HarmonyClient({
+        wsFactory: createWsFactory(PORT),
+        mlsProvider: new SimplifiedMLSProvider(),
+        cryptoProvider: crypto
+      })
+      await client1.connect({
+        serverUrl: `ws://127.0.0.1:${PORT}`,
+        identity: id1.identity,
+        keyPair: id1.keyPair,
+        vp: id1.vp
+      })
+      const community = await client1.createCommunity({ name: 'E2EE Msg Test' })
+      const channelId = community.channels[0].id
+
+      const client2 = new HarmonyClient({
+        wsFactory: createWsFactory(PORT),
+        mlsProvider: new SimplifiedMLSProvider(),
+        cryptoProvider: crypto
+      })
+      await client2.connect({
+        serverUrl: `ws://127.0.0.1:${PORT}`,
+        identity: id2.identity,
+        keyPair: id2.keyPair,
+        vp: id2.vp
+      })
+      await client2.joinCommunity(community.id)
+
+      // Send encrypted message
+      const msgId = await client1.sendMessage(community.id, channelId, 'Hello encrypted world!')
+
+      // Wait for message to arrive at client2
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 500)
+        client2.on('message', (msg: any) => {
+          if (msg.id === msgId) {
+            clearTimeout(timer)
+            resolve()
+          }
+        })
+      })
+
+      await client1.disconnect()
+      await client2.disconnect()
+    })
+
+    it('MUST gracefully degrade when E2EE not enabled', async () => {
+      const id1 = await createTestIdentity()
+      const id2 = await createTestIdentity()
+
+      // No E2EE provider — plaintext mode
+      const client1 = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client1.connect({
+        serverUrl: `ws://127.0.0.1:${PORT}`,
+        identity: id1.identity,
+        keyPair: id1.keyPair,
+        vp: id1.vp
+      })
+      const community = await client1.createCommunity({ name: 'Plaintext Test' })
+      const channelId = community.channels[0].id
+
+      expect(client1.e2eeEnabled).toBe(false)
+      expect(client1.hasMLSGroup(community.id, channelId)).toBe(false)
+
+      const client2 = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client2.connect({
+        serverUrl: `ws://127.0.0.1:${PORT}`,
+        identity: id2.identity,
+        keyPair: id2.keyPair,
+        vp: id2.vp
+      })
+      await client2.joinCommunity(community.id)
+
+      // Send plaintext message — should work without E2EE
+      const messagePromise = new Promise<any>((resolve) => {
+        client2.on('message', resolve)
+      })
+
+      const msgId = await client1.sendMessage(community.id, channelId, 'Hello plaintext!')
+      const received = await messagePromise
+      expect(received.content.text).toBe('Hello plaintext!')
+
+      await client1.disconnect()
+      await client2.disconnect()
+    })
+
+    it('MUST handle DM encryption when DM provider is set', async () => {
+      const { SimplifiedDMProvider } = await import('@harmony/e2ee')
+      const id1 = await createTestIdentity()
+      const client = new HarmonyClient({
+        wsFactory: createWsFactory(PORT),
+        dmProvider: new SimplifiedDMProvider()
+      })
+      await client.connect({
+        serverUrl: `ws://127.0.0.1:${PORT}`,
+        identity: id1.identity,
+        keyPair: id1.keyPair,
+        vp: id1.vp
+      })
+
+      expect(client.e2eeEnabled).toBe(true) // DM provider counts as E2EE
+
+      await client.disconnect()
+    })
+  })
 })

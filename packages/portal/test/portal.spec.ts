@@ -168,9 +168,11 @@ describe('@harmony/portal', () => {
 describe('@harmony/portal HTTP Server', () => {
   let server: Server
   let baseUrl: string
+  let portal: PortalService
 
   beforeAll(async () => {
-    const app = await createApp()
+    portal = new PortalService(crypto, didProvider)
+    const app = await createApp(portal)
     await new Promise<void>((resolve) => {
       server = app.listen(0, () => {
         const addr = server.address() as any
@@ -339,6 +341,63 @@ describe('@harmony/portal HTTP Server', () => {
 
   it.skip('GET /api/oauth/discord/callback exchanges code (needs real Discord credentials)', async () => {
     // This test requires real Discord OAuth credentials
+  })
+
+  describe('Friend Search', () => {
+    it('MUST search by Discord username among linked identities', async () => {
+      const createRes = await fetch(`${baseUrl}/api/identities`, { method: 'POST' })
+      const { did } = (await createRes.json()) as { did: string }
+
+      await portal.completeOAuthLink({
+        provider: 'discord',
+        providerUserId: 'searchDisc1',
+        providerUsername: 'TestSearchUser',
+        userDID: did
+      })
+
+      const searchRes = await fetch(`${baseUrl}/api/friends/search?q=TestSearch`)
+      expect(searchRes.status).toBe(200)
+      const body = (await searchRes.json()) as { results: any[] }
+      expect(body.results.length).toBeGreaterThanOrEqual(1)
+      expect(body.results.some((r: any) => r.username === 'TestSearchUser')).toBe(true)
+    })
+
+    it('MUST return empty results for unlinked users', async () => {
+      const searchRes = await fetch(`${baseUrl}/api/friends/search?q=NonExistentUser99999`)
+      expect(searchRes.status).toBe(200)
+      const body = (await searchRes.json()) as { results: any[] }
+      expect(body.results).toHaveLength(0)
+    })
+
+    it('MUST handle multiple results', async () => {
+      const res1 = await fetch(`${baseUrl}/api/identities`, { method: 'POST' })
+      const { did: did1 } = (await res1.json()) as { did: string }
+      await portal.completeOAuthLink({
+        provider: 'discord',
+        providerUserId: 'multi1',
+        providerUsername: 'MultiResult_Alpha',
+        userDID: did1
+      })
+
+      const res2 = await fetch(`${baseUrl}/api/identities`, { method: 'POST' })
+      const { did: did2 } = (await res2.json()) as { did: string }
+      await portal.completeOAuthLink({
+        provider: 'discord',
+        providerUserId: 'multi2',
+        providerUsername: 'MultiResult_Beta',
+        userDID: did2
+      })
+
+      const searchRes = await fetch(`${baseUrl}/api/friends/search?q=MultiResult`)
+      expect(searchRes.status).toBe(200)
+      const body = (await searchRes.json()) as { results: any[] }
+      expect(body.results.length).toBeGreaterThanOrEqual(2)
+    })
+
+    it('MUST reject search without query parameter', async () => {
+      const res = await fetch(`${baseUrl}/api/friends/search`)
+      expect(res.status).toBe(400)
+    })
   })
 })
 

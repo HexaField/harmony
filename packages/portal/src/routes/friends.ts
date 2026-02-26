@@ -35,6 +35,22 @@ export function friendsRoutes(portal: PortalService): Router {
     }
   })
 
+  // GET /api/friends/search?q=username — Search linked identities by Discord username
+  // Must be before /friends/:did to avoid param matching
+  router.get('/friends/search', async (req: Request, res: Response) => {
+    try {
+      const q = ((req.query.q as string) || '').trim()
+      if (!q) {
+        res.status(400).json({ error: 'Missing search query parameter q' })
+        return
+      }
+      const results = portal.searchByDiscordUsername(q)
+      res.json({ results })
+    } catch (err: any) {
+      res.status(500).json({ error: err.message })
+    }
+  })
+
   // GET /api/friends/:did — Get a user's discovered friends
   router.get('/friends/:did', async (req: Request, res: Response) => {
     try {

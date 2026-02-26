@@ -167,4 +167,16 @@ export class PortalService {
     }
     return results
   }
+
+  /** Search for linked identities by Discord username (case-insensitive partial match) */
+  searchByDiscordUsername(query: string): Array<{ did: string; discordId: string; username: string }> {
+    const results: Array<{ did: string; discordId: string; username: string }> = []
+    const lowerQuery = query.toLowerCase()
+    for (const [did, profile] of this.discordProfiles) {
+      if (profile.username.toLowerCase().includes(lowerQuery)) {
+        results.push({ did, discordId: profile.discordId, username: profile.username })
+      }
+    }
+    return results
+  }
 }

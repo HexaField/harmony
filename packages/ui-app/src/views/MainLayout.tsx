@@ -14,6 +14,7 @@ import { DelegationView } from './DelegationView.tsx'
 import { DMListView } from './DMListView.tsx'
 import { DMConversationView } from './DMConversationView.tsx'
 import { NewDMModal } from './NewDMModal.tsx'
+import { ThreadView } from './ThreadView.tsx'
 
 export const MainLayout: Component = () => {
   const store = useAppStore()
@@ -88,8 +89,13 @@ export const MainLayout: Component = () => {
           </div>
 
           {/* Member sidebar (right) */}
-          <Show when={store.showMemberSidebar()}>
+          <Show when={store.showMemberSidebar() && !store.activeThread()}>
             <MemberSidebarView />
+          </Show>
+
+          {/* Thread panel (right) */}
+          <Show when={store.activeThread()}>
+            <ThreadView />
           </Show>
 
           {/* Search overlay */}

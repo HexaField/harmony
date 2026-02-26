@@ -2,7 +2,7 @@ import { createSignal, Show, For, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 
-type SettingsSection = 'identity' | 'servers' | 'friends' | 'appearance' | 'about'
+type SettingsSection = 'identity' | 'servers' | 'friends' | 'appearance' | 'recovery' | 'about'
 
 export const SettingsView: Component = () => {
   const store = useAppStore()
@@ -10,6 +10,10 @@ export const SettingsView: Component = () => {
   const [showMnemonic, setShowMnemonic] = createSignal(false)
   const [copiedDid, setCopiedDid] = createSignal(false)
   const [copiedMnemonic, setCopiedMnemonic] = createSignal(false)
+  const [recoverySetupMode, setRecoverySetupMode] = createSignal(false)
+  const [trustedDIDs, setTrustedDIDs] = createSignal<string[]>([''])
+  const [threshold, setThreshold] = createSignal(1)
+  const [recoveryLoading, setRecoveryLoading] = createSignal(false)
 
   async function copyText(text: string, setter: (v: boolean) => void) {
     try {
@@ -24,6 +28,7 @@ export const SettingsView: Component = () => {
     { key: 'servers', label: () => t('SETTINGS_SERVERS') },
     { key: 'friends', label: () => t('FRIENDS_CONNECTIONS') },
     { key: 'appearance', label: () => t('SETTINGS_APPEARANCE') },
+    { key: 'recovery', label: () => t('SETTINGS_RECOVERY') },
     { key: 'about', label: () => t('SETTINGS_ABOUT') }
   ]
 
@@ -244,6 +249,192 @@ export const SettingsView: Component = () => {
                 {t('SETTINGS_THEME_LIGHT')}
               </button>
             </div>
+          </div>
+        </Show>
+
+        {/* Recovery */}
+        <Show when={section() === 'recovery'}>
+          <h3 class="text-xl font-bold mb-6">{t('SETTINGS_RECOVERY')}</h3>
+
+          {/* Recovery Status */}
+          <Show
+            when={store.recoveryStatus()?.configured}
+            fallback={
+              <div class="bg-[var(--bg-surface)] p-4 rounded-lg mb-4">
+                <p class="text-sm text-[var(--text-muted)] mb-3">{t('RECOVERY_NOT_CONFIGURED')}</p>
+                <Show
+                  when={recoverySetupMode()}
+                  fallback={
+                    <button
+                      onClick={() => setRecoverySetupMode(true)}
+                      class="py-2 px-4 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-sm font-semibold transition-colors"
+                    >
+                      {t('RECOVERY_SETUP')}
+                    </button>
+                  }
+                >
+                  {/* Setup form */}
+                  <div class="space-y-3">
+                    <label class="text-sm text-[var(--text-muted)] block">{t('RECOVERY_TRUSTED_DIDS')}</label>
+                    <For each={trustedDIDs()}>
+                      {(did, idx) => (
+                        <div class="flex gap-2">
+                          <input
+                            type="text"
+                            value={did}
+                            onInput={(e) => {
+                              const updated = [...trustedDIDs()]
+                              updated[idx()] = e.currentTarget.value
+                              setTrustedDIDs(updated)
+                            }}
+                            placeholder="did:key:z..."
+                            class="flex-1 p-2 rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm font-mono"
+                          />
+                          <Show when={trustedDIDs().length > 1}>
+                            <button
+                              onClick={() => setTrustedDIDs(trustedDIDs().filter((_, i) => i !== idx()))}
+                              class="text-xs text-red-400 hover:text-red-300 px-2"
+                            >
+                              {t('RECOVERY_REMOVE_DID')}
+                            </button>
+                          </Show>
+                        </div>
+                      )}
+                    </For>
+                    <button
+                      onClick={() => setTrustedDIDs([...trustedDIDs(), ''])}
+                      class="text-xs text-[var(--accent)] hover:underline"
+                    >
+                      + {t('RECOVERY_ADD_DID')}
+                    </button>
+
+                    <div>
+                      <label class="text-sm text-[var(--text-muted)] block mb-1">{t('RECOVERY_THRESHOLD')}</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max={trustedDIDs().filter((d) => d.trim()).length || 1}
+                        value={threshold()}
+                        onInput={(e) => setThreshold(parseInt(e.currentTarget.value) || 1)}
+                        class="w-20 p-2 rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm"
+                      />
+                    </div>
+
+                    <div class="flex gap-2">
+                      <button
+                        onClick={async () => {
+                          const dids = trustedDIDs().filter((d) => d.trim())
+                          if (dids.length === 0) return
+                          setRecoveryLoading(true)
+                          try {
+                            // TODO: Call POST /recovery/setup when cloud URL is available
+                            store.setRecoveryStatus({
+                              configured: true,
+                              trustedDIDs: dids,
+                              threshold: threshold()
+                            })
+                            setRecoverySetupMode(false)
+                          } catch (err) {
+                            console.error('Recovery setup failed:', err)
+                          } finally {
+                            setRecoveryLoading(false)
+                          }
+                        }}
+                        disabled={recoveryLoading() || trustedDIDs().filter((d) => d.trim()).length === 0}
+                        class="py-2 px-4 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-sm font-semibold transition-colors disabled:opacity-50"
+                      >
+                        {t('RECOVERY_SAVE')}
+                      </button>
+                      <button
+                        onClick={() => setRecoverySetupMode(false)}
+                        class="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                      >
+                        {t('THREAD_CANCEL')}
+                      </button>
+                    </div>
+                  </div>
+                </Show>
+              </div>
+            }
+          >
+            <div class="bg-[var(--bg-surface)] p-4 rounded-lg mb-4">
+              <p class="text-sm text-green-400 mb-2">✓ {t('RECOVERY_CONFIGURED')}</p>
+              <p class="text-sm text-[var(--text-muted)]">
+                {t('RECOVERY_THRESHOLD_SUMMARY', {
+                  threshold: store.recoveryStatus()!.threshold ?? 0,
+                  total: store.recoveryStatus()!.trustedDIDs?.length ?? 0
+                })}
+              </p>
+              <Show when={store.recoveryStatus()!.trustedDIDs}>
+                <div class="mt-2 space-y-1">
+                  <For each={store.recoveryStatus()!.trustedDIDs!}>
+                    {(did) => <p class="text-xs font-mono text-[var(--text-muted)] truncate">{did}</p>}
+                  </For>
+                </div>
+              </Show>
+              <button
+                onClick={() => {
+                  setRecoverySetupMode(true)
+                  setTrustedDIDs(store.recoveryStatus()!.trustedDIDs ?? [''])
+                  setThreshold(store.recoveryStatus()!.threshold ?? 1)
+                  store.setRecoveryStatus(null)
+                }}
+                class="mt-3 text-sm text-[var(--accent)] hover:underline"
+              >
+                {t('RECOVERY_RECONFIGURE')}
+              </button>
+            </div>
+          </Show>
+
+          {/* Pending Recovery Requests */}
+          <div class="bg-[var(--bg-surface)] p-4 rounded-lg">
+            <h4 class="text-sm font-semibold mb-3">{t('RECOVERY_PENDING_TITLE')}</h4>
+            <Show
+              when={store.pendingRecoveryRequests().length > 0}
+              fallback={<p class="text-sm text-[var(--text-muted)]">{t('RECOVERY_NO_PENDING')}</p>}
+            >
+              <div class="space-y-3">
+                <For each={store.pendingRecoveryRequests()}>
+                  {(req) => (
+                    <div class="bg-[var(--bg-input)] p-3 rounded-lg">
+                      <p class="text-xs text-[var(--text-muted)]">{t('RECOVERY_CLAIMED_DID')}</p>
+                      <p class="text-sm font-mono truncate mb-2">{req.claimedDID}</p>
+                      <p class="text-xs text-[var(--text-muted)]">
+                        {t('RECOVERY_APPROVALS', {
+                          count: req.approvalsCount,
+                          threshold: req.threshold
+                        })}
+                      </p>
+                      <Show
+                        when={!req.alreadyApproved}
+                        fallback={<p class="text-xs text-green-400 mt-2">✓ {t('RECOVERY_APPROVED')}</p>}
+                      >
+                        <button
+                          onClick={async () => {
+                            try {
+                              // TODO: Call POST /recovery/approve when cloud URL available
+                              const updated = store
+                                .pendingRecoveryRequests()
+                                .map((r) =>
+                                  r.requestId === req.requestId
+                                    ? { ...r, alreadyApproved: true, approvalsCount: r.approvalsCount + 1 }
+                                    : r
+                                )
+                              store.setPendingRecoveryRequests(updated)
+                            } catch (err) {
+                              console.error('Approval failed:', err)
+                            }
+                          }}
+                          class="mt-2 py-1 px-3 rounded bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-xs font-semibold transition-colors"
+                        >
+                          {t('RECOVERY_APPROVE')}
+                        </button>
+                      </Show>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
           </div>
         </Show>
 

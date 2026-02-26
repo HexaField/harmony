@@ -468,7 +468,47 @@ export const en = {
   DATA_BROWSER_ALL_CHANNELS: 'All channels',
   DATA_BROWSER_ALL_SERVERS: 'All servers',
   DATA_BROWSER_DELETE: 'Delete claimed data',
-  DATA_BROWSER_DELETE_CONFIRM: 'Are you sure? This cannot be undone.'
+  DATA_BROWSER_DELETE_CONFIRM: 'Are you sure? This cannot be undone.',
+
+  // Threads
+  THREAD_START: 'Start Thread',
+  THREAD_NAME_PROMPT: 'Thread name',
+  THREAD_CREATE: 'Create Thread',
+  THREAD_CANCEL: 'Cancel',
+  THREAD_REPLIES: '{count} replies',
+  THREAD_CLOSE: 'Close thread',
+  THREAD_MESSAGE_PLACEHOLDER: 'Reply in thread…',
+  THREAD_PARENT_MESSAGE: 'Original message',
+
+  // Recovery
+  RECOVERY_NOT_CONFIGURED: 'Social recovery is not configured.',
+  RECOVERY_SETUP: 'Set Up Social Recovery',
+  RECOVERY_CONFIGURED: 'Social recovery is configured.',
+  RECOVERY_THRESHOLD_SUMMARY: '{threshold} of {total} trusted contacts required',
+  RECOVERY_TRUSTED_DIDS: 'Trusted DIDs',
+  RECOVERY_ADD_DID: 'Add trusted DID',
+  RECOVERY_REMOVE_DID: 'Remove',
+  RECOVERY_THRESHOLD: 'Approval threshold',
+  RECOVERY_SAVE: 'Save Recovery Config',
+  RECOVERY_RECONFIGURE: 'Reconfigure',
+  RECOVERY_PENDING_TITLE: 'Pending Recovery Requests',
+  RECOVERY_NO_PENDING: 'No pending recovery requests.',
+  RECOVERY_APPROVE: 'Approve',
+  RECOVERY_APPROVED: 'Already approved',
+  RECOVERY_APPROVALS: '{count} of {threshold} approvals',
+  RECOVERY_CLAIMED_DID: 'Claimed DID',
+  RECOVERY_VIA_CONTACTS: 'Recover via trusted contacts',
+  RECOVERY_VIA_MNEMONIC: 'Recover via mnemonic',
+  RECOVERY_ENTER_DID: 'Enter your DID',
+  RECOVERY_INITIATE: 'Start Recovery',
+  RECOVERY_REQUEST_ID: 'Recovery Request ID',
+  RECOVERY_SHARE_INSTRUCTIONS:
+    'Share this request ID with your trusted contacts. They need to approve your recovery in their Harmony settings.',
+  RECOVERY_CHECK_STATUS: 'Check Status',
+  RECOVERY_THRESHOLD_MET: 'Threshold met! Complete recovery.',
+  RECOVERY_COMPLETE: 'Complete Recovery',
+  RECOVERY_SUCCESS: 'Identity recovered successfully!',
+  RECOVERY_SETUP_SUCCESS: 'Social recovery configured successfully.'
 } as const
 
 export type StringKey = keyof typeof en

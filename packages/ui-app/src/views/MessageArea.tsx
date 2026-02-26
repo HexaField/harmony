@@ -41,6 +41,8 @@ export const MessageArea: Component = () => {
   const [uploadProgress, setUploadProgress] = createSignal('')
   const [dragging, setDragging] = createSignal(false)
   const [lightboxSrc, setLightboxSrc] = createSignal<string | null>(null)
+  const [threadPromptMsg, setThreadPromptMsg] = createSignal<string | null>(null)
+  const [threadName, setThreadName] = createSignal('')
   let messagesEndRef: HTMLDivElement | undefined
   let typingTimeout: ReturnType<typeof setTimeout> | undefined
   let fileInputRef: HTMLInputElement | undefined
@@ -300,6 +302,35 @@ export const MessageArea: Component = () => {
     setConfirmDelete(null)
   }
 
+  // Thread creation
+  async function startThread(msgId: string) {
+    const name = threadName().trim()
+    const client = store.client()
+    const communityId = store.activeCommunityId()
+    const channelId = store.activeChannelId()
+    if (!name || !client || !communityId || !channelId) return
+
+    try {
+      await client.createThread(communityId, channelId, msgId, name, name)
+      setThreadPromptMsg(null)
+      setThreadName('')
+    } catch (err) {
+      console.error('Failed to create thread:', err)
+    }
+  }
+
+  function openThread(msgId: string) {
+    const meta = store.threadMetaForMessage(msgId)
+    if (!meta) return
+    store.setActiveThread({
+      threadId: meta.threadId,
+      parentMessageId: msgId,
+      channelId: store.activeChannelId(),
+      communityId: store.activeCommunityId(),
+      name: meta.name
+    })
+  }
+
   // Reactions
   async function toggleReaction(msgId: string, emoji: string) {
     const client = store.client()
@@ -538,6 +569,52 @@ export const MessageArea: Component = () => {
                   </Show>
                 </div>
 
+                {/* Thread reply count */}
+                <Show when={store.threadMetaForMessage(msg.id)}>
+                  {(meta) => (
+                    <button
+                      onClick={() => openThread(msg.id)}
+                      class="flex items-center gap-1 mt-1 text-xs text-[var(--accent)] hover:underline cursor-pointer"
+                    >
+                      <span>💬</span>
+                      <span>{t('THREAD_REPLIES', { count: meta().replyCount })}</span>
+                    </button>
+                  )}
+                </Show>
+
+                {/* Thread creation prompt */}
+                <Show when={threadPromptMsg() === msg.id}>
+                  <div class="mt-2 p-2 bg-[var(--bg-surface)] rounded-lg border border-[var(--border)]">
+                    <input
+                      type="text"
+                      value={threadName()}
+                      onInput={(e) => setThreadName(e.currentTarget.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') startThread(msg.id)
+                        if (e.key === 'Escape') setThreadPromptMsg(null)
+                      }}
+                      placeholder={t('THREAD_NAME_PROMPT')}
+                      class="w-full p-1.5 bg-[var(--bg-input)] rounded text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none border border-[var(--border)] focus:border-[var(--accent)]"
+                      autofocus
+                    />
+                    <div class="flex gap-2 mt-2 justify-end">
+                      <button
+                        onClick={() => setThreadPromptMsg(null)}
+                        class="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                      >
+                        {t('THREAD_CANCEL')}
+                      </button>
+                      <button
+                        onClick={() => startThread(msg.id)}
+                        disabled={!threadName().trim()}
+                        class="text-xs text-[var(--accent)] hover:text-[var(--accent-hover)] disabled:opacity-30 font-semibold"
+                      >
+                        {t('THREAD_CREATE')}
+                      </button>
+                    </div>
+                  </div>
+                </Show>
+
                 {/* Hover actions */}
                 <div class="absolute right-2 top-0 opacity-0 group-hover:opacity-100 transition-opacity flex gap-0.5 bg-[var(--bg-surface)] rounded border border-[var(--border)] shadow-sm">
                   {/* Reaction button */}
@@ -568,6 +645,17 @@ export const MessageArea: Component = () => {
                       🗑️
                     </button>
                   </Show>
+                  {/* Start Thread */}
+                  <button
+                    onClick={() => {
+                      setThreadPromptMsg(msg.id)
+                      setThreadName('')
+                    }}
+                    class="p-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                    title={t('THREAD_START')}
+                  >
+                    💬
+                  </button>
                 </div>
 
                 {/* Emoji picker popup */}

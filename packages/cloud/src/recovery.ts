@@ -133,6 +133,39 @@ export class RecoveryService {
     return null
   }
 
+  getPendingForApprover(approverDID: string): Array<{
+    requestId: string
+    claimedDID: string
+    createdAt: string
+    approvalsCount: number
+    threshold: number
+    alreadyApproved: boolean
+  }> {
+    const results: Array<{
+      requestId: string
+      claimedDID: string
+      createdAt: string
+      approvalsCount: number
+      threshold: number
+      alreadyApproved: boolean
+    }> = []
+
+    for (const [requestId, entry] of this.activeRequests) {
+      if (entry.request.config.trustedDIDs.includes(approverDID)) {
+        results.push({
+          requestId,
+          claimedDID: entry.request.claimedDID,
+          createdAt: entry.request.createdAt,
+          approvalsCount: entry.approvals.length,
+          threshold: entry.request.config.threshold,
+          alreadyApproved: entry.approvals.some((a) => a.approverDID === approverDID)
+        })
+      }
+    }
+
+    return results
+  }
+
   getActiveRequests(): Map<string, { request: RecoveryRequest; approvals: RecoveryApproval[] }> {
     return new Map(this.activeRequests)
   }

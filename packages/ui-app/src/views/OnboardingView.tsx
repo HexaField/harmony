@@ -44,6 +44,14 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
   const [step, _setStep] = createSignal<OnboardingStep>(props.startAtSetup ? 'setup' : 'welcome')
   const [generatedMnemonic, setGeneratedMnemonic] = createSignal('')
   const [recoverInput, setRecoverInput] = createSignal('')
+  const [recoverMode, setRecoverMode] = createSignal<'mnemonic' | 'social'>('mnemonic')
+  const [socialRecoveryDid, setSocialRecoveryDid] = createSignal('')
+  const [socialRecoveryRequestId, setSocialRecoveryRequestId] = createSignal('')
+  const [socialRecoveryStatus, setSocialRecoveryStatus] = createSignal<{
+    approvalsCount: number
+    threshold: number
+    thresholdMet: boolean
+  } | null>(null)
   const [error, setError] = createSignal('')
   const [loading, setLoading] = createSignal(false)
   const [copied, setCopied] = createSignal(false)
@@ -462,35 +470,176 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
         <Show when={step() === 'recover'}>
           <div>
             <h2 class="text-2xl font-bold mb-2 text-center">{t('ONBOARDING_RECOVER_IDENTITY')}</h2>
-            <p class="text-[var(--text-secondary)] text-sm mb-4 text-center">{t('ONBOARDING_RECOVER_PROMPT')}</p>
-            <textarea
-              value={recoverInput()}
-              onInput={(e) => setRecoverInput(e.currentTarget.value)}
-              rows={3}
-              class="w-full p-3 rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none font-mono text-sm resize-none"
-              placeholder="word1 word2 word3 ..."
-            />
-            <Show when={error()}>
-              <p class="mt-2 text-[var(--error)] text-sm">{error()}</p>
-            </Show>
-            <div class="flex gap-3 mt-4">
+
+            {/* Recovery mode tabs */}
+            <div class="flex gap-2 mb-4">
               <button
-                onClick={() => {
-                  setStep('welcome')
-                  setError('')
+                onClick={() => setRecoverMode('mnemonic')}
+                class="flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-colors"
+                classList={{
+                  'bg-[var(--accent)] text-white': recoverMode() === 'mnemonic',
+                  'bg-[var(--bg-input)] text-[var(--text-muted)] hover:bg-[var(--border)]': recoverMode() !== 'mnemonic'
                 }}
-                class="flex-1 py-3 px-6 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)] font-semibold transition-colors"
               >
-                {t('ONBOARDING_BACK')}
+                {t('RECOVERY_VIA_MNEMONIC')}
               </button>
               <button
-                onClick={handleRecover}
-                disabled={loading()}
-                class="flex-1 py-3 px-6 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-semibold transition-colors disabled:opacity-50"
+                onClick={() => setRecoverMode('social')}
+                class="flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-colors"
+                classList={{
+                  'bg-[var(--accent)] text-white': recoverMode() === 'social',
+                  'bg-[var(--bg-input)] text-[var(--text-muted)] hover:bg-[var(--border)]': recoverMode() !== 'social'
+                }}
               >
-                {loading() ? t('LOADING') : t('ONBOARDING_RECOVER_IDENTITY')}
+                {t('RECOVERY_VIA_CONTACTS')}
               </button>
             </div>
+
+            {/* Mnemonic recovery */}
+            <Show when={recoverMode() === 'mnemonic'}>
+              <p class="text-[var(--text-secondary)] text-sm mb-4 text-center">{t('ONBOARDING_RECOVER_PROMPT')}</p>
+              <textarea
+                value={recoverInput()}
+                onInput={(e) => setRecoverInput(e.currentTarget.value)}
+                rows={3}
+                class="w-full p-3 rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none font-mono text-sm resize-none"
+                placeholder="word1 word2 word3 ..."
+              />
+              <Show when={error()}>
+                <p class="mt-2 text-[var(--error)] text-sm">{error()}</p>
+              </Show>
+              <div class="flex gap-3 mt-4">
+                <button
+                  onClick={() => {
+                    setStep('welcome')
+                    setError('')
+                  }}
+                  class="flex-1 py-3 px-6 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)] font-semibold transition-colors"
+                >
+                  {t('ONBOARDING_BACK')}
+                </button>
+                <button
+                  onClick={handleRecover}
+                  disabled={loading()}
+                  class="flex-1 py-3 px-6 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-semibold transition-colors disabled:opacity-50"
+                >
+                  {loading() ? t('LOADING') : t('ONBOARDING_RECOVER_IDENTITY')}
+                </button>
+              </div>
+            </Show>
+
+            {/* Social recovery */}
+            <Show when={recoverMode() === 'social'}>
+              <Show
+                when={!socialRecoveryRequestId()}
+                fallback={
+                  <div class="space-y-4">
+                    <div class="bg-[var(--bg-input)] p-4 rounded-lg">
+                      <p class="text-xs text-[var(--text-muted)] mb-1">{t('RECOVERY_REQUEST_ID')}</p>
+                      <p class="font-mono text-sm break-all">{socialRecoveryRequestId()}</p>
+                    </div>
+                    <p class="text-sm text-[var(--text-secondary)]">{t('RECOVERY_SHARE_INSTRUCTIONS')}</p>
+                    <Show when={socialRecoveryStatus()}>
+                      <p class="text-sm text-[var(--text-muted)]">
+                        {t('RECOVERY_APPROVALS', {
+                          count: socialRecoveryStatus()!.approvalsCount,
+                          threshold: socialRecoveryStatus()!.threshold
+                        })}
+                      </p>
+                    </Show>
+                    <Show when={socialRecoveryStatus()?.thresholdMet}>
+                      <button
+                        onClick={async () => {
+                          // TODO: POST /recovery/complete
+                          setLoading(true)
+                          try {
+                            // Complete recovery when cloud API available
+                            setError('Social recovery completion not yet connected to backend')
+                          } finally {
+                            setLoading(false)
+                          }
+                        }}
+                        class="w-full py-3 px-6 rounded-lg bg-green-600 hover:bg-green-500 text-white font-semibold transition-colors"
+                      >
+                        {t('RECOVERY_COMPLETE')}
+                      </button>
+                    </Show>
+                    <Show when={!socialRecoveryStatus()?.thresholdMet}>
+                      <button
+                        onClick={async () => {
+                          // TODO: GET /recovery/:requestId/status
+                          setSocialRecoveryStatus({
+                            approvalsCount: 0,
+                            threshold: 2,
+                            thresholdMet: false
+                          })
+                        }}
+                        class="w-full py-3 px-6 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)] font-semibold transition-colors"
+                      >
+                        {t('RECOVERY_CHECK_STATUS')}
+                      </button>
+                    </Show>
+                    <button
+                      onClick={() => {
+                        setStep('welcome')
+                        setSocialRecoveryRequestId('')
+                        setSocialRecoveryStatus(null)
+                      }}
+                      class="w-full py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    >
+                      {t('ONBOARDING_BACK')}
+                    </button>
+                  </div>
+                }
+              >
+                <div class="space-y-4">
+                  <div>
+                    <label class="text-sm text-[var(--text-muted)] block mb-1">{t('RECOVERY_ENTER_DID')}</label>
+                    <input
+                      type="text"
+                      value={socialRecoveryDid()}
+                      onInput={(e) => setSocialRecoveryDid(e.currentTarget.value)}
+                      placeholder="did:key:z..."
+                      class="w-full p-3 rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none font-mono text-sm"
+                    />
+                  </div>
+                  <Show when={error()}>
+                    <p class="text-[var(--error)] text-sm">{error()}</p>
+                  </Show>
+                  <div class="flex gap-3">
+                    <button
+                      onClick={() => {
+                        setStep('welcome')
+                        setError('')
+                      }}
+                      class="flex-1 py-3 px-6 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)] font-semibold transition-colors"
+                    >
+                      {t('ONBOARDING_BACK')}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!socialRecoveryDid().trim()) return
+                        setLoading(true)
+                        setError('')
+                        try {
+                          // TODO: POST /recovery/initiate
+                          const requestId = `recovery-${Date.now()}`
+                          setSocialRecoveryRequestId(requestId)
+                        } catch (err) {
+                          setError(String(err))
+                        } finally {
+                          setLoading(false)
+                        }
+                      }}
+                      disabled={loading() || !socialRecoveryDid().trim()}
+                      class="flex-1 py-3 px-6 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-semibold transition-colors disabled:opacity-50"
+                    >
+                      {loading() ? t('LOADING') : t('RECOVERY_INITIATE')}
+                    </button>
+                  </div>
+                </div>
+              </Show>
+            </Show>
           </div>
         </Show>
         {/* Setup — post-identity profile & community setup */}

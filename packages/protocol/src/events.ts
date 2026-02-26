@@ -34,6 +34,8 @@ export type ClientEvent =
   | 'voice.joined'
   | 'voice.left'
   | 'voice.state'
+  | 'thread.created'
+  | 'thread.message'
   | 'error'
 
 export type FederationEvent = 'peer.connected' | 'peer.disconnected' | 'peer.message' | 'peer.sync' | 'peer.error'

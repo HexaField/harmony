@@ -106,5 +106,16 @@ export function recoveryRoutes(recoveryService: RecoveryService): Router {
     }
   })
 
+  /** Get pending recovery requests where this DID is a trusted contact */
+  router.get('/recovery/pending/:approverDID', async (req: Request, res: Response) => {
+    try {
+      const approverDID = decodeURIComponent(req.params.approverDID as string)
+      const pending = recoveryService.getPendingForApprover(approverDID)
+      res.json({ requests: pending })
+    } catch (err: any) {
+      res.status(500).json({ error: err.message })
+    }
+  })
+
   return router
 }

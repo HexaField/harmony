@@ -192,6 +192,7 @@ export class HarmonyClient {
   private emitter = new EventEmitter()
   private _communities: Map<string, CommunityState> = new Map()
   private _dmChannels: Map<string, DMChannelState> = new Map()
+  private _threadMessages: Map<string, any[]> = new Map()
   private _channelLogs: Map<string, CRDTLog<DecryptedMessage>> = new Map()
   private _channelSubscriptions: Map<string, ChannelSubscription> = new Map()
   private _messageQueue: ProtocolMessage[] = []
@@ -1052,6 +1053,10 @@ export class HarmonyClient {
     return id
   }
 
+  getThreadMessages(threadId: string): any[] {
+    return this._threadMessages.get(threadId) ?? []
+  }
+
   // ── Presence ──
 
   async setPresence(status: 'online' | 'idle' | 'dnd' | 'offline', customStatus?: string): Promise<void> {
@@ -1293,12 +1298,35 @@ export class HarmonyClient {
       case 'community.list.response':
         this.emitter.emit('community.list', msg.payload)
         break
-      case 'thread.created':
-        this.emitter.emit('message', msg.payload)
+      case 'thread.created': {
+        const p = msg.payload as any
+        if (!this._threadMessages.has(p.threadId)) {
+          this._threadMessages.set(p.threadId, [])
+        }
+        this._threadMessages.get(p.threadId)!.push({
+          id: msg.id,
+          sender: msg.sender,
+          content: p.content,
+          timestamp: msg.timestamp
+        })
+        this.emitter.emit('thread.created', msg.payload)
         break
-      case 'thread.message':
-        this.emitter.emit('message', msg.payload)
+      }
+      case 'thread.message': {
+        const p = msg.payload as any
+        if (!this._threadMessages.has(p.threadId)) {
+          this._threadMessages.set(p.threadId, [])
+        }
+        this._threadMessages.get(p.threadId)!.push({
+          id: msg.id,
+          sender: msg.sender,
+          content: p.content,
+          nonce: p.nonce,
+          timestamp: msg.timestamp
+        })
+        this.emitter.emit('thread.message', msg.payload)
         break
+      }
       case 'error':
         this.emitter.emit('error', msg.payload)
         break

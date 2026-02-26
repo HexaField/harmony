@@ -608,6 +608,18 @@ export class CommunityManager {
 
 // ── Harmony Server ──
 
+// Thread state (in-memory MVP)
+interface ThreadState {
+  threadId: string
+  parentMessageId: string
+  channelId: string
+  communityId: string
+  name: string
+  creatorDID: string
+  createdAt: string
+  messageCount: number
+}
+
 export class HarmonyServer {
   private wss: WebSocketServer | null = null
   private _connections: Map<string, ServerConnection> = new Map()
@@ -620,6 +632,7 @@ export class HarmonyServer {
   private keyPackages: Map<string, Uint8Array[]> = new Map() // DID → key packages (serialized)
   private e2eeGroups: Map<string, { creatorDID: string; communityId: string; channelId: string; groupId: string }> =
     new Map() // groupId → metadata
+  private _threads: Map<string, ThreadState> = new Map()
   private voiceChannelParticipants: Map<string, Set<string>> = new Map() // channelId → Set<connId>
   private bannedUsers: Map<string, Set<string>> = new Map() // communityId → Set<DID>
 
@@ -940,6 +953,12 @@ export class HarmonyServer {
       case 'voice.answer':
       case 'voice.ice':
         await this.handleVoiceSignaling(conn, msg)
+        break
+      case 'thread.create':
+        await this.handleThreadCreate(conn, msg)
+        break
+      case 'thread.send':
+        await this.handleThreadSend(conn, msg)
         break
       default:
         // Unknown message type — ignore
@@ -1752,6 +1771,85 @@ export class HarmonyServer {
     for (const communityId of payload.reconciledCommunities) {
       await this.autoJoinCommunity(payload.did, communityId)
     }
+  }
+
+  private async handleThreadCreate(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as {
+      communityId: string
+      channelId: string
+      parentMessageId: string
+      name: string
+      content: unknown
+      clock: LamportClock
+    }
+
+    const threadId = msg.id
+    const thread: ThreadState = {
+      threadId,
+      parentMessageId: payload.parentMessageId,
+      channelId: payload.channelId,
+      communityId: payload.communityId,
+      name: payload.name,
+      creatorDID: conn.did,
+      createdAt: msg.timestamp,
+      messageCount: 1
+    }
+    this._threads.set(threadId, thread)
+
+    this.broadcastToCommunity(payload.communityId, {
+      id: msg.id,
+      type: 'thread.created',
+      timestamp: msg.timestamp,
+      sender: conn.did,
+      payload: {
+        threadId,
+        parentMessageId: payload.parentMessageId,
+        channelId: payload.channelId,
+        communityId: payload.communityId,
+        name: payload.name,
+        creatorDID: conn.did,
+        content: payload.content,
+        clock: payload.clock
+      }
+    })
+  }
+
+  private async handleThreadSend(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as {
+      threadId: string
+      content: unknown
+      nonce: string
+      replyTo?: string
+      clock: LamportClock
+    }
+
+    const thread = this._threads.get(payload.threadId)
+    if (!thread) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'THREAD_NOT_FOUND', message: 'Thread not found' }
+      })
+      return
+    }
+
+    thread.messageCount++
+
+    this.broadcastToCommunity(thread.communityId, {
+      id: msg.id,
+      type: 'thread.message',
+      timestamp: msg.timestamp,
+      sender: conn.did,
+      payload: {
+        threadId: payload.threadId,
+        content: payload.content,
+        nonce: payload.nonce,
+        replyTo: payload.replyTo,
+        clock: payload.clock
+      }
+    })
   }
 
   /** Auto-join a user to a community after reconciliation (ghost → real DID) */

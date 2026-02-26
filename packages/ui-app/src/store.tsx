@@ -178,6 +178,55 @@ export interface AppStore {
   autoJoinedCommunities: () => Array<{ communityId: string; communityName: string }>
   addAutoJoinedCommunity: (c: { communityId: string; communityName: string }) => void
 
+  // Threads
+  activeThread: () => {
+    threadId: string
+    parentMessageId: string
+    channelId: string
+    communityId: string
+    name: string
+  } | null
+  setActiveThread: (
+    thread: {
+      threadId: string
+      parentMessageId: string
+      channelId: string
+      communityId: string
+      name: string
+    } | null
+  ) => void
+  threadMessages: (threadId: string) => MessageData[]
+  addThreadMessage: (threadId: string, msg: MessageData) => void
+  threadCounts: () => Map<string, number>
+  addThreadMeta: (parentMessageId: string, threadId: string, name: string) => void
+  threadMetaForMessage: (messageId: string) => { threadId: string; name: string; replyCount: number } | null
+
+  // Recovery
+  recoveryStatus: () => {
+    configured: boolean
+    trustedDIDs?: string[]
+    threshold?: number
+  } | null
+  setRecoveryStatus: (s: { configured: boolean; trustedDIDs?: string[]; threshold?: number } | null) => void
+  pendingRecoveryRequests: () => Array<{
+    requestId: string
+    claimedDID: string
+    createdAt: string
+    approvalsCount: number
+    threshold: number
+    alreadyApproved: boolean
+  }>
+  setPendingRecoveryRequests: (
+    r: Array<{
+      requestId: string
+      claimedDID: string
+      createdAt: string
+      approvalsCount: number
+      threshold: number
+      alreadyApproved: boolean
+    }>
+  ) => void
+
   // Data Claim
   hasClaimedData: () => boolean
   setHasClaimedData: (v: boolean) => void
@@ -493,6 +542,78 @@ export function createAppStore(): AppStore {
   } | null>(_savedClaimedMeta)
   const [showDataClaim, setShowDataClaim] = createSignal(false)
   const [showDataBrowser, setShowDataBrowser] = createSignal(false)
+
+  // Thread state
+  const [activeThread, setActiveThread] = createSignal<{
+    threadId: string
+    parentMessageId: string
+    channelId: string
+    communityId: string
+    name: string
+  } | null>(null)
+  const threadMessageCache = new Map<string, MessageData[]>()
+  const [threadVersion, setThreadVersion] = createSignal(0)
+  // parentMessageId → { threadId, name, replyCount }
+  const threadMetaMap = new Map<string, { threadId: string; name: string; replyCount: number }>()
+  const [threadMetaVersion, setThreadMetaVersion] = createSignal(0)
+
+  const threadMessages = (threadId: string): MessageData[] => {
+    threadVersion() // track reactivity
+    return threadMessageCache.get(threadId) ?? []
+  }
+
+  const addThreadMessage = (threadId: string, msg: MessageData) => {
+    const existing = threadMessageCache.get(threadId) ?? []
+    if (existing.some((e) => e.id === msg.id)) return
+    threadMessageCache.set(threadId, [...existing, msg])
+    setThreadVersion((v) => v + 1)
+    // Update reply count in meta
+    for (const [, meta] of threadMetaMap) {
+      if (meta.threadId === threadId) {
+        meta.replyCount++
+        setThreadMetaVersion((v) => v + 1)
+        break
+      }
+    }
+  }
+
+  const threadCounts = (): Map<string, number> => {
+    threadMetaVersion() // track reactivity
+    const counts = new Map<string, number>()
+    for (const [msgId, meta] of threadMetaMap) {
+      counts.set(msgId, meta.replyCount)
+    }
+    return counts
+  }
+
+  const addThreadMeta = (parentMessageId: string, threadId: string, name: string) => {
+    if (!threadMetaMap.has(parentMessageId)) {
+      threadMetaMap.set(parentMessageId, { threadId, name, replyCount: 0 })
+      setThreadMetaVersion((v) => v + 1)
+    }
+  }
+
+  const threadMetaForMessage = (messageId: string): { threadId: string; name: string; replyCount: number } | null => {
+    threadMetaVersion() // track reactivity
+    return threadMetaMap.get(messageId) ?? null
+  }
+
+  // Recovery state
+  const [recoveryStatus, setRecoveryStatus] = createSignal<{
+    configured: boolean
+    trustedDIDs?: string[]
+    threshold?: number
+  } | null>(null)
+  const [pendingRecoveryRequests, setPendingRecoveryRequests] = createSignal<
+    Array<{
+      requestId: string
+      claimedDID: string
+      createdAt: string
+      approvalsCount: number
+      threshold: number
+      alreadyApproved: boolean
+    }>
+  >([])
 
   // Wrap setters (no localStorage — claimed data state comes from server)
   const _setHasClaimedData = (v: boolean) => {
@@ -1071,6 +1192,59 @@ export function createAppStore(): AppStore {
         })
       }
     })
+
+    // Thread events
+    client.on('thread.created', (...args: unknown[]) => {
+      const event = args[0] as {
+        threadId: string
+        parentMessageId: string
+        channelId: string
+        communityId: string
+        name: string
+        creatorDID: string
+        content: { text?: string }
+      }
+      if (event?.threadId) {
+        addThreadMeta(event.parentMessageId, event.threadId, event.name)
+        if (event.content?.text) {
+          addThreadMessage(event.threadId, {
+            id: `${event.threadId}-0`,
+            content: event.content.text,
+            authorDid: event.creatorDID,
+            authorName: (() => {
+              const member = members().find((mb) => mb.did === event.creatorDID)
+              return member?.displayName || pseudonymFromDid(event.creatorDID)
+            })(),
+            timestamp: new Date().toISOString(),
+            reactions: []
+          })
+        }
+      }
+    })
+
+    client.on('thread.message', (...args: unknown[]) => {
+      const event = args[0] as {
+        threadId: string
+        content: { text?: string }
+        nonce: string
+      }
+      // msg.sender is on the outer message, not the payload — we get it from args
+      const rawMsg = args[1] as { sender?: string } | undefined
+      const sender = rawMsg?.sender ?? 'unknown'
+      if (event?.threadId && event.content?.text) {
+        addThreadMessage(event.threadId, {
+          id: `thread-${event.threadId}-${Date.now()}-${event.nonce}`,
+          content: event.content.text,
+          authorDid: sender,
+          authorName: (() => {
+            const member = members().find((mb) => mb.did === sender)
+            return member?.displayName || pseudonymFromDid(sender)
+          })(),
+          timestamp: new Date().toISOString(),
+          reactions: []
+        })
+      }
+    })
   }
 
   function updateConnectionStateFromClient(client: HarmonyClient) {
@@ -1262,7 +1436,18 @@ export function createAppStore(): AppStore {
     showDataClaim,
     setShowDataClaim,
     showDataBrowser,
-    setShowDataBrowser
+    setShowDataBrowser,
+    activeThread,
+    setActiveThread,
+    threadMessages,
+    addThreadMessage,
+    threadCounts,
+    addThreadMeta,
+    threadMetaForMessage,
+    recoveryStatus,
+    setRecoveryStatus,
+    pendingRecoveryRequests,
+    setPendingRecoveryRequests
   }
 }
 

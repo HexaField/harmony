@@ -43,3 +43,8 @@ Harmony — open-source, self-hostable Discord alternative with sovereign identi
 ## Implementation Reference
 
 See `IMPLEMENTATION.md` for full module interfaces, spec tests, and architecture.
+
+## Contributing Requirements
+
+- Must update TEST-MATRIX.md with new features and flows
+- Must update FEATURES.md with new features and details

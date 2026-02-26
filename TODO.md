@@ -8,24 +8,16 @@
 - ~~PWA Icons~~ ✅ — Purple hexagon SVG, manifest + favicon
 - ~~GUIDE.md Audit~~ ✅ — Threads/export marked "Coming soon", voice/docker/downloads caveated
 
-## ~~E2EE Server-Side Key Exchange~~ ✅ Done (2026-02-26)
+## ~~E2EE~~ ✅ All Done (2026-02-26)
 
-Wired end-to-end: MLS group creation → key package exchange → auto member addition → encrypted messaging → decryption.
-
-- ~~Server tracks E2EE group metadata~~ ✅
-- ~~Server notifies group creators on new member key package upload (`mls.member.joined`)~~ ✅
-- ~~Client auto-adds new members to MLS groups~~ ✅
-- ~~Client decrypts messages when MLS group exists, plaintext fallback otherwise~~ ✅
-- ~~11 new integration tests (e2ee-integration.spec.ts)~~ ✅
+- ~~Server-side MLS key exchange~~ ✅ — Group creation, key package exchange, auto member addition, 11 integration tests
+- ~~Always-on E2EE~~ ✅ — Removed `enableE2EE()` toggle, MLS + DM providers auto-created in every client
+- ~~DM encryption~~ ✅ — X25519 key exchange, XChaCha20-Poly1305, auto-negotiated on first DM, 6 integration tests
 - ~~Un-skipped integration.spec.ts:289 + user-journeys.spec.ts:715~~ ✅
-- ~~UI toggle for E2EE per channel/community~~ ✅ (removed — E2EE is always on)
 
-### DM Encryption
+---
 
-~~`SimplifiedDMProvider` exists but DM send/receive pipeline doesn't use it.~~
-
-- [x] Wire DM encryption into client send/receive ✅
-- [x] Key exchange for DM pairs ✅
+## Post-Launch — Wiring Gaps
 
 ### Federation
 
@@ -60,6 +52,10 @@ Moderation module has rate limiting logic. Verify it's actually called in the se
 - [ ] Confirm rate limit check on `channel.send`
 - [ ] Confirm rate limit response sent to client
 - [ ] UI feedback when rate limited
+
+---
+
+## Post-Launch — New Features
 
 ### Voice & Video
 
@@ -136,9 +132,9 @@ Addressed in POLISH.md pass — worth visual re-verification after all recent ch
 
 ## Stats Snapshot (2026-02-26)
 
-- **Tests:** 2206 passing, 68 skipped, 83 files
+- **Tests:** 2212 passing, 68 skipped, 84 files
 - **Packages:** 36
 - **UI:** 22 views, 15 component directories, ~9700 LOC
-- **Client:** ~1950 LOC
-- **Server:** ~1725 LOC
+- **Client:** ~1970 LOC
+- **Server:** ~1740 LOC
 - **Total estimated LOC:** ~26,000+

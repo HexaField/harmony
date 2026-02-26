@@ -1487,6 +1487,11 @@ export class HarmonyClient {
       case 'media.upload.complete' as any:
         this.emitter.emit('message', msg)
         break
+      default:
+        // Emit unhandled server messages generically
+        this.emitter.emit(msg.type as string, msg.payload)
+        this.emitter.emit('message', msg)
+        break
     }
   }
 

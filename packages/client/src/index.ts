@@ -705,6 +705,50 @@ export class HarmonyClient {
     })
   }
 
+  /**
+   * Join a community via an invite code.
+   * Resolves the invite via a portal API, connects to the target server if needed,
+   * then joins the community.
+   */
+  async joinViaInvite(code: string, portalBaseUrl: string = 'https://harmony.chat'): Promise<CommunityState> {
+    // Strip URL prefix if a full invite URL was pasted
+    const cleanCode = code
+      .replace(/^https?:\/\/[^/]+\/invite\//, '')
+      .replace(/[?#].*$/, '')
+      .trim()
+
+    if (!cleanCode) throw new Error('Invalid invite code')
+
+    // Resolve invite via portal
+    const res = await fetch(`${portalBaseUrl}/invite/${cleanCode}`)
+    if (!res.ok) {
+      if (res.status === 404) throw new Error('Invite not found or expired')
+      throw new Error(`Failed to resolve invite: ${res.status}`)
+    }
+    const data = (await res.json()) as {
+      target: { endpoint: string; communityId: string; preview?: { name?: string; memberCount?: number } }
+    }
+
+    const { endpoint, communityId } = data.target
+    if (!endpoint || !communityId) throw new Error('Invalid invite data')
+
+    // Connect to server if not already connected
+    const existingServer = this._servers.get(endpoint)
+    if (!existingServer || !existingServer.connected) {
+      if (!this._identity || !this._keyPair) {
+        throw new Error('Client must have identity before joining via invite')
+      }
+      await this.connect({
+        serverUrl: endpoint,
+        identity: this._identity,
+        keyPair: this._keyPair
+      })
+    }
+
+    // Join the community
+    return this.joinCommunity(communityId)
+  }
+
   async leaveCommunity(communityId: string): Promise<void> {
     this.send(this.createMessage('community.leave', { communityId }))
     this._communities.delete(communityId)

@@ -1406,4 +1406,120 @@ describe('@harmony/client', () => {
       await client2.disconnect()
     })
   })
+
+  describe('Invite Join Flow', () => {
+    it('MUST resolve invite and join community via portal', async () => {
+      const id1 = await createTestIdentity()
+      const id2 = await createTestIdentity()
+
+      const adminClient = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await adminClient.connect({
+        serverUrl: `ws://127.0.0.1:${PORT}`,
+        identity: id1.identity,
+        keyPair: id1.keyPair,
+        vp: id1.vp
+      })
+      const community = await adminClient.createCommunity({ name: 'Invite Test' })
+
+      const origFetch = globalThis.fetch
+      const { vi } = await import('vitest')
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ target: { endpoint: `ws://127.0.0.1:${PORT}`, communityId: community.id } })
+      })
+
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({
+        serverUrl: `ws://127.0.0.1:${PORT}`,
+        identity: id2.identity,
+        keyPair: id2.keyPair,
+        vp: id2.vp
+      })
+      const state = await client.joinViaInvite('abc123', 'https://portal.test')
+      expect(state.id).toBe(community.id)
+
+      globalThis.fetch = origFetch
+      await client.disconnect()
+      await adminClient.disconnect()
+    })
+
+    it('MUST handle invalid/expired invite code', async () => {
+      const id1 = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({
+        serverUrl: `ws://127.0.0.1:${PORT}`,
+        identity: id1.identity,
+        keyPair: id1.keyPair,
+        vp: id1.vp
+      })
+
+      const origFetch = globalThis.fetch
+      const { vi } = await import('vitest')
+      globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404, json: async () => ({}) })
+      await expect(client.joinViaInvite('invalid', 'https://portal.test')).rejects.toThrow(
+        'Invite not found or expired'
+      )
+      globalThis.fetch = origFetch
+
+      await client.disconnect()
+    })
+
+    it('MUST throw on empty invite code', async () => {
+      const id1 = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({
+        serverUrl: `ws://127.0.0.1:${PORT}`,
+        identity: id1.identity,
+        keyPair: id1.keyPair,
+        vp: id1.vp
+      })
+
+      await expect(client.joinViaInvite('', 'https://portal.test')).rejects.toThrow('Invalid invite code')
+      await expect(client.joinViaInvite('   ', 'https://portal.test')).rejects.toThrow('Invalid invite code')
+
+      await client.disconnect()
+    })
+
+    it('MUST strip URL prefix from invite code', async () => {
+      const id1 = await createTestIdentity()
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await client.connect({
+        serverUrl: `ws://127.0.0.1:${PORT}`,
+        identity: id1.identity,
+        keyPair: id1.keyPair,
+        vp: id1.vp
+      })
+
+      const origFetch = globalThis.fetch
+      const { vi } = await import('vitest')
+      const mockFetch = vi.fn().mockResolvedValue({ ok: false, status: 404, json: async () => ({}) })
+      globalThis.fetch = mockFetch
+
+      await client.joinViaInvite('https://harmony.chat/invite/xyz789', 'https://portal.test').catch(() => {})
+      expect(mockFetch).toHaveBeenCalledWith('https://portal.test/invite/xyz789')
+
+      mockFetch.mockClear()
+      await client.joinViaInvite('http://localhost:3000/invite/abc?ref=share', 'https://portal.test').catch(() => {})
+      expect(mockFetch).toHaveBeenCalledWith('https://portal.test/invite/abc')
+
+      globalThis.fetch = origFetch
+      await client.disconnect()
+    })
+
+    it('MUST reject when client has no identity', async () => {
+      const origFetch = globalThis.fetch
+      const { vi } = await import('vitest')
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ target: { endpoint: 'ws://127.0.0.1:19999', communityId: 'some-id' } })
+      })
+      const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
+      await expect(client.joinViaInvite('code123', 'https://portal.test')).rejects.toThrow(
+        'Client must have identity before joining via invite'
+      )
+      globalThis.fetch = origFetch
+    })
+  })
 })

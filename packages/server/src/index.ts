@@ -618,6 +618,8 @@ export class HarmonyServer {
   private vcService: VCService
   private communitySubscriptions: Map<string, Set<string>> = new Map() // communityId → connection IDs
   private keyPackages: Map<string, Uint8Array[]> = new Map() // DID → key packages (serialized)
+  private e2eeGroups: Map<string, { creatorDID: string; communityId: string; channelId: string; groupId: string }> =
+    new Map() // groupId → metadata
   private voiceChannelParticipants: Map<string, Set<string>> = new Map() // channelId → Set<connId>
   private bannedUsers: Map<string, Set<string>> = new Map() // communityId → Set<DID>
 
@@ -921,6 +923,9 @@ export class HarmonyServer {
         break
       case 'mls.group.setup':
         await this.handleMLSGroupSetup(conn, msg)
+        break
+      case 'mls.member.joined':
+        // Client-to-client: just forwarded by server, no handler needed
         break
       case 'voice.join':
         await this.handleVoiceJoin(conn, msg)
@@ -1531,6 +1536,34 @@ export class HarmonyServer {
       this.keyPackages.set(conn.did, [])
     }
     this.keyPackages.get(conn.did)!.push(serialized)
+
+    // Notify E2EE group creators that this member has a key package ready
+    for (const [, groupMeta] of this.e2eeGroups) {
+      // Check if the uploader is NOT the creator (creator doesn't need to add themselves)
+      if (groupMeta.creatorDID === conn.did) continue
+
+      // Check if this member is in the community
+      const memberCommunities = conn.communities ?? []
+      if (!memberCommunities.includes(groupMeta.communityId)) continue
+
+      // Send mls.member.joined to the group creator
+      for (const [, otherConn] of this._connections) {
+        if (otherConn.did === groupMeta.creatorDID) {
+          this.sendToConnection(otherConn, {
+            id: `mls-mj-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            type: 'mls.member.joined' as ProtocolMessage['type'],
+            timestamp: new Date().toISOString(),
+            sender: conn.did,
+            payload: {
+              communityId: groupMeta.communityId,
+              channelId: groupMeta.channelId,
+              groupId: groupMeta.groupId,
+              memberDID: conn.did
+            }
+          })
+        }
+      }
+    }
   }
 
   private async handleMLSKeyPackageFetch(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
@@ -1584,8 +1617,17 @@ export class HarmonyServer {
   }
 
   private async handleMLSGroupSetup(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as { communityId?: string }
+    const payload = msg.payload as { communityId?: string; channelId?: string; groupId?: string }
     if (payload.communityId) {
+      // Track E2EE group metadata
+      if (payload.groupId) {
+        this.e2eeGroups.set(payload.groupId, {
+          creatorDID: conn.did,
+          communityId: payload.communityId,
+          channelId: payload.channelId ?? '',
+          groupId: payload.groupId
+        })
+      }
       this.broadcastToCommunity(
         payload.communityId,
         {

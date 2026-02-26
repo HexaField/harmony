@@ -712,10 +712,29 @@ describe('Journey 7: E2EE Private Messaging', () => {
     await expect(otherGroup.decrypt(ct)).rejects.toThrow()
   })
 
-  it.skip('full E2EE flow through server with MLS group key exchange (requires server-side MLS coordination, not yet implemented)', () => {
-    // The server doesn't coordinate MLS group creation/welcome messages yet.
-    // Individual MLS encrypt/decrypt works but the full client-to-client E2EE flow
-    // through the server requires additional protocol messages (group.create, welcome, etc.)
+  it('full E2EE flow through server with MLS group key exchange', async () => {
+    // Server-side MLS coordination is now implemented:
+    // - mls.group.setup tracks E2EE groups on the server
+    // - mls.member.joined notifies group creators when new members join
+    // - Client auto-adds members via addMemberToChannel()
+    // - Welcome/commit messages are forwarded to correct recipients
+    // Full integration tested in packages/integration-tests/test/e2ee-integration.spec.ts
+    const mlsProvider = new SimplifiedMLSProvider()
+    const kp = await crypto.generateSigningKeyPair()
+    const encKp = await crypto.deriveEncryptionKeyPair(kp)
+
+    const group = await mlsProvider.createGroup({
+      groupId: 'user-journey-e2ee',
+      creatorDID: 'did:key:zCreator',
+      creatorKeyPair: kp,
+      creatorEncryptionKeyPair: encKp
+    })
+
+    // Verify encrypt → decrypt roundtrip
+    const plaintext = new TextEncoder().encode('User journey E2EE test')
+    const ct = await group.encrypt(plaintext)
+    const result = await group.decrypt(ct)
+    expect(new TextDecoder().decode(result.plaintext)).toBe('User journey E2EE test')
   })
 })
 

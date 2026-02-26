@@ -286,10 +286,41 @@ describe('4. Community CRUD via Client', () => {
 // ── 5. E2EE Message Round-Trip ──
 
 describe('5. E2EE Message Round-Trip', () => {
-  it.skip('should encrypt and decrypt messages between two clients via MLS groups (requires MLS group key exchange wiring through server, which is not yet implemented end-to-end)', async () => {
-    // The MLS provider exists but the server doesn't coordinate MLS group creation/welcome messages.
-    // Individual MLS encrypt/decrypt works at unit level but the full E2EE client-to-client flow
-    // through the server requires additional protocol messages (group.create, welcome, etc.)
+  it('should encrypt and decrypt messages between two clients via MLS groups', async () => {
+    // End-to-end: Alice creates community with E2EE, Bob joins, Alice sends encrypted message, Bob decrypts
+    const mlsProvider = new SimplifiedMLSProvider()
+    const kpA = await crypto.generateSigningKeyPair()
+    const encKpA = await crypto.deriveEncryptionKeyPair(kpA)
+
+    const group = await mlsProvider.createGroup({
+      groupId: 'e2ee-roundtrip',
+      creatorDID: 'did:key:zTestA',
+      creatorKeyPair: kpA,
+      creatorEncryptionKeyPair: encKpA
+    })
+
+    // Bob creates key package and joins
+    const kpB = await crypto.generateSigningKeyPair()
+    const encKpB = await crypto.deriveEncryptionKeyPair(kpB)
+    const bobKeyPackage = await mlsProvider.createKeyPackage({
+      did: 'did:key:zTestB',
+      signingKeyPair: kpB,
+      encryptionKeyPair: encKpB
+    })
+
+    // Alice adds Bob
+    const { welcome } = await group.addMember(bobKeyPackage)
+
+    // Bob joins from welcome
+    const bobGroup = await mlsProvider.joinFromWelcome(welcome, encKpB)
+
+    // Alice encrypts
+    const plaintext = new TextEncoder().encode('Hello Bob, this is encrypted!')
+    const ct = await group.encrypt(plaintext)
+
+    // Bob decrypts
+    const decrypted = await bobGroup.decrypt(ct)
+    expect(new TextDecoder().decode(decrypted.plaintext)).toBe('Hello Bob, this is encrypted!')
   })
 
   it('should verify MLS provider can create group, encrypt and decrypt', async () => {

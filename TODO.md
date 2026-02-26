@@ -1,48 +1,12 @@
 # Harmony — Remaining Work
 
-## MVP Blockers
+## ~~MVP Blockers~~ ✅ All Done (2026-02-26)
 
-These are needed before launch because the GUIDE.md promises them or they're table-stakes for real usage.
-
-### Docker Compose
-
-No Dockerfile or docker-compose.yml exists yet. GUIDE.md documents full Docker deployment flow.
-
-- [ ] Dockerfile for server + web UI
-- [ ] docker-compose.yml with `with-bot` profile
-- [ ] .env.example + harmony.config.example.yaml
-- [ ] Test: `docker compose up -d` → community accessible
-
-### Electron Packaging
-
-Dev scripts work but no distributable builds. GUIDE.md promises .dmg, .exe, .AppImage downloads.
-
-- [ ] Add electron-builder or electron-forge config
-- [ ] Build targets: macOS (.dmg), Windows (.exe), Linux (.AppImage, .deb)
-- [ ] Code signing (can defer, but needed for macOS Gatekeeper)
-- [ ] Auto-update mechanism (can defer)
-
-### Ban Enforcement
-
-Moderation module exists (368 LOC) but server accepts any valid VP — no ban list check at connection level.
-
-- [ ] Server checks ban list on connection and message send
-- [ ] Banned user gets disconnected with reason
-- [ ] Skipped test: `integration.spec.ts:426`
-
-### PWA Icons
-
-Manifest exists but `"icons": []` — broken PWA install experience.
-
-- [ ] Generate icon set (192x192, 512x512 minimum)
-- [ ] Add to manifest.json
-- [ ] Favicon for browser tab
-
-### GUIDE.md Audit
-
-Guide references features not yet working. Either implement or mark as coming soon.
-
-- [ ] Threads — mentioned in day-to-day usage ("Start a thread by right-clicking a message")
+- ~~Docker Compose~~ ✅ — Dockerfile, docker-compose.yml, .env.example, harmony.config.example.yaml
+- ~~Electron Packaging~~ ✅ — electron-builder.yml, macOS/Windows/Linux targets
+- ~~Ban Enforcement~~ ✅ — Server-side ban list, ban/unban handlers, 6 new tests
+- ~~PWA Icons~~ ✅ — Purple hexagon SVG, manifest + favicon
+- ~~GUIDE.md Audit~~ ✅ — Threads/export marked "Coming soon", voice/docker/downloads caveated
 - [ ] Voice/video — full section on joining voice channels
 - [ ] Docker deployment — full section but no Docker files exist
 - [ ] Desktop downloads — references .dmg/.exe/.AppImage that don't exist yet

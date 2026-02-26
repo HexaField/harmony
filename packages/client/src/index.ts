@@ -1314,6 +1314,9 @@ export class HarmonyClient {
       case 'mls.keypackage.response':
         this.emitter.emit('mls.keypackage.response', msg.payload)
         break
+      case 'mls.member.joined':
+        this.handleMLSMemberJoined(msg)
+        break
       case 'voice.participant.joined':
       case 'voice.participant.left':
       case 'voice.state':
@@ -1707,8 +1710,9 @@ export class HarmonyClient {
       const group = await this.mlsProvider.joinFromWelcome(welcome, this._encryptionKeyPair)
       this.mlsGroups.set(payload.groupId, group)
       this.emitter.emit('mls.welcome', payload)
-    } catch {
-      // Welcome processing failed
+    } catch (err) {
+      // Welcome processing failed — emit error for debugging
+      this.emitter.emit('e2ee.error', { type: 'welcome-failed', error: err })
     }
   }
 
@@ -1724,6 +1728,18 @@ export class HarmonyClient {
     } catch {
       // Commit processing failed
     }
+  }
+
+  private handleMLSMemberJoined(msg: ProtocolMessage): void {
+    const payload = msg.payload as { communityId: string; channelId: string; groupId: string; memberDID: string }
+    if (!this.mlsProvider || !this._keyPair) return
+    const groupId = payload.groupId
+    const group = this.mlsGroups.get(groupId)
+    if (!group) return
+    // Auto-add the new member
+    this.addMemberToChannel(payload.communityId, payload.channelId, payload.memberDID).catch(() => {
+      // Failed to add member — they won't be able to decrypt
+    })
   }
 
   /** Add a member to an MLS group for a channel (called by existing members when new member joins) */

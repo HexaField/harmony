@@ -8,6 +8,7 @@ import { MemberSidebarView } from './MemberSidebarView.tsx'
 import { SearchOverlayView } from './SearchOverlayView.tsx'
 import { EmptyStateView } from './EmptyStateView.tsx'
 import { CreateCommunityModal } from './CreateCommunityModal.tsx'
+import { CommunitySettingsModal } from './CommunitySettingsModal.tsx'
 import { CreateChannelModal } from './CreateChannelModal.tsx'
 import { ChannelSettingsModal } from './ChannelSettingsModal.tsx'
 import { DelegationView } from './DelegationView.tsx'
@@ -158,6 +159,10 @@ export const MainLayout: Component = () => {
       {/* Create community modal */}
       <Show when={store.showCreateCommunity()}>
         <CreateCommunityModal />
+      </Show>
+
+      <Show when={store.showCommunitySettings()}>
+        <CommunitySettingsModal />
       </Show>
 
       {/* Create channel modal */}

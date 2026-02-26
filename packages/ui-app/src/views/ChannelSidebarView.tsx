@@ -52,6 +52,16 @@ export const ChannelSidebarView: Component = () => {
           >
             {showInviteCopied() ? '✓' : '🔗'}
           </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              store.setShowCommunitySettings(true)
+            }}
+            class="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors p-1"
+            title="Community Settings"
+          >
+            ⚙️
+          </button>
           <span class="text-[var(--text-muted)]">▾</span>
         </div>
       </div>

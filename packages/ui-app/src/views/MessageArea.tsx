@@ -43,6 +43,8 @@ export const MessageArea: Component = () => {
   const [lightboxSrc, setLightboxSrc] = createSignal<string | null>(null)
   const [threadPromptMsg, setThreadPromptMsg] = createSignal<string | null>(null)
   const [threadName, setThreadName] = createSignal('')
+  const [contextMenu, setContextMenu] = createSignal<{ msgId: string; x: number; y: number } | null>(null)
+  const [replyTo, setReplyTo] = createSignal<{ id: string; content: string; authorName: string } | null>(null)
   let messagesEndRef: HTMLDivElement | undefined
   let typingTimeout: ReturnType<typeof setTimeout> | undefined
   let fileInputRef: HTMLInputElement | undefined
@@ -199,7 +201,8 @@ export const MessageArea: Component = () => {
     const channelId = store.activeChannelId()
     if (client?.isConnected() && communityId && channelId) {
       try {
-        const msgId = await client.sendMessage(communityId, channelId, text)
+        const reply = replyTo()
+        const msgId = await client.sendMessage(communityId, channelId, text, reply ? { replyTo: reply.id } : undefined)
         const msg: MessageData = {
           id: msgId,
           content: text,
@@ -207,12 +210,14 @@ export const MessageArea: Component = () => {
           authorName: store.displayName() || pseudonymFromDid(store.did()),
           timestamp: new Date().toISOString(),
           reactions: [],
+          replyTo: reply ? { id: reply.id, content: reply.content, authorName: reply.authorName } : undefined,
           attachments: attachments.length > 0 ? attachments : undefined
         }
         store.addMessage(msg)
         store.addChannelMessage(channelId, msg)
         setInputContent('')
         setPendingAttachments([])
+        setReplyTo(null)
         requestAnimationFrame(() => messagesEndRef?.scrollIntoView({ behavior: 'smooth' }))
       } catch (err) {
         console.error('Failed to send message:', err)
@@ -439,6 +444,10 @@ export const MessageArea: Component = () => {
               <div
                 class="group flex px-2 py-0.5 hover:bg-[var(--bg-surface)]/30 rounded transition-colors relative"
                 classList={{ 'mt-4': !isGrouped(), 'mt-0': isGrouped() }}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  setContextMenu({ msgId: msg.id, x: e.clientX, y: e.clientY })
+                }}
               >
                 <Show
                   when={!isGrouped()}
@@ -776,6 +785,91 @@ export const MessageArea: Component = () => {
             }
           }}
         />
+        {/* Context menu overlay */}
+        <Show when={contextMenu()}>
+          {(menu) => {
+            const msg = allMessages().find((m) => m.id === menu().msgId)
+            return (
+              <div class="fixed inset-0 z-50" onClick={() => setContextMenu(null)}>
+                <div
+                  class="absolute bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg shadow-xl py-1.5 min-w-[180px]"
+                  style={{ left: `${menu().x}px`, top: `${menu().y}px` }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    class="w-full px-3 py-1.5 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--accent)] hover:text-white transition-colors flex items-center gap-2"
+                    onClick={() => {
+                      if (msg) setReplyTo({ id: msg.id, content: msg.content.slice(0, 50), authorName: msg.authorName })
+                      setContextMenu(null)
+                    }}
+                  >
+                    <span>↩</span> Reply
+                  </button>
+                  <button
+                    class="w-full px-3 py-1.5 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--accent)] hover:text-white transition-colors flex items-center gap-2"
+                    onClick={() => {
+                      if (msg) toggleReaction(msg.id, '👍')
+                      setContextMenu(null)
+                    }}
+                  >
+                    <span>👍</span> React
+                  </button>
+                  <button
+                    class="w-full px-3 py-1.5 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--accent)] hover:text-white transition-colors flex items-center gap-2"
+                    onClick={() => {
+                      if (msg) {
+                        setThreadPromptMsg(msg.id)
+                        setThreadName('')
+                      }
+                      setContextMenu(null)
+                    }}
+                  >
+                    <span>🧵</span> Start Thread
+                  </button>
+                  <Show when={msg && isOwnMessage(msg)}>
+                    <div class="my-1 border-t border-[var(--border)]" />
+                    <button
+                      class="w-full px-3 py-1.5 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--accent)] hover:text-white transition-colors flex items-center gap-2"
+                      onClick={() => {
+                        if (msg) startEdit(msg)
+                        setContextMenu(null)
+                      }}
+                    >
+                      <span>✏️</span> Edit
+                    </button>
+                    <button
+                      class="w-full px-3 py-1.5 text-left text-sm text-[var(--error)] hover:bg-[var(--error)] hover:text-white transition-colors flex items-center gap-2"
+                      onClick={() => {
+                        if (msg) setConfirmDelete(msg.id)
+                        setContextMenu(null)
+                      }}
+                    >
+                      <span>🗑️</span> Delete
+                    </button>
+                  </Show>
+                </div>
+              </div>
+            )
+          }}
+        </Show>
+
+        {/* Reply bar */}
+        <Show when={replyTo()}>
+          {(reply) => (
+            <div class="px-4 py-2 bg-[var(--bg-surface)] border-t border-[var(--border)] flex items-center gap-2">
+              <span class="text-xs text-[var(--text-muted)]">
+                ↩ Replying to <strong>{reply().authorName}</strong>: {reply().content}
+              </span>
+              <button
+                class="ml-auto text-xs text-[var(--text-muted)] hover:text-[var(--error)]"
+                onClick={() => setReplyTo(null)}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+        </Show>
+
         <div class="flex items-end bg-[var(--bg-input)] rounded-lg border border-[var(--border)] focus-within:border-[var(--accent)] transition-colors">
           <button
             class="p-3 text-[var(--text-muted)] hover:text-[var(--text-primary)] shrink-0"

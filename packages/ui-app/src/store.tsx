@@ -109,6 +109,8 @@ export interface AppStore {
   setShowSearch: (s: boolean) => void
   showCreateCommunity: () => boolean
   setShowCreateCommunity: (s: boolean) => void
+  showCommunitySettings: () => boolean
+  setShowCommunitySettings: (s: boolean) => void
   showSettings: () => boolean
   setShowSettings: (s: boolean) => void
   showCreateChannel: () => boolean
@@ -488,6 +490,7 @@ export function createAppStore(): AppStore {
   const [showMemberSidebar, setShowMemberSidebar] = createSignal(true)
   const [showSearch, setShowSearch] = createSignal(false)
   const [showCreateCommunity, setShowCreateCommunity] = createSignal(false)
+  const [showCommunitySettings, setShowCommunitySettings] = createSignal(false)
   const [showSettings, setShowSettings] = createSignal(false)
   const [showCreateChannel, setShowCreateChannel] = createSignal(false)
   const [editingMessageId, setEditingMessageId] = createSignal<string | null>(null)
@@ -719,6 +722,11 @@ export function createAppStore(): AppStore {
   const setDisplayName = (n: string) => {
     _setDisplayName(n)
     persistIdentity()
+    // Update member list entry for local user
+    const myDid = did()
+    if (myDid) {
+      setMembers(members().map((m) => (m.did === myDid ? { ...m, displayName: n || pseudonymFromDid(myDid) } : m)))
+    }
   }
   const setTheme = (t: 'dark' | 'light') => {
     _setTheme(t)
@@ -874,6 +882,49 @@ export function createAppStore(): AppStore {
       }
     })
 
+    client.on('reaction.added' as any, (...args: unknown[]) => {
+      const evt = args[0] as { channelId: string; messageId: string; emoji: string; memberDID: string }
+      if (!evt?.messageId) return
+      const myDid = did()
+      const updateReactions = (msgs: MessageData[]) =>
+        msgs.map((m) => {
+          if (m.id !== evt.messageId) return m
+          const reactions = [...(m.reactions || [])]
+          const existing = reactions.find((r) => r.emoji === evt.emoji)
+          if (existing) {
+            existing.count++
+            if (evt.memberDID === myDid) existing.userReacted = true
+          } else {
+            reactions.push({ emoji: evt.emoji, count: 1, userReacted: evt.memberDID === myDid })
+          }
+          return { ...m, reactions }
+        })
+      setMessages(updateReactions(messages()))
+      const cached = channelMessageCache.get(evt.channelId)
+      if (cached) setChannelMessages(evt.channelId, updateReactions(cached))
+    })
+
+    client.on('reaction.removed' as any, (...args: unknown[]) => {
+      const evt = args[0] as { channelId: string; messageId: string; emoji: string; memberDID: string }
+      if (!evt?.messageId) return
+      const myDid = did()
+      const updateReactions = (msgs: MessageData[]) =>
+        msgs.map((m) => {
+          if (m.id !== evt.messageId) return m
+          let reactions = [...(m.reactions || [])]
+          const existing = reactions.find((r) => r.emoji === evt.emoji)
+          if (existing) {
+            existing.count--
+            if (evt.memberDID === myDid) existing.userReacted = false
+            if (existing.count <= 0) reactions = reactions.filter((r) => r.emoji !== evt.emoji)
+          }
+          return { ...m, reactions }
+        })
+      setMessages(updateReactions(messages()))
+      const cached = channelMessageCache.get(evt.channelId)
+      if (cached) setChannelMessages(evt.channelId, updateReactions(cached))
+    })
+
     client.on('sync', (...args: unknown[]) => {
       const event = args[0] as {
         communityId: string
@@ -971,11 +1022,10 @@ export function createAppStore(): AppStore {
           const existing = current.find((e) => e.did === m.did)
           // If this member is the current user, prefer local display name
           const isCurrentUser = m.did === did()
+          const serverName = m.displayName && m.displayName !== m.did ? m.displayName : undefined
           const resolvedName = isCurrentUser
-            ? displayName() || m.displayName || pseudonymFromDid(m.did)
-            : m.displayName && m.displayName !== m.did
-              ? m.displayName
-              : existing?.displayName || pseudonymFromDid(m.did)
+            ? displayName() || serverName || pseudonymFromDid(m.did)
+            : serverName || existing?.displayName || pseudonymFromDid(m.did)
           updated.push({
             did: m.did,
             displayName: resolvedName,
@@ -1408,6 +1458,8 @@ export function createAppStore(): AppStore {
     setShowSearch,
     showCreateCommunity,
     setShowCreateCommunity,
+    showCommunitySettings,
+    setShowCommunitySettings,
     showSettings,
     setShowSettings,
     showCreateChannel,

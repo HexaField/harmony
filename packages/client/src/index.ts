@@ -770,6 +770,10 @@ export class HarmonyClient {
     this.persistState()
   }
 
+  async updateCommunity(communityId: string, params: { name?: string; description?: string }): Promise<void> {
+    this.send(this.createMessage('community.update', { communityId, ...params }))
+  }
+
   // ── Channels ──
 
   subscribeChannel(communityId: string, channelId: string): ChannelSubscription {
@@ -800,8 +804,8 @@ export class HarmonyClient {
     return sub
   }
 
-  async createChannel(_communityId: string, params: ChannelCreatePayload): Promise<ChannelInfo> {
-    this.send(this.createMessage('channel.create', params))
+  async createChannel(communityId: string, params: ChannelCreatePayload): Promise<ChannelInfo> {
+    this.send(this.createMessage('channel.create', { ...params, communityId }))
     return new Promise((resolve) => {
       const unsub = this.on('channel.created', (...args: unknown[]) => {
         unsub()
@@ -1004,6 +1008,14 @@ export class HarmonyClient {
     return Array.from(this._dmChannels.values())
   }
 
+  sendDMTyping(recipientDID: string): void {
+    this.send(this.createMessage('dm.typing', { recipientDID }))
+  }
+
+  sendTyping(communityId: string, channelId: string): void {
+    this.send(this.createMessage('channel.typing', { communityId, channelId }))
+  }
+
   // ── Threads ──
 
   async createThread(
@@ -1095,8 +1107,8 @@ export class HarmonyClient {
 
   // ── Roles & Moderation ──
 
-  async createRole(_communityId: string, params: RoleCreatePayload): Promise<void> {
-    this.send(this.createMessage('role.create', params))
+  async createRole(communityId: string, params: RoleCreatePayload): Promise<void> {
+    this.send(this.createMessage('role.create', { ...params, communityId }))
   }
 
   async updateRole(communityId: string, roleId: string, params: Partial<RoleCreatePayload>): Promise<void> {
@@ -1108,15 +1120,19 @@ export class HarmonyClient {
   }
 
   async assignRole(communityId: string, memberDID: string, roleId: string): Promise<void> {
-    this.send(this.createMessage('member.update', { communityId, memberDID, roles: [roleId] }))
+    this.send(this.createMessage('role.assign', { communityId, memberDID, roleId }))
   }
 
   async kickMember(communityId: string, memberDID: string, reason?: string): Promise<void> {
-    this.send(this.createMessage('member.kick', { communityId, memberDID, reason }))
+    this.send(this.createMessage('community.kick', { communityId, targetDID: memberDID, reason }))
   }
 
   async banMember(communityId: string, memberDID: string, reason?: string): Promise<void> {
-    this.send(this.createMessage('member.ban', { communityId, memberDID, reason }))
+    this.send(this.createMessage('community.ban', { communityId, targetDID: memberDID, reason }))
+  }
+
+  async unbanMember(communityId: string, memberDID: string): Promise<void> {
+    this.send(this.createMessage('community.unban', { communityId, targetDID: memberDID }))
   }
 
   // ── Pins ──
@@ -1371,7 +1387,10 @@ export class HarmonyClient {
         this.emitter.emit('typing', msg.payload)
         break
       case 'channel.reaction.added':
-        this.emitter.emit('message', msg.payload)
+        this.emitter.emit('reaction.added', { ...msg.payload, memberDID: msg.sender })
+        break
+      case 'channel.reaction.removed':
+        this.emitter.emit('reaction.removed', { ...msg.payload, memberDID: msg.sender })
         break
       case 'dm.message':
         this.handleDMMessage(msg)

@@ -914,6 +914,12 @@ export class HarmonyServer {
       case 'dm.send':
         await this.handleDMSend(conn, msg)
         break
+      case 'dm.edit':
+        await this.handleDMEdit(conn, msg)
+        break
+      case 'dm.delete':
+        await this.handleDMDelete(conn, msg)
+        break
       case 'dm.typing':
         await this.handleDMTyping(conn, msg)
         break
@@ -929,11 +935,17 @@ export class HarmonyServer {
       case 'community.leave':
         await this.handleCommunityLeave(conn, msg)
         break
+      case 'community.update':
+        await this.handleCommunityUpdate(conn, msg)
+        break
       case 'community.ban':
         await this.handleCommunityBan(conn, msg)
         break
       case 'community.unban':
         await this.handleCommunityUnban(conn, msg)
+        break
+      case 'community.kick':
+        await this.handleCommunityKick(conn, msg)
         break
       case 'channel.create':
         await this.handleChannelCreate(conn, msg)
@@ -1166,6 +1178,32 @@ export class HarmonyServer {
     await this.messageStore.storeMessage('dm', `${conn.did}:${payload.recipientDID}`, msg)
   }
 
+  private async handleDMEdit(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { recipientDID: string; messageId: string; newText: string }
+    for (const [_id, otherConn] of this._connections) {
+      if (otherConn.did === payload.recipientDID) {
+        this.sendToConnection(otherConn, {
+          ...msg,
+          type: 'dm.edited',
+          sender: conn.did
+        })
+      }
+    }
+  }
+
+  private async handleDMDelete(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { recipientDID: string; messageId: string }
+    for (const [_id, otherConn] of this._connections) {
+      if (otherConn.did === payload.recipientDID) {
+        this.sendToConnection(otherConn, {
+          ...msg,
+          type: 'dm.deleted',
+          sender: conn.did
+        })
+      }
+    }
+  }
+
   private async handleDMTyping(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
     const payload = msg.payload as { recipientDID: string }
     for (const [_id, otherConn] of this._connections) {
@@ -1282,6 +1320,56 @@ export class HarmonyServer {
       },
       conn.id
     )
+  }
+
+  private async handleCommunityUpdate(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { communityId: string; name?: string; description?: string }
+
+    // Admin check
+    if (!(await this.isAdmin(payload.communityId, conn.did))) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'FORBIDDEN', message: 'Only admins can update community settings' }
+      })
+      return
+    }
+
+    // Update name/description in RDF store
+    if (payload.name) {
+      const existingName = await this.store.match({ subject: payload.communityId, predicate: HarmonyPredicate.name })
+      for (const q of existingName) await this.store.remove(q)
+      await this.store.add({
+        subject: payload.communityId,
+        predicate: HarmonyPredicate.name,
+        object: payload.name,
+        graph: payload.communityId
+      })
+    }
+    if (payload.description !== undefined) {
+      const existingDesc = await this.store.match({
+        subject: payload.communityId,
+        predicate: HarmonyPredicate.description
+      })
+      for (const q of existingDesc) await this.store.remove(q)
+      await this.store.add({
+        subject: payload.communityId,
+        predicate: HarmonyPredicate.description,
+        object: payload.description,
+        graph: payload.communityId
+      })
+    }
+
+    // Broadcast update to community
+    this.broadcastToCommunity(payload.communityId, {
+      id: `cu-${Date.now()}`,
+      type: 'community.updated',
+      timestamp: new Date().toISOString(),
+      sender: conn.did,
+      payload: { communityId: payload.communityId, name: payload.name, description: payload.description }
+    })
   }
 
   private async handleCommunityLeave(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
@@ -1401,6 +1489,60 @@ export class HarmonyServer {
       sender: 'server',
       payload: { communityId: payload.communityId, targetDID: payload.targetDID }
     })
+  }
+
+  private async handleCommunityKick(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { communityId: string; targetDID: string; reason?: string }
+
+    // Admin check
+    if (!(await this.isAdmin(payload.communityId, conn.did))) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'FORBIDDEN', message: 'Only admins can kick users' }
+      })
+      return
+    }
+
+    if (payload.targetDID === conn.did) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'INVALID', message: 'Cannot kick yourself' }
+      })
+      return
+    }
+
+    // Remove member from community (but don't ban — they can rejoin)
+    await this.communityManager.leave(payload.communityId, payload.targetDID)
+
+    // Broadcast kick
+    this.broadcastToCommunity(payload.communityId, {
+      id: `kick-${Date.now()}`,
+      type: 'member.kicked',
+      timestamp: new Date().toISOString(),
+      sender: conn.did,
+      payload: { communityId: payload.communityId, targetDID: payload.targetDID, reason: payload.reason }
+    })
+
+    // Disconnect kicked user if currently connected
+    for (const [connId, otherConn] of this._connections) {
+      if (otherConn.did === payload.targetDID && otherConn.communities.includes(payload.communityId)) {
+        this.sendToConnection(otherConn, {
+          id: `kicked-${Date.now()}`,
+          type: 'error',
+          timestamp: new Date().toISOString(),
+          sender: 'server',
+          payload: { code: 'KICKED', message: payload.reason ?? 'You have been kicked from this community' }
+        })
+        otherConn.communities = otherConn.communities.filter((c) => c !== payload.communityId)
+        this.communitySubscriptions.get(payload.communityId)?.delete(connId)
+      }
+    }
   }
 
   private async handleChannelCreate(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
@@ -2137,7 +2279,8 @@ export class HarmonyServer {
         content: payload.content,
         nonce: payload.nonce,
         replyTo: payload.replyTo,
-        clock: payload.clock
+        clock: payload.clock,
+        messageCount: thread.messageCount
       }
     })
   }

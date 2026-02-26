@@ -1,9 +1,16 @@
-import { For, Show, type Component } from 'solid-js'
+import { For, Show, createSignal, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 
 export const ServerListBar: Component = () => {
   const store = useAppStore()
+  const [contextMenu, setContextMenu] = createSignal<{
+    communityId: string
+    communityName: string
+    x: number
+    y: number
+  } | null>(null)
+  const [confirmLeave, setConfirmLeave] = createSignal<string | null>(null)
 
   function statusColor(connected: boolean): string {
     if (connected) return 'bg-[var(--success)]'
@@ -107,6 +114,15 @@ export const ServerListBar: Component = () => {
                   store.setActiveCommunityId(community.id)
                   store.setShowDMView(false)
                 }}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  setContextMenu({
+                    communityId: community.id,
+                    communityName: community.name,
+                    x: e.clientX,
+                    y: e.clientY
+                  })
+                }}
                 class="w-12 h-12 flex items-center justify-center text-sm font-semibold transition-all"
                 classList={{
                   'rounded-xl bg-[var(--accent)] text-white': isActive(),
@@ -154,6 +170,76 @@ export const ServerListBar: Component = () => {
       >
         ⚙️
       </button>
+
+      {/* Community context menu */}
+      <Show when={contextMenu()}>
+        {(menu) => (
+          <div class="fixed inset-0 z-50" onClick={() => setContextMenu(null)}>
+            <div
+              class="absolute bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg shadow-xl py-1.5 min-w-[160px]"
+              style={{ left: `${menu().x}px`, top: `${menu().y}px` }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                class="w-full px-3 py-1.5 text-left text-sm text-[var(--error)] hover:bg-[var(--error)] hover:text-white transition-colors flex items-center gap-2"
+                onClick={() => {
+                  setConfirmLeave(menu().communityId)
+                  setContextMenu(null)
+                }}
+              >
+                <span>🚪</span> Leave Community
+              </button>
+            </div>
+          </div>
+        )}
+      </Show>
+
+      {/* Leave confirmation dialog */}
+      <Show when={confirmLeave()}>
+        {(communityId) => {
+          const community = store.communities().find((c) => c.id === communityId())
+          return (
+            <div
+              class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center"
+              onClick={() => setConfirmLeave(null)}
+            >
+              <div
+                class="bg-[var(--bg-surface)] rounded-lg p-6 shadow-xl max-w-sm"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 class="text-lg font-semibold mb-2">Leave Community</h3>
+                <p class="text-sm text-[var(--text-muted)] mb-4">
+                  Are you sure you want to leave <strong>{community?.name}</strong>?
+                </p>
+                <div class="flex gap-2 justify-end">
+                  <button
+                    class="px-4 py-2 text-sm rounded bg-[var(--bg-input)] hover:bg-[var(--border)] transition-colors"
+                    onClick={() => setConfirmLeave(null)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    class="px-4 py-2 text-sm rounded bg-[var(--error)] text-white hover:opacity-90 transition-opacity"
+                    onClick={async () => {
+                      const client = store.client()
+                      if (client) {
+                        await client.leaveCommunity(communityId())
+                        store.setCommunities(store.communities().filter((c) => c.id !== communityId()))
+                        if (store.activeCommunityId() === communityId()) {
+                          store.setActiveCommunityId(store.communities()[0]?.id ?? null)
+                        }
+                      }
+                      setConfirmLeave(null)
+                    }}
+                  >
+                    Leave
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        }}
+      </Show>
     </div>
   )
 }

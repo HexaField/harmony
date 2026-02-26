@@ -14,6 +14,8 @@ Download the Harmony desktop app for your platform:
 - **Windows:** `Harmony-Setup.exe`
 - **Linux:** `Harmony.AppImage` or `harmony.deb`
 
+> **Note:** Pre-built binaries are not yet available for download. To create distributable builds from source, clone the repo and run `pnpm electron:build` from `packages/app/`. See the README for build prerequisites.
+
 The desktop app is the easiest way to use Harmony. It runs a personal server on your machine so your data stays with you. When you launch the app, you're not just connecting to someone else's server — you're running your own.
 
 ### Web App
@@ -410,7 +412,7 @@ For TLS, you'll want a certificate from Let's Encrypt or similar. If you're behi
 
 If your community started on your laptop and you want to move it to a VPS:
 
-1. In the desktop app, go to community settings → "Export community"
+1. In the desktop app, go to community settings → "Export community" _(Coming soon)_
 2. Save the export file
 3. Transfer it to your server
 4. On the server:
@@ -418,6 +420,8 @@ If your community started on your laptop and you want to move it to a VPS:
    ```
    harmony community import community.hbundle
    ```
+
+   _(Coming soon — the `.hbundle` export/import format is not yet implemented)_
 
 5. Share the new invite link with your community
 
@@ -474,12 +478,14 @@ The interface works like you'd expect if you've used Discord. Server list on the
 - Drag and drop files to upload them (they're encrypted automatically)
 - Use markdown: **bold**, _italic_, `code`, `code blocks`
 - React to messages by hovering and clicking the emoji button
-- Start a thread by right-clicking a message
+- Start a thread by right-clicking a message _(Coming soon)_
 - Search with Ctrl+K (or Cmd+K on macOS)
 
 All messages are end-to-end encrypted. The server never sees your message content.
 
 ### Voice and video
+
+> **Note:** Voice and video require a [LiveKit](https://livekit.io/) server, which must be set up separately. This is optional — communities work fully without it. If voice is not configured, voice channels will not appear.
 
 Click a voice channel to join. Controls appear at the bottom of the screen:
 

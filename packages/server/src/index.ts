@@ -10,6 +10,7 @@ import { createCryptoProvider, randomBytes } from '@harmony/crypto'
 import type { ProtocolMessage, PresenceUpdatePayload, LamportClock, MessageType } from '@harmony/protocol'
 import { serialise, deserialise } from '@harmony/protocol'
 import { HarmonyPredicate, HarmonyType, HarmonyAction, HARMONY, RDFPredicate, XSDDatatype } from '@harmony/vocab'
+import type { DIDDocument } from '@harmony/did'
 
 // ── Server Config ──
 
@@ -620,6 +621,17 @@ interface ThreadState {
   messageCount: number
 }
 
+// Role state (in-memory MVP)
+interface Role {
+  id: string
+  communityId: string
+  name: string
+  color?: string
+  permissions: string[]
+  position: number
+  createdBy: string
+}
+
 export class HarmonyServer {
   private wss: WebSocketServer | null = null
   private _connections: Map<string, ServerConnection> = new Map()
@@ -634,7 +646,30 @@ export class HarmonyServer {
     new Map() // groupId → metadata
   private _threads: Map<string, ThreadState> = new Map()
   private voiceChannelParticipants: Map<string, Set<string>> = new Map() // channelId → Set<connId>
+  private voiceParticipantState: Map<
+    string,
+    { muted: boolean; deafened: boolean; videoEnabled: boolean; screenSharing: boolean }
+  > = new Map() // connId → state
   private bannedUsers: Map<string, Set<string>> = new Map() // communityId → Set<DID>
+  private mediaStore: Map<
+    string,
+    {
+      id: string
+      filename: string
+      mimeType: string
+      size: number
+      data: string
+      uploadedBy: string
+      communityId: string
+      channelId: string
+      uploadedAt: string
+    }
+  > = new Map()
+  private zcapService: ZCAPService
+  private capabilityStore: Map<string, Capability> = new Map() // capabilityId → Capability
+  private roles: Map<string, Map<string, Role>> = new Map() // communityId → roleId → Role
+  private memberRoles: Map<string, Map<string, Set<string>>> = new Map() // communityId → DID → Set<roleId>
+  private pins: Map<string, Set<string>> = new Map() // channelKey → Set<messageId>
 
   constructor(config: ServerConfig) {
     this.config = config
@@ -642,6 +677,7 @@ export class HarmonyServer {
     this.messageStore = new MessageStore(config.store)
     this.communityManager = new CommunityManager(config.store, this.crypto)
     this.vcService = new VCService(this.crypto)
+    this.zcapService = new ZCAPService(this.crypto)
   }
 
   get messageStoreInstance(): MessageStore {
@@ -773,6 +809,7 @@ export class HarmonyServer {
           for (const [channelId, participants] of this.voiceChannelParticipants) {
             if (participants.has(connId)) {
               participants.delete(connId)
+              this.voiceParticipantState.delete(connId)
               // Broadcast participant left
               this.broadcastVoiceState(channelId, conn.did, 'voice.participant.left')
             }
@@ -954,11 +991,57 @@ export class HarmonyServer {
       case 'voice.ice':
         await this.handleVoiceSignaling(conn, msg)
         break
+      case 'voice.mute':
+      case 'voice.unmute':
+        await this.handleVoiceMuteToggle(conn, msg)
+        break
+      case 'voice.video':
+        await this.handleVoiceVideo(conn, msg)
+        break
+      case 'voice.screen':
+        await this.handleVoiceScreen(conn, msg)
+        break
+      case 'voice.speaking':
+        await this.handleVoiceSpeaking(conn, msg)
+        break
+      case 'voice.token':
+        await this.handleVoiceToken(conn, msg)
+        break
       case 'thread.create':
         await this.handleThreadCreate(conn, msg)
         break
       case 'thread.send':
         await this.handleThreadSend(conn, msg)
+        break
+      case 'role.create':
+        await this.handleRoleCreate(conn, msg)
+        break
+      case 'role.update':
+        await this.handleRoleUpdate(conn, msg)
+        break
+      case 'role.delete':
+        await this.handleRoleDelete(conn, msg)
+        break
+      case 'role.assign':
+        await this.handleRoleAssign(conn, msg)
+        break
+      case 'role.remove':
+        await this.handleRoleRemove(conn, msg)
+        break
+      case 'channel.pin':
+        await this.handleChannelPin(conn, msg)
+        break
+      case 'channel.unpin':
+        await this.handleChannelUnpin(conn, msg)
+        break
+      case 'channel.pins.list':
+        await this.handleChannelPinsList(conn, msg)
+        break
+      case 'media.upload.request':
+        await this.handleMediaUploadRequest(conn, msg)
+        break
+      case 'media.delete':
+        await this.handleMediaDelete(conn, msg)
         break
       default:
         // Unknown message type — ignore
@@ -1133,6 +1216,9 @@ export class HarmonyServer {
       this.communitySubscriptions.set(result.communityId, new Set())
     }
     this.communitySubscriptions.get(result.communityId)!.add(conn.id)
+
+    // Store the root capability for ZCAP verification
+    this.capabilityStore.set(result.rootCapability.id, result.rootCapability)
 
     this.sendToConnection(conn, {
       id: `cc-${Date.now()}`,
@@ -1557,9 +1643,78 @@ export class HarmonyServer {
 
   private async verifyZCAPProof(msg: ProtocolMessage): Promise<boolean> {
     if (!msg.proof) return false
-    // In a full implementation, we'd fetch the capability chain and verify.
-    // For this simplified version, we check the proof structure is present.
-    return !!(msg.proof.capabilityId && msg.proof.invocation?.proof)
+
+    const { capabilityId, capabilityChain, invocation } = msg.proof as {
+      capabilityId?: string
+      capabilityChain?: string[]
+      invocation?: import('@harmony/zcap').Invocation
+    }
+    if (!capabilityId || !invocation) return false
+
+    // Build capability chain from stored capabilities
+    const chainIds = capabilityChain || [capabilityId]
+    const capabilities = this.resolveCapabilityChain(chainIds)
+    if (capabilities.length === 0) return false
+
+    // Use the real ZCAPService verification
+    const result = await this.zcapService.verifyInvocation(
+      invocation,
+      capabilities,
+      async (did: string) => this.resolveDID(did),
+      this.config.revocationStore
+    )
+
+    return result.valid
+  }
+
+  private resolveCapabilityChain(chainIds: string[]): Capability[] {
+    const capabilities: Capability[] = []
+    for (const id of chainIds) {
+      const cap = this.capabilityStore.get(id)
+      if (cap) capabilities.push(cap)
+    }
+    return capabilities
+  }
+
+  private async resolveDID(did: string): Promise<DIDDocument | null> {
+    // Try the configured DID resolver first
+    try {
+      const doc = await this.config.didResolver(did)
+      if (doc) return doc
+    } catch {
+      // Fall through to manual resolution
+    }
+
+    // For did:key, construct a minimal DID document
+    if (did.startsWith('did:key:')) {
+      const multibaseKey = did.replace('did:key:', '')
+      return {
+        '@context': ['https://www.w3.org/ns/did/v1'],
+        id: did,
+        verificationMethod: [
+          {
+            id: `${did}#${multibaseKey}`,
+            type: 'Ed25519VerificationKey2020',
+            controller: did,
+            publicKeyMultibase: multibaseKey
+          }
+        ],
+        authentication: [`${did}#${multibaseKey}`],
+        assertionMethod: [`${did}#${multibaseKey}`],
+        capabilityDelegation: [`${did}#${multibaseKey}`],
+        capabilityInvocation: [`${did}#${multibaseKey}`]
+      } as DIDDocument
+    }
+
+    return null
+  }
+
+  storeCapability(cap: Capability): void {
+    this.capabilityStore.set(cap.id, cap)
+  }
+
+  getCapability(id: string): Capability | undefined {
+    return this.capabilityStore.get(id)
   }
 
   // ── MLS / E2EE Handlers ──
@@ -1686,18 +1841,25 @@ export class HarmonyServer {
       this.voiceChannelParticipants.set(channelId, new Set())
     }
     this.voiceChannelParticipants.get(channelId)!.add(conn.id)
+    this.voiceParticipantState.set(conn.id, {
+      muted: false,
+      deafened: false,
+      videoEnabled: false,
+      screenSharing: false
+    })
 
     // Broadcast to all in channel that this user joined
     this.broadcastVoiceState(channelId, conn.did, 'voice.participant.joined')
 
     // Send current voice state to the joining user
     const participants = this.getVoiceChannelParticipants(channelId)
+    const participantDetails = this.getVoiceChannelParticipantDetails(channelId)
     this.sendToConnection(conn, {
       id: `vs-${Date.now()}`,
       type: 'voice.state',
       timestamp: new Date().toISOString(),
       sender: 'server',
-      payload: { channelId, participants }
+      payload: { channelId, participants, participantDetails }
     })
   }
 
@@ -1707,6 +1869,7 @@ export class HarmonyServer {
     const participants = this.voiceChannelParticipants.get(channelId)
     if (participants) {
       participants.delete(conn.id)
+      this.voiceParticipantState.delete(conn.id)
       if (participants.size === 0) {
         this.voiceChannelParticipants.delete(channelId)
       }
@@ -1760,6 +1923,133 @@ export class HarmonyServer {
       if (conn) dids.push(conn.did)
     }
     return dids
+  }
+
+  private getVoiceChannelParticipantDetails(
+    channelId: string
+  ): Array<{ did: string; muted: boolean; deafened: boolean; videoEnabled: boolean; screenSharing: boolean }> {
+    const connIds = this.voiceChannelParticipants.get(channelId)
+    if (!connIds) return []
+    const result: Array<{
+      did: string
+      muted: boolean
+      deafened: boolean
+      videoEnabled: boolean
+      screenSharing: boolean
+    }> = []
+    for (const connId of connIds) {
+      const conn = this._connections.get(connId)
+      const state = this.voiceParticipantState.get(connId)
+      if (conn) {
+        result.push({
+          did: conn.did,
+          muted: state?.muted ?? false,
+          deafened: state?.deafened ?? false,
+          videoEnabled: state?.videoEnabled ?? false,
+          screenSharing: state?.screenSharing ?? false
+        })
+      }
+    }
+    return result
+  }
+
+  private findVoiceChannelForConn(connId: string): string | null {
+    for (const [channelId, participants] of this.voiceChannelParticipants) {
+      if (participants.has(connId)) return channelId
+    }
+    return null
+  }
+
+  private broadcastVoiceUpdate(channelId: string, senderDid: string, updatePayload: Record<string, unknown>): void {
+    const participants = this.voiceChannelParticipants.get(channelId)
+    if (!participants) return
+    const msg: ProtocolMessage = {
+      id: `vs-${Date.now()}`,
+      type: 'voice.state' as ProtocolMessage['type'],
+      timestamp: new Date().toISOString(),
+      sender: senderDid,
+      payload: { channelId, ...updatePayload, participants: this.getVoiceChannelParticipantDetails(channelId) }
+    }
+    for (const connId of participants) {
+      const conn = this._connections.get(connId)
+      if (conn) this.sendToConnection(conn, msg)
+    }
+  }
+
+  private async handleVoiceMuteToggle(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const channelId = this.findVoiceChannelForConn(conn.id)
+    if (!channelId) return
+    const state = this.voiceParticipantState.get(conn.id)
+    if (!state) return
+    state.muted = msg.type === 'voice.mute'
+    this.broadcastVoiceUpdate(channelId, conn.did, { action: msg.type, did: conn.did })
+  }
+
+  private async handleVoiceVideo(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const channelId = this.findVoiceChannelForConn(conn.id)
+    if (!channelId) return
+    const state = this.voiceParticipantState.get(conn.id)
+    if (!state) return
+    const payload = msg.payload as { enabled: boolean }
+    state.videoEnabled = payload.enabled
+    this.broadcastVoiceUpdate(channelId, conn.did, {
+      action: 'voice.video',
+      did: conn.did,
+      videoEnabled: payload.enabled
+    })
+  }
+
+  private async handleVoiceScreen(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const channelId = this.findVoiceChannelForConn(conn.id)
+    if (!channelId) return
+    const state = this.voiceParticipantState.get(conn.id)
+    if (!state) return
+    const payload = msg.payload as { sharing: boolean }
+    state.screenSharing = payload.sharing
+    this.broadcastVoiceUpdate(channelId, conn.did, {
+      action: 'voice.screen',
+      did: conn.did,
+      screenSharing: payload.sharing
+    })
+  }
+
+  private async handleVoiceSpeaking(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const channelId = this.findVoiceChannelForConn(conn.id)
+    if (!channelId) return
+    const payload = msg.payload as { speaking: boolean }
+    const participants = this.voiceChannelParticipants.get(channelId)
+    if (!participants) return
+    const speakingMsg: ProtocolMessage = {
+      id: `vs-${Date.now()}`,
+      type: 'voice.speaking' as ProtocolMessage['type'],
+      timestamp: new Date().toISOString(),
+      sender: conn.did,
+      payload: { channelId, did: conn.did, speaking: payload.speaking }
+    }
+    for (const connId of participants) {
+      if (connId === conn.id) continue // don't echo back to sender
+      const c = this._connections.get(connId)
+      if (c) this.sendToConnection(c, speakingMsg)
+    }
+  }
+
+  private async handleVoiceToken(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { channelId: string }
+    // Generate a token for the client (in production, this would be a LiveKit JWT)
+    const token = Buffer.from(
+      JSON.stringify({
+        room: payload.channelId,
+        participant: conn.did,
+        iat: Date.now()
+      })
+    ).toString('base64')
+    this.sendToConnection(conn, {
+      id: `vt-${Date.now()}`,
+      type: 'voice.token.response' as ProtocolMessage['type'],
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: { channelId: payload.channelId, token }
+    })
   }
 
   private async handleReconciliation(_conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
@@ -1886,6 +2176,347 @@ export class HarmonyServer {
     }
   }
 
+  // ── Role Handlers ──
+
+  private hasPermission(conn: ServerConnection, communityId: string, action: string): boolean {
+    // Check if admin (community creator or admin role)
+    // We do a synchronous check here using member roles
+    const memberRoleIds = this.memberRoles.get(communityId)?.get(conn.did)
+    if (memberRoleIds) {
+      const communityRoles = this.roles.get(communityId)
+      if (communityRoles) {
+        for (const roleId of memberRoleIds) {
+          const role = communityRoles.get(roleId)
+          if (role && role.permissions.includes(action)) return true
+        }
+      }
+    }
+    return false
+  }
+
+  private async handleRoleCreate(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as {
+      communityId: string
+      name: string
+      color?: string
+      permissions: string[]
+      position: number
+    }
+
+    if (!(await this.isAdmin(payload.communityId, conn.did))) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'FORBIDDEN', message: 'Only admins can create roles' }
+      })
+      return
+    }
+
+    const roleId = 'role:' + Array.from(randomBytes(8), (b) => b.toString(16).padStart(2, '0')).join('')
+    const role: Role = {
+      id: roleId,
+      communityId: payload.communityId,
+      name: payload.name,
+      color: payload.color,
+      permissions: payload.permissions,
+      position: payload.position,
+      createdBy: conn.did
+    }
+
+    if (!this.roles.has(payload.communityId)) {
+      this.roles.set(payload.communityId, new Map())
+    }
+    this.roles.get(payload.communityId)!.set(roleId, role)
+
+    this.broadcastToCommunity(payload.communityId, {
+      id: `rc-${Date.now()}`,
+      type: 'role.created',
+      timestamp: new Date().toISOString(),
+      sender: conn.did,
+      payload: role
+    })
+  }
+
+  private async handleRoleUpdate(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as {
+      communityId: string
+      roleId: string
+      name?: string
+      color?: string
+      permissions?: string[]
+      position?: number
+    }
+
+    if (!(await this.isAdmin(payload.communityId, conn.did))) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'FORBIDDEN', message: 'Only admins can update roles' }
+      })
+      return
+    }
+
+    const communityRoles = this.roles.get(payload.communityId)
+    const role = communityRoles?.get(payload.roleId)
+    if (!role) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'NOT_FOUND', message: 'Role not found' }
+      })
+      return
+    }
+
+    if (payload.name !== undefined) role.name = payload.name
+    if (payload.color !== undefined) role.color = payload.color
+    if (payload.permissions !== undefined) role.permissions = payload.permissions
+    if (payload.position !== undefined) role.position = payload.position
+
+    this.broadcastToCommunity(payload.communityId, {
+      id: `ru-${Date.now()}`,
+      type: 'role.updated',
+      timestamp: new Date().toISOString(),
+      sender: conn.did,
+      payload: role
+    })
+  }
+
+  private async handleRoleDelete(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { communityId: string; roleId: string }
+
+    if (!(await this.isAdmin(payload.communityId, conn.did))) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'FORBIDDEN', message: 'Only admins can delete roles' }
+      })
+      return
+    }
+
+    const communityRoles = this.roles.get(payload.communityId)
+    if (!communityRoles?.has(payload.roleId)) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'NOT_FOUND', message: 'Role not found' }
+      })
+      return
+    }
+
+    communityRoles.delete(payload.roleId)
+
+    // Remove role from all members
+    const communityMembers = this.memberRoles.get(payload.communityId)
+    if (communityMembers) {
+      for (const [, memberRoleSet] of communityMembers) {
+        memberRoleSet.delete(payload.roleId)
+      }
+    }
+
+    this.broadcastToCommunity(payload.communityId, {
+      id: `rd-${Date.now()}`,
+      type: 'role.deleted',
+      timestamp: new Date().toISOString(),
+      sender: conn.did,
+      payload: { communityId: payload.communityId, roleId: payload.roleId }
+    })
+  }
+
+  private async handleRoleAssign(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { communityId: string; memberDID: string; roleId: string }
+
+    if (!(await this.isAdmin(payload.communityId, conn.did))) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'FORBIDDEN', message: 'Only admins can assign roles' }
+      })
+      return
+    }
+
+    // Verify role exists
+    const communityRoles = this.roles.get(payload.communityId)
+    if (!communityRoles?.has(payload.roleId)) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'NOT_FOUND', message: 'Role not found' }
+      })
+      return
+    }
+
+    if (!this.memberRoles.has(payload.communityId)) {
+      this.memberRoles.set(payload.communityId, new Map())
+    }
+    const communityMembers = this.memberRoles.get(payload.communityId)!
+    if (!communityMembers.has(payload.memberDID)) {
+      communityMembers.set(payload.memberDID, new Set())
+    }
+    communityMembers.get(payload.memberDID)!.add(payload.roleId)
+
+    this.broadcastToCommunity(payload.communityId, {
+      id: `ra-${Date.now()}`,
+      type: 'community.member.updated',
+      timestamp: new Date().toISOString(),
+      sender: conn.did,
+      payload: {
+        communityId: payload.communityId,
+        did: payload.memberDID,
+        roleId: payload.roleId,
+        action: 'role.assigned'
+      }
+    })
+  }
+
+  private async handleRoleRemove(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { communityId: string; memberDID: string; roleId: string }
+
+    if (!(await this.isAdmin(payload.communityId, conn.did))) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'FORBIDDEN', message: 'Only admins can remove roles' }
+      })
+      return
+    }
+
+    const communityMembers = this.memberRoles.get(payload.communityId)
+    communityMembers?.get(payload.memberDID)?.delete(payload.roleId)
+
+    this.broadcastToCommunity(payload.communityId, {
+      id: `rr-${Date.now()}`,
+      type: 'community.member.updated',
+      timestamp: new Date().toISOString(),
+      sender: conn.did,
+      payload: {
+        communityId: payload.communityId,
+        did: payload.memberDID,
+        roleId: payload.roleId,
+        action: 'role.removed'
+      }
+    })
+  }
+
+  // ── Pin Handlers ──
+
+  private async handleChannelPin(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { communityId: string; channelId: string; messageId: string }
+
+    if (
+      !(await this.isAdmin(payload.communityId, conn.did)) &&
+      !this.hasPermission(conn, payload.communityId, 'channel.pin')
+    ) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'FORBIDDEN', message: 'You do not have permission to pin messages' }
+      })
+      return
+    }
+
+    const channelKey = `${payload.communityId}:${payload.channelId}`
+    if (!this.pins.has(channelKey)) {
+      this.pins.set(channelKey, new Set())
+    }
+    const channelPins = this.pins.get(channelKey)!
+
+    if (channelPins.size >= 50) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'PIN_LIMIT', message: 'Maximum of 50 pinned messages per channel' }
+      })
+      return
+    }
+
+    channelPins.add(payload.messageId)
+
+    this.broadcastToCommunity(payload.communityId, {
+      id: `pin-${Date.now()}`,
+      type: 'channel.message.pinned',
+      timestamp: new Date().toISOString(),
+      sender: conn.did,
+      payload: {
+        communityId: payload.communityId,
+        channelId: payload.channelId,
+        messageId: payload.messageId,
+        pinnedBy: conn.did
+      }
+    })
+  }
+
+  private async handleChannelUnpin(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { communityId: string; channelId: string; messageId: string }
+
+    if (
+      !(await this.isAdmin(payload.communityId, conn.did)) &&
+      !this.hasPermission(conn, payload.communityId, 'channel.pin')
+    ) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'FORBIDDEN', message: 'You do not have permission to unpin messages' }
+      })
+      return
+    }
+
+    const channelKey = `${payload.communityId}:${payload.channelId}`
+    this.pins.get(channelKey)?.delete(payload.messageId)
+
+    this.broadcastToCommunity(payload.communityId, {
+      id: `unpin-${Date.now()}`,
+      type: 'channel.message.unpinned',
+      timestamp: new Date().toISOString(),
+      sender: conn.did,
+      payload: {
+        communityId: payload.communityId,
+        channelId: payload.channelId,
+        messageId: payload.messageId,
+        unpinnedBy: conn.did
+      }
+    })
+  }
+
+  private async handleChannelPinsList(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { communityId: string; channelId: string }
+    const channelKey = `${payload.communityId}:${payload.channelId}`
+    const pinnedIds = Array.from(this.pins.get(channelKey) ?? [])
+
+    this.sendToConnection(conn, {
+      id: `pins-${Date.now()}`,
+      type: 'channel.pins.response',
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: {
+        communityId: payload.communityId,
+        channelId: payload.channelId,
+        messageIds: pinnedIds
+      }
+    })
+  }
+
   broadcastToCommunity(communityId: string, msg: ProtocolMessage, excludeConnId?: string): void {
     const connIds = this.communitySubscriptions.get(communityId)
     if (!connIds) return
@@ -1972,5 +2603,162 @@ export class HarmonyServer {
         displayName
       }
     })
+  }
+
+  // ── Media Upload ──
+
+  private static readonly ALLOWED_MIME_TYPES = new Set([
+    'image/png',
+    'image/jpeg',
+    'image/gif',
+    'image/webp',
+    'image/svg+xml',
+    'application/pdf',
+    'text/plain',
+    'text/markdown',
+    'application/zip',
+    'audio/mpeg',
+    'audio/ogg',
+    'audio/wav'
+  ])
+
+  private static readonly MAX_MEDIA_SIZE = 10 * 1024 * 1024 // 10MB
+
+  private async handleMediaUploadRequest(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as {
+      communityId: string
+      channelId: string
+      filename: string
+      mimeType: string
+      size: number
+      data: string // base64
+    }
+
+    // Validate membership
+    if (!conn.communities.includes(payload.communityId)) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'NOT_MEMBER', message: 'Not a member of this community' }
+      })
+      return
+    }
+
+    // Validate MIME type
+    if (!HarmonyServer.ALLOWED_MIME_TYPES.has(payload.mimeType)) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'INVALID_MIME_TYPE', message: `MIME type not allowed: ${payload.mimeType}` }
+      })
+      return
+    }
+
+    // Validate size
+    if (payload.size > HarmonyServer.MAX_MEDIA_SIZE) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: {
+          code: 'FILE_TOO_LARGE',
+          message: `File exceeds ${HarmonyServer.MAX_MEDIA_SIZE / (1024 * 1024)}MB limit`
+        }
+      })
+      return
+    }
+
+    // Validate data present
+    if (!payload.data || typeof payload.data !== 'string') {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'MISSING_DATA', message: 'No file data provided' }
+      })
+      return
+    }
+
+    const mediaId = `media-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
+    const now = new Date().toISOString()
+
+    this.mediaStore.set(mediaId, {
+      id: mediaId,
+      filename: payload.filename,
+      mimeType: payload.mimeType,
+      size: payload.size,
+      data: payload.data,
+      uploadedBy: conn.did,
+      communityId: payload.communityId,
+      channelId: payload.channelId,
+      uploadedAt: now
+    })
+
+    // Respond with upload complete
+    this.sendToConnection(conn, {
+      id: `muc-${Date.now()}`,
+      type: 'media.upload.complete' as MessageType,
+      timestamp: now,
+      sender: 'server',
+      payload: {
+        mediaId,
+        filename: payload.filename,
+        mimeType: payload.mimeType,
+        size: payload.size,
+        url: `/media/${mediaId}/${encodeURIComponent(payload.filename)}`,
+        communityId: payload.communityId,
+        channelId: payload.channelId
+      }
+    })
+  }
+
+  private async handleMediaDelete(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { mediaId: string; communityId: string }
+
+    const media = this.mediaStore.get(payload.mediaId)
+    if (!media) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'NOT_FOUND', message: 'Media not found' }
+      })
+      return
+    }
+
+    // Only uploader can delete
+    if (media.uploadedBy !== conn.did) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'FORBIDDEN', message: 'Only the uploader can delete this file' }
+      })
+      return
+    }
+
+    this.mediaStore.delete(payload.mediaId)
+
+    this.sendToConnection(conn, {
+      id: `md-${Date.now()}`,
+      type: 'media.delete' as MessageType,
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: { mediaId: payload.mediaId, deleted: true }
+    })
+  }
+
+  getMediaData(mediaId: string): { data: string; mimeType: string; filename: string } | null {
+    const media = this.mediaStore.get(mediaId)
+    if (!media) return null
+    return { data: media.data, mimeType: media.mimeType, filename: media.filename }
   }
 }

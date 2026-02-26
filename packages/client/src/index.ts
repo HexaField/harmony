@@ -1119,6 +1119,33 @@ export class HarmonyClient {
     this.send(this.createMessage('member.ban', { communityId, memberDID, reason }))
   }
 
+  // ── Pins ──
+
+  async pinMessage(communityId: string, channelId: string, messageId: string): Promise<void> {
+    this.send(this.createMessage('channel.pin', { communityId, channelId, messageId }))
+  }
+
+  async unpinMessage(communityId: string, channelId: string, messageId: string): Promise<void> {
+    this.send(this.createMessage('channel.unpin', { communityId, channelId, messageId }))
+  }
+
+  async getPinnedMessages(communityId: string, channelId: string): Promise<string[]> {
+    return new Promise((resolve) => {
+      const handler = (msg: any) => {
+        if (
+          msg.type === 'channel.pins.response' &&
+          msg.payload?.communityId === communityId &&
+          msg.payload?.channelId === channelId
+        ) {
+          this.off('message' as any, handler)
+          resolve(msg.payload.messageIds ?? [])
+        }
+      }
+      this.on('message' as any, handler)
+      this.send(this.createMessage('channel.pins.list', { communityId, channelId }))
+    })
+  }
+
   // ── Voice ──
 
   async joinVoice(channelId: string): Promise<VoiceConnection> {
@@ -1167,6 +1194,108 @@ export class HarmonyClient {
   }
 
   // ── Search ──
+
+  // ── Server Media Upload ──
+
+  async uploadMediaToServer(
+    communityId: string,
+    channelId: string,
+    file: {
+      filename: string
+      mimeType: string
+      data: ArrayBuffer | Uint8Array
+    }
+  ): Promise<{ mediaId: string; url: string; filename: string; mimeType: string; size: number }> {
+    const data = file.data instanceof Uint8Array ? file.data : new Uint8Array(file.data)
+    const base64 =
+      typeof btoa === 'function' ? btoa(String.fromCharCode(...data)) : Buffer.from(data).toString('base64')
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Upload timeout')), 30000)
+
+      const handler = (msg: ProtocolMessage) => {
+        if (msg.type === 'media.upload.complete') {
+          const p = msg.payload as any
+          clearTimeout(timeout)
+          this.off('message', handler)
+          this.off('error', errorHandler)
+          resolve({ mediaId: p.mediaId, url: p.url, filename: p.filename, mimeType: p.mimeType, size: p.size })
+        }
+      }
+      const errorHandler = (payload: any) => {
+        if (
+          payload.code === 'FILE_TOO_LARGE' ||
+          payload.code === 'INVALID_MIME_TYPE' ||
+          payload.code === 'MISSING_DATA' ||
+          payload.code === 'NOT_MEMBER'
+        ) {
+          clearTimeout(timeout)
+          this.off('message', handler)
+          this.off('error', errorHandler)
+          reject(new Error(payload.message))
+        }
+      }
+      this.on('message', handler)
+      this.on('error', errorHandler)
+
+      this.send(
+        this.createMessage('media.upload.request', {
+          communityId,
+          channelId,
+          filename: file.filename,
+          mimeType: file.mimeType,
+          size: data.length,
+          data: base64
+        })
+      )
+    })
+  }
+
+  async sendMessageWithAttachments(
+    communityId: string,
+    channelId: string,
+    content: string,
+    attachments: Array<{
+      filename: string
+      mimeType: string
+      data: ArrayBuffer | Uint8Array
+    }>
+  ): Promise<string> {
+    // Upload each attachment first
+    const uploadedRefs = await Promise.all(
+      attachments.map((att) => this.uploadMediaToServer(communityId, channelId, att))
+    )
+
+    // Send message with attachment references
+    this._clock = clockTick(this._clock)
+    const id = this.nextId()
+    const encrypted = await this.encryptForChannel(communityId, channelId, content)
+
+    const msg = this.createMessage(
+      'channel.send',
+      {
+        communityId,
+        channelId,
+        content: encrypted,
+        nonce: id,
+        clock: { ...this._clock },
+        attachments: uploadedRefs.map((ref) => ({
+          id: ref.mediaId,
+          filename: ref.filename,
+          contentType: ref.mimeType,
+          size: ref.size,
+          url: ref.url,
+          encrypted: false
+        }))
+      },
+      id
+    )
+
+    this.send(msg)
+    return id
+  }
+
+  // ── Search (continued) ──
 
   search(query: SearchQuery): SearchResult[] {
     if (!this.searchIndex) throw new Error('Search index not configured')
@@ -1354,6 +1483,9 @@ export class HarmonyClient {
         break
       case 'community.auto-joined':
         this.handleCommunityAutoJoined(msg)
+        break
+      case 'media.upload.complete' as any:
+        this.emitter.emit('message', msg)
         break
     }
   }

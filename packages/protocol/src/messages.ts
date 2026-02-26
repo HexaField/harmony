@@ -24,6 +24,11 @@ export type MessageType =
   | 'role.create'
   | 'role.update'
   | 'role.delete'
+  | 'role.assign'
+  | 'role.remove'
+  | 'channel.pin'
+  | 'channel.unpin'
+  | 'channel.pins.list'
   | 'member.update'
   | 'member.kick'
   | 'member.ban'
@@ -62,6 +67,9 @@ export type MessageType =
   | 'role.created'
   | 'role.updated'
   | 'role.deleted'
+  | 'channel.message.pinned'
+  | 'channel.message.unpinned'
+  | 'channel.pins.response'
   | 'presence.changed'
   | 'sync.response'
   | 'community.info.response'
@@ -76,6 +84,12 @@ export type MessageType =
   | 'voice.offer'
   | 'voice.answer'
   | 'voice.ice'
+  | 'voice.mute'
+  | 'voice.unmute'
+  | 'voice.video'
+  | 'voice.screen'
+  | 'voice.token'
+  | 'voice.token.response'
   // Files
   | 'media.upload.request'
   | 'media.upload.complete'
@@ -136,6 +150,11 @@ export const CLIENT_TO_SERVER_TYPES: MessageType[] = [
   'role.create',
   'role.update',
   'role.delete',
+  'role.assign',
+  'role.remove',
+  'channel.pin',
+  'channel.unpin',
+  'channel.pins.list',
   'member.update',
   'member.kick',
   'member.ban',
@@ -149,6 +168,11 @@ export const CLIENT_TO_SERVER_TYPES: MessageType[] = [
   'voice.join',
   'voice.leave',
   'voice.state',
+  'voice.mute',
+  'voice.unmute',
+  'voice.video',
+  'voice.screen',
+  'voice.token',
   'media.upload.request',
   'media.upload.complete',
   'media.delete',
@@ -202,6 +226,9 @@ export const SERVER_TO_CLIENT_TYPES: MessageType[] = [
   'role.created',
   'role.updated',
   'role.deleted',
+  'channel.message.pinned',
+  'channel.message.unpinned',
+  'channel.pins.response',
   'presence.changed',
   'sync.response',
   'community.info.response',
@@ -213,6 +240,7 @@ export const SERVER_TO_CLIENT_TYPES: MessageType[] = [
   'voice.offer',
   'voice.answer',
   'voice.ice',
+  'voice.token.response',
   'search.metadata.result',
   'bot.event',
   // E2EE / MLS

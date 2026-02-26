@@ -867,6 +867,9 @@ export class HarmonyServer {
       case 'dm.typing':
         await this.handleDMTyping(conn, msg)
         break
+      case 'dm.keyexchange':
+        await this.handleDMKeyExchange(conn, msg)
+        break
       case 'community.create':
         await this.handleCommunityCreate(conn, msg)
         break
@@ -1068,6 +1071,19 @@ export class HarmonyServer {
         this.sendToConnection(otherConn, {
           ...msg,
           type: 'dm.typing.indicator',
+          sender: conn.did
+        })
+      }
+    }
+  }
+
+  private async handleDMKeyExchange(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { recipientDID: string }
+    for (const [_id, otherConn] of this._connections) {
+      if (otherConn.did === payload.recipientDID) {
+        this.sendToConnection(otherConn, {
+          ...msg,
+          type: 'dm.keyexchange',
           sender: conn.did
         })
       }

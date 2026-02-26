@@ -8,7 +8,6 @@ import type { DIDResolver } from '@harmony/vc'
 import { HarmonyServer } from '@harmony/server'
 import { HarmonyClient } from '@harmony/client'
 import { MemoryQuadStore } from '@harmony/quads'
-import { SimplifiedMLSProvider } from '@harmony/e2ee'
 import type { KeyPair } from '@harmony/crypto'
 import type { Identity } from '@harmony/identity'
 import type { VerifiablePresentation } from '@harmony/vc'
@@ -88,22 +87,9 @@ describe('E2EE Integration — End-to-End Encrypted Messaging', () => {
     await server.start()
   }
 
-  async function createE2EEClient(): Promise<HarmonyClient> {
+  async function createClient(): Promise<HarmonyClient> {
     const { identity, keyPair, vp } = await createIdentityAndVP()
-    const mlsProvider = new SimplifiedMLSProvider()
-    const client = new HarmonyClient({ mlsProvider, wsFactory })
-    await client.connect({
-      serverUrl: `ws://localhost:${PORT}`,
-      identity,
-      keyPair,
-      vp
-    })
-    clients.push(client)
-    return client
-  }
-
-  async function createPlainClient(): Promise<HarmonyClient> {
-    const { identity, keyPair, vp } = await createIdentityAndVP()
+    // E2EE is always on — no need to explicitly pass mlsProvider
     const client = new HarmonyClient({ wsFactory })
     await client.connect({
       serverUrl: `ws://localhost:${PORT}`,
@@ -119,8 +105,8 @@ describe('E2EE Integration — End-to-End Encrypted Messaging', () => {
 
   it('two clients with E2EE: create community → join → send encrypted message → receiver decrypts', async () => {
     await startServer()
-    const alice = await createE2EEClient()
-    const bob = await createE2EEClient()
+    const alice = await createClient()
+    const bob = await createClient()
 
     // Alice creates community (MLS groups set up automatically)
     const community = await alice.createCommunity({ name: 'E2EE Test' })
@@ -182,7 +168,7 @@ describe('E2EE Integration — End-to-End Encrypted Messaging', () => {
 
   it('key package upload on community creation', async () => {
     await startServer()
-    const alice = await createE2EEClient()
+    const alice = await createClient()
 
     const community = await alice.createCommunity({ name: 'KP Test' })
     await wait(200)
@@ -194,8 +180,8 @@ describe('E2EE Integration — End-to-End Encrypted Messaging', () => {
 
   it('key package upload on community join', async () => {
     await startServer()
-    const alice = await createE2EEClient()
-    const bob = await createE2EEClient()
+    const alice = await createClient()
+    const bob = await createClient()
 
     const community = await alice.createCommunity({ name: 'Join KP Test' })
     await wait(200)
@@ -206,18 +192,22 @@ describe('E2EE Integration — End-to-End Encrypted Messaging', () => {
     expect(bob.e2eeEnabled).toBe(true)
   })
 
-  it('message sent without E2EE is received as plaintext', async () => {
+  it('all clients have E2EE — messages always encrypted', async () => {
     await startServer()
-    const alice = await createPlainClient()
-    const bob = await createPlainClient()
+    const alice = await createClient()
+    const bob = await createClient()
 
-    const community = await alice.createCommunity({ name: 'Plaintext Test' })
+    const community = await alice.createCommunity({ name: 'Always E2EE Test' })
     const channelId = community.channels[0].id
 
     await bob.joinCommunity(community.id)
     await wait(200)
 
-    const msgId = await alice.sendMessage(community.id, channelId, 'Hello plaintext!')
+    // Both clients always have E2EE enabled
+    expect(alice.e2eeEnabled).toBe(true)
+    expect(bob.e2eeEnabled).toBe(true)
+
+    const msgId = await alice.sendMessage(community.id, channelId, 'Hello encrypted!')
 
     const received = await new Promise<any>((resolve) => {
       bob.on('message', (...args: unknown[]) => {
@@ -226,45 +216,26 @@ describe('E2EE Integration — End-to-End Encrypted Messaging', () => {
       })
     })
 
-    expect(received.content.text).toBe('Hello plaintext!')
+    expect(received).toBeTruthy()
+    expect(received.authorDID).toBe(alice.myDID())
   })
 
-  it('client without E2EE joins E2EE community — messages received as [encrypted]', async () => {
+  it('e2eeEnabled is always true even without explicit provider', async () => {
     await startServer()
-    const alice = await createE2EEClient()
-    const plainBob = await createPlainClient()
+    const alice = await createClient()
+    expect(alice.e2eeEnabled).toBe(true)
 
-    const community = await alice.createCommunity({ name: 'Mixed E2EE Test' })
+    const community = await alice.createCommunity({ name: 'Auto E2EE Test' })
     const channelId = community.channels[0].id
-
-    await wait(200)
-    await plainBob.joinCommunity(community.id)
     await wait(200)
 
-    // Alice has an MLS group, so her message will be encrypted
-    const hasGroup = alice.hasMLSGroup(community.id, channelId)
-    if (hasGroup) {
-      const msgId = await alice.sendMessage(community.id, channelId, 'Secret message')
-
-      const received = await new Promise<any>((resolve) => {
-        const unsub = plainBob.on('message', (...args: unknown[]) => {
-          const msg = args[0] as any
-          if (msg.id === msgId) {
-            unsub()
-            resolve(msg)
-          }
-        })
-      })
-
-      // Plain Bob can't decrypt — should see [encrypted] or garbled text
-      expect(received).toBeTruthy()
-      expect(received.content.text).not.toBe('Secret message')
-    }
+    // MLS group should be auto-created
+    expect(alice.hasMLSGroup(community.id, channelId)).toBe(true)
   })
 
   it('encryptForChannel uses MLS encryption when group exists', async () => {
     await startServer()
-    const alice = await createE2EEClient()
+    const alice = await createClient()
 
     const community = await alice.createCommunity({ name: 'Encrypt Path Test' })
     const channelId = community.channels[0].id
@@ -277,12 +248,12 @@ describe('E2EE Integration — End-to-End Encrypted Messaging', () => {
 
   it('welcome message forwarded to correct recipient', async () => {
     await startServer()
-    const alice = await createE2EEClient()
+    const alice = await createClient()
 
     const community = await alice.createCommunity({ name: 'Welcome Test' })
     await wait(200)
 
-    const bob = await createE2EEClient()
+    const bob = await createClient()
 
     const welcomeReceived = new Promise<void>((resolve) => {
       bob.on('mls.welcome' as any, () => resolve())
@@ -299,8 +270,8 @@ describe('E2EE Integration — End-to-End Encrypted Messaging', () => {
 
   it('commit message broadcast to community members', async () => {
     await startServer()
-    const alice = await createE2EEClient()
-    const bob = await createE2EEClient()
+    const alice = await createClient()
+    const bob = await createClient()
 
     const community = await alice.createCommunity({ name: 'Commit Test' })
     await wait(200)
@@ -319,8 +290,8 @@ describe('E2EE Integration — End-to-End Encrypted Messaging', () => {
 
   it('graceful handling of invalid ciphertext', async () => {
     await startServer()
-    const alice = await createE2EEClient()
-    const bob = await createE2EEClient()
+    const alice = await createClient()
+    const bob = await createClient()
 
     const community = await alice.createCommunity({ name: 'Error Test' })
     const channelId = community.channels[0].id
@@ -349,7 +320,7 @@ describe('E2EE Integration — End-to-End Encrypted Messaging', () => {
 
   it('multiple channels in same community get separate MLS groups', async () => {
     await startServer()
-    const alice = await createE2EEClient()
+    const alice = await createClient()
 
     const community = await alice.createCommunity({
       name: 'Multi-Channel',
@@ -374,7 +345,7 @@ describe('E2EE Integration — End-to-End Encrypted Messaging', () => {
 
   it('server remains zero-knowledge — never sees plaintext', async () => {
     await startServer()
-    const alice = await createE2EEClient()
+    const alice = await createClient()
 
     const community = await alice.createCommunity({ name: 'Zero Knowledge' })
     const channelId = community.channels[0].id

@@ -238,10 +238,10 @@ describe('E2EE Integration', () => {
     await client.disconnect()
   })
 
-  it('should fall back to plaintext when no MLS group exists', async () => {
+  it('should always have MLS provider — E2EE is always on', async () => {
     const alice = await createIdentity()
 
-    // No MLS provider = no encryption
+    // Even without explicitly passing mlsProvider, client creates one internally
     const client = new HarmonyClient({ wsFactory })
 
     await client.connect({
@@ -251,16 +251,16 @@ describe('E2EE Integration', () => {
       vp: alice.vp
     })
 
+    expect(client.e2eeEnabled).toBe(true)
+
     const community = await client.createCommunity({ name: 'Test', defaultChannels: ['general'] })
     const channelId = community.channels[0].id
 
-    expect(client.hasMLSGroup(community.id, channelId)).toBe(false)
+    // Wait for MLS setup
+    await new Promise((r) => setTimeout(r, 100))
 
-    // Encrypt should just wrap plaintext
-    const plaintext = 'No encryption here'
-    const encrypted = await (client as any).encryptForChannel(community.id, channelId, plaintext)
-    const decoded = new TextDecoder().decode(encrypted.ciphertext)
-    expect(decoded).toBe(plaintext)
+    // MLS group should exist since E2EE is always on
+    expect(client.hasMLSGroup(community.id, channelId)).toBe(true)
 
     await client.disconnect()
   })

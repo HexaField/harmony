@@ -1524,8 +1524,7 @@ describe('@harmony/client', () => {
   })
 
   describe('E2EE Integration', () => {
-    it('MUST enable E2EE at runtime', async () => {
-      const { SimplifiedMLSProvider, SimplifiedDMProvider } = await import('@harmony/e2ee')
+    it('MUST have E2EE always enabled', async () => {
       const id1 = await createTestIdentity()
       const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
       await client.connect({
@@ -1535,8 +1534,7 @@ describe('@harmony/client', () => {
         vp: id1.vp
       })
 
-      expect(client.e2eeEnabled).toBe(false)
-      client.enableE2EE({ mlsProvider: new SimplifiedMLSProvider() })
+      // E2EE is always on
       expect(client.e2eeEnabled).toBe(true)
 
       await client.disconnect()
@@ -1620,11 +1618,10 @@ describe('@harmony/client', () => {
       await client2.disconnect()
     })
 
-    it('MUST gracefully degrade when E2EE not enabled', async () => {
+    it('MUST always have E2EE — all clients encrypt', async () => {
       const id1 = await createTestIdentity()
       const id2 = await createTestIdentity()
 
-      // No E2EE provider — plaintext mode
       const client1 = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
       await client1.connect({
         serverUrl: `ws://127.0.0.1:${PORT}`,
@@ -1632,11 +1629,12 @@ describe('@harmony/client', () => {
         keyPair: id1.keyPair,
         vp: id1.vp
       })
-      const community = await client1.createCommunity({ name: 'Plaintext Test' })
+      const community = await client1.createCommunity({ name: 'E2EE Always On Test' })
       const channelId = community.channels[0].id
 
-      expect(client1.e2eeEnabled).toBe(false)
-      expect(client1.hasMLSGroup(community.id, channelId)).toBe(false)
+      expect(client1.e2eeEnabled).toBe(true)
+      await new Promise((r) => setTimeout(r, 100))
+      expect(client1.hasMLSGroup(community.id, channelId)).toBe(true)
 
       const client2 = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
       await client2.connect({
@@ -1647,14 +1645,7 @@ describe('@harmony/client', () => {
       })
       await client2.joinCommunity(community.id)
 
-      // Send plaintext message — should work without E2EE
-      const messagePromise = new Promise<any>((resolve) => {
-        client2.on('message', resolve)
-      })
-
-      const msgId = await client1.sendMessage(community.id, channelId, 'Hello plaintext!')
-      const received = await messagePromise
-      expect(received.content.text).toBe('Hello plaintext!')
+      expect(client2.e2eeEnabled).toBe(true)
 
       await client1.disconnect()
       await client2.disconnect()

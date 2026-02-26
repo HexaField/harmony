@@ -17,6 +17,7 @@ import type { VCService as VCServiceType, VerifiablePresentation, VerifiableCred
 import { VCService } from '@harmony/vc'
 import type { ZCAPService, Capability } from '@harmony/zcap'
 import type { MLSGroup, MLSProvider, DMChannel, DMProvider } from '@harmony/e2ee'
+import { SimplifiedMLSProvider, SimplifiedDMProvider } from '@harmony/e2ee'
 import type { VoiceClient, VoiceConnection } from '@harmony/voice'
 import type { MediaClient, MediaRef, FileInput, DecryptedFile } from '@harmony/media'
 import type { ClientSearchIndex, SearchQuery, SearchResult } from '@harmony/search'
@@ -246,10 +247,12 @@ export class HarmonyClient {
     pushService?: PushNotificationService
     persistenceAdapter?: PersistenceAdapter
   }) {
+    // E2EE is always on — auto-create providers if not supplied
+    this.mlsProvider = options?.mlsProvider ?? new SimplifiedMLSProvider()
+    this._dmProvider = options?.dmProvider ?? new SimplifiedDMProvider()
+
     if (options) {
       this._wsFactory = options.wsFactory ?? null
-      this.mlsProvider = options.mlsProvider ?? null
-      this._dmProvider = options.dmProvider ?? null
       this.voiceClient = options.voiceClient ?? null
       this.mediaClient = options.mediaClient ?? null
       this.searchIndex = options.searchIndex ?? null
@@ -438,18 +441,9 @@ export class HarmonyClient {
     })
   }
 
-  /**
-   * Enable E2EE at runtime with an MLS provider and optional DM provider.
-   * Can be called after construction to activate encryption for subsequent operations.
-   */
-  enableE2EE(options: { mlsProvider?: MLSProvider; dmProvider?: DMProvider }): void {
-    if (options.mlsProvider) this.mlsProvider = options.mlsProvider
-    if (options.dmProvider) this._dmProvider = options.dmProvider
-  }
-
-  /** Check if E2EE is enabled */
+  /** E2EE is always enabled */
   get e2eeEnabled(): boolean {
-    return this.mlsProvider !== null || this._dmProvider !== null
+    return true
   }
 
   async disconnect(): Promise<void> {
@@ -1248,6 +1242,9 @@ export class HarmonyClient {
       case 'dm.message':
         this.handleDMMessage(msg)
         break
+      case 'dm.keyexchange':
+        this.handleDMKeyExchange(msg)
+        break
       case 'dm.typing.indicator':
         this.emitter.emit('typing', msg.payload)
         break
@@ -1439,7 +1436,11 @@ export class HarmonyClient {
   }
 
   private handleDMMessage(msg: ProtocolMessage): void {
-    const payload = msg.payload as { recipientDID?: string; clock: LamportClock }
+    const payload = msg.payload as {
+      recipientDID?: string
+      clock: LamportClock
+      content?: EncryptedContent & { nonce?: Uint8Array; senderPublicKey?: Uint8Array }
+    }
     this._clock = clockMerge(this._clock, payload.clock)
 
     const senderDID = msg.sender
@@ -1457,10 +1458,81 @@ export class HarmonyClient {
       reactions: new Map(),
       edited: false
     }
-    dmState.messages.push(decrypted)
-    dmState.unreadCount++
-    dmState.lastMessage = decrypted
-    this.emitter.emit('dm', decrypted)
+
+    const addAndEmit = () => {
+      dmState.messages.push(decrypted)
+      dmState.unreadCount++
+      dmState.lastMessage = decrypted
+      this.emitter.emit('dm', decrypted)
+    }
+
+    // Try to decrypt DM
+    const dmChannel = this.dmEncChannels.get(senderDID)
+    const content = payload.content
+    if (dmChannel && content && content.nonce) {
+      const nonce =
+        content.nonce instanceof Uint8Array
+          ? content.nonce
+          : new Uint8Array(Object.values(content.nonce as Record<string, number>))
+      const ciphertext =
+        content.ciphertext instanceof Uint8Array
+          ? content.ciphertext
+          : new Uint8Array(Object.values(content.ciphertext as Record<string, number>))
+      const senderPublicKey =
+        content.senderPublicKey instanceof Uint8Array
+          ? content.senderPublicKey
+          : content.senderPublicKey
+            ? new Uint8Array(Object.values(content.senderPublicKey as Record<string, number>))
+            : new Uint8Array(0)
+      dmChannel
+        .decrypt({ ciphertext, nonce, senderPublicKey })
+        .then((plaintext) => {
+          decrypted.content = { text: new TextDecoder().decode(plaintext) }
+          addAndEmit()
+        })
+        .catch(() => {
+          addAndEmit()
+        })
+    } else if (content && !content.nonce) {
+      // Plaintext fallback (no nonce = not encrypted)
+      const ct = content.ciphertext
+      if (ct) {
+        try {
+          const bytes = ct instanceof Uint8Array ? ct : new Uint8Array(Object.values(ct as Record<string, number>))
+          decrypted.content = { text: new TextDecoder().decode(bytes) }
+        } catch {
+          /* ignore */
+        }
+      }
+      addAndEmit()
+    } else {
+      addAndEmit()
+    }
+  }
+
+  private async handleDMKeyExchange(msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { senderPublicKey: number[] | Uint8Array }
+    const senderDID = msg.sender
+    if (!this._dmProvider || !this._encryptionKeyPair) return
+    if (this.dmEncChannels.has(senderDID)) return // Already have channel
+
+    try {
+      const senderPubKey =
+        payload.senderPublicKey instanceof Uint8Array
+          ? payload.senderPublicKey
+          : new Uint8Array(payload.senderPublicKey)
+
+      const dmChannel = await this._dmProvider.openChannel({
+        recipientDID: this._did,
+        recipientKeyPair: this._encryptionKeyPair,
+        senderDID,
+        senderPublicKey: senderPubKey
+      })
+      this.dmEncChannels.set(senderDID, dmChannel)
+      this.emitter.emit('dm.keyexchange', { senderDID })
+    } catch {
+      // Key exchange failed
+    }
   }
 
   private handleMemberJoined(msg: ProtocolMessage): void {
@@ -1933,14 +2005,70 @@ export class HarmonyClient {
     return { ciphertext: plaintext, epoch: 0, senderIndex: 0 }
   }
 
-  private async encryptForDM(_recipientDID: string, text: string): Promise<EncryptedContent> {
+  private async encryptForDM(recipientDID: string, text: string): Promise<EncryptedContent> {
     const plaintext = new TextEncoder().encode(text)
-    const dmChannel = this.dmEncChannels.get(_recipientDID) ?? (this._dmProvider ? undefined : undefined)
+    let dmChannel = this.dmEncChannels.get(recipientDID)
+
+    if (!dmChannel && this._dmProvider && this._encryptionKeyPair) {
+      // Need to establish DM channel — fetch recipient's public key via key packages
+      try {
+        const recipientPubKey = await this.fetchRecipientPublicKey(recipientDID)
+        if (recipientPubKey) {
+          dmChannel = await this._dmProvider.createChannel({
+            senderDID: this._did,
+            senderKeyPair: this._encryptionKeyPair,
+            recipientDID,
+            recipientPublicKey: recipientPubKey
+          })
+          this.dmEncChannels.set(recipientDID, dmChannel)
+
+          // Send key exchange message so recipient can set up their side
+          this.send(
+            this.createMessage('dm.keyexchange', {
+              recipientDID,
+              senderPublicKey: Array.from(this._encryptionKeyPair.publicKey)
+            })
+          )
+        }
+      } catch {
+        // Key exchange failed — fall back to plaintext
+      }
+    }
+
     if (dmChannel) {
       const ct = await dmChannel.encrypt(plaintext)
-      return { ciphertext: ct.ciphertext, epoch: 0, senderIndex: 0 }
+      return {
+        ciphertext: ct.ciphertext,
+        epoch: 0,
+        senderIndex: 0,
+        nonce: ct.nonce,
+        senderPublicKey: ct.senderPublicKey
+      } as EncryptedContent & { nonce: Uint8Array; senderPublicKey: Uint8Array }
     }
     return { ciphertext: plaintext, epoch: 0, senderIndex: 0 }
+  }
+
+  /** Fetch a recipient's encryption public key via key package */
+  private fetchRecipientPublicKey(recipientDID: string): Promise<Uint8Array | null> {
+    this.send(this.createMessage('mls.keypackage.fetch', { dids: [recipientDID] }))
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        unsub()
+        resolve(null)
+      }, 3000)
+      const unsub = this.on('mls.keypackage.response', (...args: unknown[]) => {
+        unsub()
+        clearTimeout(timeout)
+        const resp = args[0] as { keyPackages: Record<string, unknown[]> }
+        const packages = resp.keyPackages[recipientDID]
+        if (packages && packages.length > 0) {
+          const kp = packages[0] as import('@harmony/e2ee').KeyPackage
+          resolve(kp.leafNode.encryptionKey)
+        } else {
+          resolve(null)
+        }
+      })
+    })
   }
 
   // For testing — get internal state

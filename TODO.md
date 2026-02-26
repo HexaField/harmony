@@ -18,18 +18,14 @@ Wired end-to-end: MLS group creation → key package exchange → auto member ad
 - ~~Client decrypts messages when MLS group exists, plaintext fallback otherwise~~ ✅
 - ~~11 new integration tests (e2ee-integration.spec.ts)~~ ✅
 - ~~Un-skipped integration.spec.ts:289 + user-journeys.spec.ts:715~~ ✅
-- [ ] UI toggle for E2EE per channel/community (deferred — works programmatically via `enableE2EE()`)
-
----
-
-## Post-Launch — Wiring Gaps
+- ~~UI toggle for E2EE per channel/community~~ ✅ (removed — E2EE is always on)
 
 ### DM Encryption
 
-`SimplifiedDMProvider` exists but DM send/receive pipeline doesn't use it.
+~~`SimplifiedDMProvider` exists but DM send/receive pipeline doesn't use it.~~
 
-- [ ] Wire DM encryption into client send/receive
-- [ ] Key exchange for DM pairs
+- [x] Wire DM encryption into client send/receive ✅
+- [x] Key exchange for DM pairs ✅
 
 ### Federation
 
@@ -64,10 +60,6 @@ Moderation module has rate limiting logic. Verify it's actually called in the se
 - [ ] Confirm rate limit check on `channel.send`
 - [ ] Confirm rate limit response sent to client
 - [ ] UI feedback when rate limited
-
----
-
-## Post-Launch — New Features
 
 ### Voice & Video
 

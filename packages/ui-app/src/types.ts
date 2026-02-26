@@ -19,6 +19,8 @@ export interface ChannelSidebarProps {
   channels: ChannelInfo[]
   activeChannelId?: string
   onSelect: (id: string) => void
+  /** Returns voice participant DIDs for a given channel */
+  voiceParticipants?: (channelId: string) => string[]
 }
 export interface ServerListProps {
   communities: CommunityInfo[]
@@ -338,6 +340,8 @@ export interface MessageData {
   replyTo?: string
   reactions?: Array<{ emoji: string; count: number; userReacted: boolean }>
   attachments?: AttachmentData[]
+  /** Set by searchMessages to indicate which channel the message belongs to */
+  channelId?: string
 }
 export interface AttachmentData {
   id: string

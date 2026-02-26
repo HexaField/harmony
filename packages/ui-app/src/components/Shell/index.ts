@@ -40,7 +40,10 @@ export function ChannelSidebar(props: ChannelSidebarProps) {
     communityId: props.communityId,
     channels: props.channels,
     activeChannelId: props.activeChannelId,
-    onSelect: props.onSelect
+    onSelect: props.onSelect,
+    voiceParticipants: (channelId: string) => (props.voiceParticipants ? props.voiceParticipants(channelId) : []),
+    voiceParticipantCount: (channelId: string) =>
+      props.voiceParticipants ? props.voiceParticipants(channelId).length : 0
   }
 }
 

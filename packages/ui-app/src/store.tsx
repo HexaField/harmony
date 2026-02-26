@@ -165,6 +165,8 @@ export interface AppStore {
   setVoiceChannelId: (id: string | null) => void
   voiceUsers: () => string[]
   setVoiceUsers: (users: string[]) => void
+  /** Per-channel voice participant tracking for sidebar display */
+  channelVoiceParticipants: (channelId: string) => string[]
   isMuted: () => boolean
   setMuted: (m: boolean) => void
   isDeafened: () => boolean
@@ -523,6 +525,12 @@ export function createAppStore(): AppStore {
   // Voice state
   const [voiceChannelId, setVoiceChannelId] = createSignal<string | null>(null)
   const [voiceUsers, setVoiceUsers] = createSignal<string[]>([])
+  const voiceParticipantsMap = new Map<string, string[]>()
+  const [voiceParticipantsVersion, setVoiceParticipantsVersion] = createSignal(0)
+  const channelVoiceParticipants = (channelId: string): string[] => {
+    voiceParticipantsVersion() // track reactivity
+    return voiceParticipantsMap.get(channelId) ?? []
+  }
   const [isMuted, setMuted] = createSignal(false)
   const [isDeafened, setDeafened] = createSignal(false)
   const [isVideoEnabled, setVideoEnabled] = createSignal(false)
@@ -788,10 +796,19 @@ export function createAppStore(): AppStore {
     if (!query.trim()) return []
     const q = query.toLowerCase()
     const results: MessageData[] = []
-    for (const [, msgs] of channelMessageCache) {
+    // Search channel messages
+    for (const [channelId, msgs] of channelMessageCache) {
       for (const m of msgs) {
         if (m.content.toLowerCase().includes(q) || m.authorName.toLowerCase().includes(q)) {
-          results.push(m)
+          results.push({ ...m, channelId })
+        }
+      }
+    }
+    // Search DM messages
+    for (const [recipientDid, msgs] of dmMessageCache) {
+      for (const m of msgs) {
+        if (m.content.toLowerCase().includes(q) || m.authorName.toLowerCase().includes(q)) {
+          results.push({ ...m, channelId: `dm:${recipientDid}` })
         }
       }
     }
@@ -1214,8 +1231,19 @@ export function createAppStore(): AppStore {
 
     client.on('voice.state', (...args: unknown[]) => {
       const event = args[0] as { channelId?: string; participants?: string[] }
-      if (event?.channelId && event.channelId === voiceChannelId()) {
-        setVoiceUsers(event.participants ?? [])
+      if (event?.channelId) {
+        // Always update per-channel map for sidebar display
+        const participants = event.participants ?? []
+        if (participants.length > 0) {
+          voiceParticipantsMap.set(event.channelId, participants)
+        } else {
+          voiceParticipantsMap.delete(event.channelId)
+        }
+        setVoiceParticipantsVersion((v) => v + 1)
+        // Update current voice users if this is our active voice channel
+        if (event.channelId === voiceChannelId()) {
+          setVoiceUsers(participants)
+        }
       }
     })
 
@@ -1496,6 +1524,7 @@ export function createAppStore(): AppStore {
     setVoiceChannelId,
     voiceUsers,
     setVoiceUsers,
+    channelVoiceParticipants,
     isMuted,
     setMuted,
     isDeafened,

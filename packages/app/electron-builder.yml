@@ -1,0 +1,61 @@
+appId: chat.harmony.app
+productName: Harmony
+copyright: Copyright © 2026 Harmony
+
+directories:
+  output: dist-electron
+  buildResources: build
+
+files:
+  - "bin/**/*"
+  - "src/**/*"
+  - "package.json"
+  - "!**/*.spec.*"
+  - "!**/*.test.*"
+
+extraMetadata:
+  main: bin/harmony-app.js
+
+nodeGypRebuild: false
+npmRebuild: true
+
+mac:
+  category: public.app-category.social-networking
+  target:
+    - target: dmg
+      arch: [universal]
+    - target: zip
+      arch: [universal]
+  icon: build/icon.icns
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+
+dmg:
+  artifactName: "Harmony-${version}.${ext}"
+
+win:
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+  icon: build/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  artifactName: "Harmony-Setup-${version}.${ext}"
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+    - target: deb
+      arch: [x64, arm64]
+  category: Network;Chat;InstantMessaging
+  icon: build/icons
+
+appImage:
+  artifactName: "Harmony-${version}.${ext}"
+
+deb:
+  artifactName: "harmony_${version}_${arch}.${ext}"

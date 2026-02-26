@@ -12,7 +12,8 @@
     "test": "vitest run",
     "electron:rebuild": "npx @electron/rebuild --version 36.9.5 --module-dir ../../node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3",
     "electron:dev": "NODE_OPTIONS='--import tsx' NODE_ENV=development electron bin/harmony-app.js",
-    "electron:start": "NODE_OPTIONS='--import tsx' electron bin/harmony-app.js"
+    "electron:start": "NODE_OPTIONS='--import tsx' electron bin/harmony-app.js",
+    "electron:build": "electron-builder --config electron-builder.yml"
   },
   "dependencies": {
     "@harmony/bot-api": "workspace:*",

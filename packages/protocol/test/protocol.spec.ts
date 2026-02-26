@@ -717,4 +717,11 @@ describe('@harmony/protocol', () => {
       expect(rt.latestClock.counter).toBe(5)
     })
   })
+
+  describe('Content Rendering', () => {
+    it.todo('MUST parse and render link previews from OpenGraph metadata')
+    it.todo('MUST render rich embeds (images, videos, cards)')
+    it.todo('MUST apply syntax highlighting to code blocks')
+    it.todo('SHOULD fetch OpenGraph data server-side to avoid CORS')
+  })
 })

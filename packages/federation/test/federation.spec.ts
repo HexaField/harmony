@@ -762,4 +762,11 @@ describe('@harmony/federation', () => {
       expect(fm.peers().length).toBe(0)
     })
   })
+
+  describe('Networking', () => {
+    it.todo('MUST establish WebSocket between two server instances')
+    it.todo('MUST discover peers via DNS or registry')
+    it.todo('MUST relay messages across federated instances in real-time')
+    it.todo('MUST issue and verify instance-level federation ZCAPs')
+  })
 })

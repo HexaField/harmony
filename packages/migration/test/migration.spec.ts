@@ -480,4 +480,10 @@ describe('@harmony/migration', () => {
       }
     })
   })
+
+  describe('GDPR Compliance', () => {
+    it.todo('MUST allow member opt-out before migration')
+    it.todo('MUST generate privacy notice template')
+    it.todo('MUST export personal data in portable format (GDPR Article 20)')
+  })
 })

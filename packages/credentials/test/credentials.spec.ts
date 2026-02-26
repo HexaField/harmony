@@ -523,4 +523,10 @@ describe('@harmony/credentials', () => {
       expect(filtered).toHaveLength(0)
     })
   })
+
+  describe('VC Portfolio UI Integration', () => {
+    it.todo('MUST render credential portfolio view')
+    it.todo('MUST display credential details on selection')
+    it.todo('SHOULD show credential validity status (active/expired/revoked)')
+  })
 })

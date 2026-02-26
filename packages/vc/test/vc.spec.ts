@@ -471,4 +471,15 @@ describe('@harmony/vc', () => {
       expect(checkNames).toContain('proofVerification')
     })
   })
+
+  describe('VC Admission Policies', () => {
+    it.todo('MUST gate community join on required VC types')
+    it.todo('MUST verify VC validity during admission check')
+    it.todo('SHOULD support multiple required VC types (AND logic)')
+  })
+
+  describe('E2EE Key Binding', () => {
+    it.todo('MUST bind E2EE public key in issued VCs')
+    it.todo('MUST verify E2EE key binding during VC verification')
+  })
 })

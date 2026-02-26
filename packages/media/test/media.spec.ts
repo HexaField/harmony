@@ -407,4 +407,9 @@ describe('@harmony/media', () => {
       // Integration with message system not implemented in media package.
     })
   })
+
+  describe('Image Gallery', () => {
+    it.todo('SHOULD render image gallery view for channels with media')
+    it.todo('SHOULD support lightbox navigation between gallery images')
+  })
 })

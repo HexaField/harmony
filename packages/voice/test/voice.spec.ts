@@ -483,4 +483,15 @@ describe('@harmony/voice', () => {
       expect(alice.screenSharing).toBe(false)
     })
   })
+
+  describe('SFU Integration', () => {
+    it.todo('MUST connect to LiveKit SFU for multi-party calls')
+    it.todo('MUST fall back to P2P when SFU unavailable')
+    it.todo('SHOULD support selective forwarding for bandwidth optimization')
+  })
+
+  describe('Picture-in-Picture', () => {
+    it.todo('MUST support PiP mode for active voice/video calls')
+    it.todo('MUST show active speaker in PiP overlay')
+  })
 })

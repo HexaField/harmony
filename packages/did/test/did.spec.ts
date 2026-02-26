@@ -289,4 +289,10 @@ describe('@harmony/did', () => {
       expect(typeQuad).toBeDefined()
     })
   })
+
+  describe('DID Method Expansion', () => {
+    it.todo('MUST support did:web method resolution')
+    it.todo('MUST support did:plc method resolution')
+    it.todo('MAY support custom DID methods via plugin interface')
+  })
 })

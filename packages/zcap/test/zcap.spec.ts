@@ -536,4 +536,11 @@ describe('@harmony/zcap', () => {
       expect(result.valid).toBe(true)
     })
   })
+
+  describe('Advanced Capabilities', () => {
+    it.todo('MUST support rate-limited capabilities via caveats')
+    it.todo('MUST support user-to-user delegation without admin')
+    it.todo('MUST support AI agent ZCAPs with constrained scope')
+    it.todo('SHOULD support fine-grained time windows (not just expiry)')
+  })
 })

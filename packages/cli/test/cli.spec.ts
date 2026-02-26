@@ -82,4 +82,10 @@ describe('Store commands', () => {
     expect(result.success).toBe(true)
     expect(result.message).toContain('0')
   })
+
+  describe('Community Bundle', () => {
+    it.todo('MUST export community to .hbundle file')
+    it.todo('MUST import community from .hbundle file')
+    it.todo('MUST preserve channels, messages, and members in bundle')
+  })
 })

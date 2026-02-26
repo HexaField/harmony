@@ -458,4 +458,11 @@ describe('@harmony/search', () => {
       // LocalStorage persistence not implemented in ClientSearchIndex.
     })
   })
+
+  describe('Search UI Integration', () => {
+    it.todo('MUST render search bar with filter options')
+    it.todo('MUST display search results with snippet highlights')
+    it.todo('SHOULD support date range filters in UI')
+    it.todo('SHOULD support channel/user filters in UI')
+  })
 })

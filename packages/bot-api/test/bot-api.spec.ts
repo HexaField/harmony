@@ -799,4 +799,10 @@ describe('@harmony/bot-api', () => {
       expect(result!.displayName).toBe('Deploy Bot')
     })
   })
+
+  describe('Channel Scoping', () => {
+    it.todo('MUST scope bot to specific channels only')
+    it.todo('MUST NOT deliver events from non-scoped channels')
+    it.todo('MUST reject sendMessage to non-scoped channel')
+  })
 })

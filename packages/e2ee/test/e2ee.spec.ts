@@ -871,4 +871,10 @@ describe('@harmony/e2ee', () => {
       expect(verifyKeyPackageSignature(badSig)).toBe(false)
     })
   })
+
+  describe('Re-keying', () => {
+    it.todo('MUST re-key MLS group when member is revoked')
+    it.todo('MUST NOT allow revoked member to decrypt new messages')
+    it.todo('SHOULD complete re-keying within bounded time')
+  })
 })

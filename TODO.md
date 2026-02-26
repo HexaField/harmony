@@ -17,17 +17,7 @@
 
 ---
 
-## Post-Launch — Wiring Gaps
-
-### Federation
-
-Protocol + `FederationManager` exist (319 LOC) but servers can't discover or relay to each other.
-
-- [ ] Server-to-server WebSocket connection
-- [ ] Peer discovery mechanism
-- [ ] Cross-server message relay
-- [ ] Trust model decisions (allow-list? open?)
-- [ ] Skipped test: `integration.spec.ts:363`
+## Pre-Launch — Required
 
 ### Threads
 
@@ -44,18 +34,6 @@ Cloud API routes exist, Settings UI has setup, Onboarding has recovery entry poi
 - [ ] Notification when someone requests recovery naming you as trusted contact
 - [ ] Approval UI (approve/deny with confirmation)
 - [ ] Status tracking (X of N approvals collected)
-
-### Rate Limiting Wiring
-
-Moderation module has rate limiting logic. Verify it's actually called in the server message handler.
-
-- [ ] Confirm rate limit check on `channel.send`
-- [ ] Confirm rate limit response sent to client
-- [ ] UI feedback when rate limited
-
----
-
-## Post-Launch — New Features
 
 ### Voice & Video
 
@@ -76,6 +54,28 @@ Scaffold exists (biometric.ts, push.ts, share-target.ts, background-sync.ts, pla
 - [ ] Biometric unlock for identity
 - [ ] Share target for invite links
 - [ ] Background sync for offline messages
+
+---
+
+## Post-Launch
+
+### Federation
+
+Protocol + `FederationManager` exist (319 LOC) but servers can't discover or relay to each other.
+
+- [ ] Server-to-server WebSocket connection
+- [ ] Peer discovery mechanism
+- [ ] Cross-server message relay
+- [ ] Trust model decisions (allow-list? open?)
+- [ ] Skipped test: `integration.spec.ts:363`
+
+### Rate Limiting Wiring
+
+Moderation module has rate limiting logic. Verify it's actually called in the server message handler.
+
+- [ ] Confirm rate limit check on `channel.send`
+- [ ] Confirm rate limit response sent to client
+- [ ] UI feedback when rate limited
 
 ### Friend Finding — Polish
 

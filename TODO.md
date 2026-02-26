@@ -7,26 +7,22 @@
 - ~~Ban Enforcement~~ ✅ — Server-side ban list, ban/unban handlers, 6 new tests
 - ~~PWA Icons~~ ✅ — Purple hexagon SVG, manifest + favicon
 - ~~GUIDE.md Audit~~ ✅ — Threads/export marked "Coming soon", voice/docker/downloads caveated
-- [ ] Voice/video — full section on joining voice channels
-- [ ] Docker deployment — full section but no Docker files exist
-- [ ] Desktop downloads — references .dmg/.exe/.AppImage that don't exist yet
-- [ ] Community export (`harmony community export` / `.hbundle` format) — referenced but not implemented
+
+## ~~E2EE Server-Side Key Exchange~~ ✅ Done (2026-02-26)
+
+Wired end-to-end: MLS group creation → key package exchange → auto member addition → encrypted messaging → decryption.
+
+- ~~Server tracks E2EE group metadata~~ ✅
+- ~~Server notifies group creators on new member key package upload (`mls.member.joined`)~~ ✅
+- ~~Client auto-adds new members to MLS groups~~ ✅
+- ~~Client decrypts messages when MLS group exists, plaintext fallback otherwise~~ ✅
+- ~~11 new integration tests (e2ee-integration.spec.ts)~~ ✅
+- ~~Un-skipped integration.spec.ts:289 + user-journeys.spec.ts:715~~ ✅
+- [ ] UI toggle for E2EE per channel/community (deferred — works programmatically via `enableE2EE()`)
 
 ---
 
 ## Post-Launch — Wiring Gaps
-
-Features where the library/backend exists but isn't connected end-to-end.
-
-### E2EE Server-Side Key Exchange
-
-MLS library works (54 tests), client has `enableE2EE()`, but server doesn't coordinate MLS group membership.
-
-- [ ] Server handles `mls.keypackage.upload` messages
-- [ ] Server manages MLS group state per channel
-- [ ] Welcome messages sent to new members joining encrypted channels
-- [ ] UI toggle for E2EE per channel/community
-- [ ] Skipped test: `integration.spec.ts:289`, `user-journeys.spec.ts:715`
 
 ### DM Encryption
 
@@ -115,15 +111,13 @@ GUIDE.md references `harmony community export` and `.hbundle` format for moving 
 
 ## Polish & Quality
 
-### Skipped Tests (71 total)
+### Skipped Tests (68 remaining)
 
-Mostly infrastructure-dependent. Categorise and track:
+Mostly infrastructure-dependent. Categorised:
 
 - **Discord OAuth dependent** (2) — cloud.spec.ts:178, 182
 - **Workers runtime dependent** (4) — cloud-worker.spec.ts:277, 282, 286, 290
-- **E2EE key exchange** (2) — integration.spec.ts:289, user-journeys.spec.ts:715
 - **Federation** (1) — integration.spec.ts:363
-- **Ban enforcement** (1) — integration.spec.ts:426
 - **Discord bot token** (1) — migration-e2e.spec.ts:12
 - **Full OAuth flow** (3) — migration-e2e.spec.ts:108, 208, 243
 - **Bot API advanced** (5) — bot-api.spec.ts:657, 704, 774, 778, 784
@@ -150,9 +144,9 @@ Addressed in POLISH.md pass — worth visual re-verification after all recent ch
 
 ## Stats Snapshot (2026-02-26)
 
-- **Tests:** 2187 passing, 71 skipped, 82 files
+- **Tests:** 2206 passing, 68 skipped, 83 files
 - **Packages:** 36
-- **UI:** 22 views, 15 component directories, 9667 LOC
-- **Client:** 1934 LOC
-- **Server:** 1682 LOC
-- **Total estimated LOC:** ~25,000+
+- **UI:** 22 views, 15 component directories, ~9700 LOC
+- **Client:** ~1950 LOC
+- **Server:** ~1725 LOC
+- **Total estimated LOC:** ~26,000+

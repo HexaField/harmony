@@ -1,6 +1,7 @@
 import { createSignal, Show, For, type Component, onMount } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
+import { addToast } from '../components/Shared/index.js'
 
 export const ThreadView: Component = () => {
   const store = useAppStore()
@@ -38,6 +39,7 @@ export const ThreadView: Component = () => {
       setTimeout(scrollToBottom, 100)
     } catch (err) {
       console.error('Failed to send thread message:', err)
+      addToast({ message: t('THREAD_SEND_FAILED'), type: 'error' })
     }
   }
 

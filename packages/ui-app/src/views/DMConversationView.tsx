@@ -1,6 +1,6 @@
 import { For, Show, createSignal, createEffect, on, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
-import { MarkdownRenderer } from '../components/Shared/index.js'
+import { MarkdownRenderer, addToast } from '../components/Shared/index.js'
 import { RelativeTime } from '../components/Shared/index.js'
 import { t } from '../i18n/strings.js'
 import { pseudonymFromDid } from '../utils/pseudonym.js'
@@ -58,6 +58,7 @@ export const DMConversationView: Component = () => {
         requestAnimationFrame(() => messagesEndRef?.scrollIntoView({ behavior: 'smooth' }))
       } catch (err) {
         console.error('Failed to send DM:', err)
+        addToast({ message: t('DM_SEND_FAILED'), type: 'error' })
         addLocalDM(text)
       }
     } else {
@@ -120,6 +121,7 @@ export const DMConversationView: Component = () => {
         store.updateDMMessage(recipient, msgId, newText)
       } catch (err) {
         console.error('Failed to edit DM:', err)
+        addToast({ message: t('DM_EDIT_FAILED'), type: 'error' })
       }
     }
     store.setEditingMessageId(null)
@@ -139,6 +141,7 @@ export const DMConversationView: Component = () => {
         store.removeDMMessage(recipient, msgId)
       } catch (err) {
         console.error('Failed to delete DM:', err)
+        addToast({ message: t('DM_DELETE_FAILED'), type: 'error' })
       }
     }
     setConfirmDelete(null)
@@ -150,6 +153,12 @@ export const DMConversationView: Component = () => {
     <div class="flex flex-col flex-1 min-h-0">
       {/* DM Title bar */}
       <div class="h-12 flex items-center px-4 bg-[var(--bg-secondary)] border-b border-[var(--border)] shrink-0">
+        <button
+          onClick={() => store.setActiveDMRecipient(null)}
+          class="md:hidden text-[var(--text-muted)] hover:text-[var(--text-primary)] mr-2 transition-colors text-sm"
+        >
+          ←
+        </button>
         <span class="text-[var(--text-muted)] mr-2">💬</span>
         <span class="font-semibold">{recipientName()}</span>
       </div>
@@ -319,7 +328,7 @@ export const DMConversationView: Component = () => {
       </Show>
 
       {/* Message input */}
-      <div class="px-4 pb-6 pt-2 shrink-0">
+      <div class="px-4 pb-6 mobile-input-safe pt-2 shrink-0">
         <div class="flex items-end bg-[var(--bg-input)] rounded-lg border border-[var(--border)] focus-within:border-[var(--accent)] transition-colors">
           <textarea
             value={inputContent()}

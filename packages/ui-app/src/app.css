@@ -70,6 +70,8 @@ body {
     inset: 0;
     z-index: 40;
     background: rgba(0, 0, 0, 0.5);
+    animation: fadeIn 0.2s ease-out;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .mobile-sidebar-drawer {
@@ -80,6 +82,9 @@ body {
     z-index: 50;
     display: flex;
     max-width: 85vw;
+    animation: slideInLeft 0.25s ease-out;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   .mobile-member-drawer {
@@ -89,6 +94,9 @@ body {
     bottom: 0;
     z-index: 50;
     max-width: 85vw;
+    animation: slideInRight 0.25s ease-out;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   .mobile-thread-fullscreen {
@@ -96,6 +104,9 @@ body {
     inset: 0;
     z-index: 50;
     background: var(--bg-primary);
+    animation: fadeIn 0.2s ease-out;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   /* Hamburger button */
@@ -103,8 +114,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     border: none;
     background: none;
     color: var(--text-primary);
@@ -112,6 +123,7 @@ body {
     cursor: pointer;
     touch-action: manipulation;
     flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
   }
 
   /* Touch-friendly targets */
@@ -130,16 +142,57 @@ body {
     overflow-x: hidden;
   }
 
-  /* Message input stays above keyboard */
-  .message-input-container {
-    position: sticky;
-    bottom: 0;
-    bottom: env(safe-area-inset-bottom);
+  /* Message input safe area for iOS home indicator */
+  .mobile-input-safe {
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+
+  /* Settings mobile layout */
+  .settings-mobile-nav {
+    display: flex;
+    gap: 0.25rem;
+    overflow-x: auto;
+    padding: 0.5rem;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .settings-mobile-nav::-webkit-scrollbar {
+    display: none;
   }
 }
 
 @media (min-width: 768px) {
   .mobile-hamburger {
     display: none;
+  }
+  .settings-mobile-nav {
+    display: none;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
   }
 }

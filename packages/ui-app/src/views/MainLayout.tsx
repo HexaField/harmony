@@ -96,12 +96,21 @@ export const MainLayout: Component = () => {
 
             {/* Connection state banner */}
             <Show when={store.connectionState() === 'disconnected' && store.communities().length > 0}>
-              <div class="bg-[var(--error)] text-white text-center py-1 text-sm">
-                {store.connectionError() || t('OFFLINE_BANNER')}
+              <div class="bg-[var(--error)] text-white text-center py-1 text-sm flex items-center justify-center gap-2">
+                <span>{store.connectionError() || t('OFFLINE_BANNER')}</span>
+                <button
+                  onClick={() => store.client()?.reconnect()}
+                  class="px-2 py-0.5 rounded bg-white/20 hover:bg-white/30 text-xs font-semibold transition-colors"
+                >
+                  {t('RETRY') ?? 'Retry'}
+                </button>
               </div>
             </Show>
             <Show when={store.connectionState() === 'reconnecting'}>
-              <div class="bg-[var(--warning)] text-black text-center py-1 text-sm">{t('ERROR_NETWORK_LOST')}</div>
+              <div class="bg-[var(--warning)] text-black text-center py-1 text-sm">
+                {t('ERROR_NETWORK_LOST')}
+                <span class="ml-2 inline-block w-3 h-3 border border-black/30 border-t-black rounded-full animate-spin align-middle" />
+              </div>
             </Show>
 
             {/* Connection error */}

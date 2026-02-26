@@ -32,37 +32,78 @@ export const SettingsView: Component = () => {
     { key: 'about', label: () => t('SETTINGS_ABOUT') }
   ]
 
+  const [isMobile, setIsMobile] = createSignal(window.innerWidth < 768)
+
+  if (typeof window !== 'undefined') {
+    const onResize = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', onResize)
+    // cleanup not needed — component unmounts with settings close
+  }
+
   return (
-    <div class="flex h-screen bg-[var(--bg-primary)]">
-      {/* Sidebar */}
-      <div class="w-60 bg-[var(--bg-secondary)] p-4 flex flex-col">
-        <button
-          onClick={() => store.setShowSettings(false)}
-          class="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] mb-4 text-left transition-colors"
-        >
-          {t('SETTINGS_BACK')}
-        </button>
-        <h2 class="text-lg font-bold mb-4">{t('SETTINGS_USER')}</h2>
-        <ul class="space-y-1">
-          <For each={navItems}>
-            {(item) => (
-              <li
-                onClick={() => setSection(item.key)}
-                class="px-3 py-2 rounded text-sm cursor-pointer transition-colors"
-                classList={{
-                  'bg-[var(--bg-input)] text-[var(--text-primary)]': section() === item.key,
-                  'hover:bg-[var(--bg-input)] text-[var(--text-muted)]': section() !== item.key
-                }}
-              >
-                {item.label()}
-              </li>
-            )}
-          </For>
-        </ul>
-      </div>
+    <div class="flex flex-col md:flex-row h-screen bg-[var(--bg-primary)]">
+      {/* Desktop Sidebar */}
+      <Show when={!isMobile()}>
+        <div class="w-60 bg-[var(--bg-secondary)] p-4 flex flex-col">
+          <button
+            onClick={() => store.setShowSettings(false)}
+            class="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] mb-4 text-left transition-colors"
+          >
+            {t('SETTINGS_BACK')}
+          </button>
+          <h2 class="text-lg font-bold mb-4">{t('SETTINGS_USER')}</h2>
+          <ul class="space-y-1">
+            <For each={navItems}>
+              {(item) => (
+                <li
+                  onClick={() => setSection(item.key)}
+                  class="px-3 py-2 rounded text-sm cursor-pointer transition-colors"
+                  classList={{
+                    'bg-[var(--bg-input)] text-[var(--text-primary)]': section() === item.key,
+                    'hover:bg-[var(--bg-input)] text-[var(--text-muted)]': section() !== item.key
+                  }}
+                >
+                  {item.label()}
+                </li>
+              )}
+            </For>
+          </ul>
+        </div>
+      </Show>
+
+      {/* Mobile header + tabs */}
+      <Show when={isMobile()}>
+        <div class="bg-[var(--bg-secondary)] border-b border-[var(--border)]">
+          <div class="flex items-center px-3 h-12">
+            <button
+              onClick={() => store.setShowSettings(false)}
+              class="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              ← {t('SETTINGS_BACK')}
+            </button>
+            <h2 class="text-lg font-bold ml-3">{t('SETTINGS_USER')}</h2>
+          </div>
+          <div class="settings-mobile-nav">
+            <For each={navItems}>
+              {(item) => (
+                <button
+                  onClick={() => setSection(item.key)}
+                  class="px-3 py-2 rounded text-sm whitespace-nowrap transition-colors shrink-0"
+                  classList={{
+                    'bg-[var(--accent)] text-white': section() === item.key,
+                    'bg-[var(--bg-input)] text-[var(--text-muted)]': section() !== item.key
+                  }}
+                >
+                  {item.label()}
+                </button>
+              )}
+            </For>
+          </div>
+        </div>
+      </Show>
 
       {/* Content */}
-      <div class="flex-1 p-8 overflow-y-auto">
+      <div class="flex-1 p-4 md:p-8 overflow-y-auto">
         {/* Identity */}
         <Show when={section() === 'identity'}>
           <h3 class="text-xl font-bold mb-6">{t('SETTINGS_IDENTITY')}</h3>

@@ -75,6 +75,9 @@ export const MessageArea: Component = () => {
         const cached = store.channelMessages(channelId)
         store.setMessages(cached.length > 0 ? cached : [])
         requestAnimationFrame(() => messagesEndRef?.scrollIntoView({ behavior: 'instant' }))
+        setShowEmojiPicker(null)
+        setConfirmDelete(null)
+        setThreadPromptMsg(null)
       }
     )
   )
@@ -213,6 +216,7 @@ export const MessageArea: Component = () => {
         requestAnimationFrame(() => messagesEndRef?.scrollIntoView({ behavior: 'smooth' }))
       } catch (err) {
         console.error('Failed to send message:', err)
+        addToast({ message: t('DM_SEND_FAILED'), type: 'error' })
         addLocalMessage(text, attachments)
       }
     } else {
@@ -277,6 +281,7 @@ export const MessageArea: Component = () => {
         store.updateMessage(channelId, msgId, newText)
       } catch (err) {
         console.error('Failed to edit:', err)
+        addToast({ message: t('MESSAGE_EDIT_FAILED'), type: 'error' })
       }
     }
     store.setEditingMessageId(null)
@@ -297,6 +302,7 @@ export const MessageArea: Component = () => {
         store.removeMessage(channelId, msgId)
       } catch (err) {
         console.error('Failed to delete:', err)
+        addToast({ message: t('MESSAGE_DELETE_FAILED'), type: 'error' })
       }
     }
     setConfirmDelete(null)
@@ -316,6 +322,7 @@ export const MessageArea: Component = () => {
       setThreadName('')
     } catch (err) {
       console.error('Failed to create thread:', err)
+      addToast({ message: t('THREAD_CREATE_FAILED'), type: 'error' })
     }
   }
 
@@ -348,6 +355,7 @@ export const MessageArea: Component = () => {
       }
     } catch (err) {
       console.error('Reaction failed:', err)
+      addToast({ message: t('REACTION_FAILED'), type: 'error' })
     }
     setShowEmojiPicker(null)
   }
@@ -716,7 +724,7 @@ export const MessageArea: Component = () => {
       </Show>
 
       {/* Message input */}
-      <div class="px-4 pb-6 pt-2 shrink-0">
+      <div class="px-4 pb-6 mobile-input-safe pt-2 shrink-0">
         {/* Upload progress */}
         <Show when={uploading()}>
           <div class="flex items-center gap-2 px-3 py-2 mb-2 bg-[var(--bg-input)] rounded-lg text-sm text-[var(--text-muted)]">

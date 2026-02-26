@@ -285,6 +285,7 @@ export const en = {
 
   // Shared
   OFFLINE_BANNER: 'You are offline',
+  RETRY: 'Retry',
   RECONNECTING: 'Reconnecting...',
   TYPING_INDICATOR: '{user} is typing...',
   TYPING_MANY: '{count} people are typing...',
@@ -376,6 +377,14 @@ export const en = {
   // Error messages
   ERROR_CONNECTION_FAILED: 'Could not connect to server at {url}. Check that the server is running.',
   ERROR_AUTH_FAILED: 'Authentication failed. Your identity may not be recognized by this server.',
+  MESSAGE_EDIT_FAILED: 'Failed to edit message',
+  MESSAGE_DELETE_FAILED: 'Failed to delete message',
+  THREAD_CREATE_FAILED: 'Failed to create thread',
+  THREAD_SEND_FAILED: 'Failed to send thread reply',
+  REACTION_FAILED: 'Failed to update reaction',
+  DM_SEND_FAILED: 'Failed to send message',
+  DM_EDIT_FAILED: 'Failed to edit message',
+  DM_DELETE_FAILED: 'Failed to delete message',
   ERROR_COMMUNITY_CREATE_FAILED: 'Failed to create community: {error}',
   ERROR_NETWORK_LOST: 'Network connection lost. Reconnecting...',
   ERROR_COMMUNITY_JOIN_FAILED: 'Failed to join community: {error}',

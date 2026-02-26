@@ -370,6 +370,7 @@ export function createAppStore(): AppStore {
   const [showDMView, setShowDMView] = createSignal(false)
   const [showNewDMModal, setShowNewDMModal] = createSignal(false)
   const dmMessageCache = new Map<string, MessageData[]>()
+  const [dmMsgVersion, setDmMsgVersion] = createSignal(0)
   // DM typing: recipientDid -> Map<did, { displayName, timestamp }>
   const dmTypingMap = new Map<string, Map<string, { displayName: string; timestamp: number }>>()
   const [dmTypingVersion, setDMTypingVersion] = createSignal(0)
@@ -381,6 +382,7 @@ export function createAppStore(): AppStore {
   }
 
   const dmMessages = (recipientDid: string): MessageData[] => {
+    dmMsgVersion() // track reactivity
     return dmMessageCache.get(recipientDid) ?? []
   }
 
@@ -388,6 +390,7 @@ export function createAppStore(): AppStore {
     const existing = dmMessageCache.get(recipientDid) ?? []
     if (existing.some((e) => e.id === m.id)) return
     dmMessageCache.set(recipientDid, [...existing, m])
+    setDmMsgVersion((v) => v + 1)
     // Update conversation list
     const convos = dmConversations()
     const idx = convos.findIndex((c) => c.participantDid === recipientDid)
@@ -417,6 +420,7 @@ export function createAppStore(): AppStore {
 
   const setDMMessages = (recipientDid: string, msgs: MessageData[]) => {
     dmMessageCache.set(recipientDid, msgs)
+    setDmMsgVersion((v) => v + 1)
   }
 
   const updateDMMessage = (recipientDid: string, messageId: string, newContent: string) => {
@@ -428,6 +432,7 @@ export function createAppStore(): AppStore {
         dmMessageCache.set(recipientDid, [...msgs])
       }
     }
+    setDmMsgVersion((v) => v + 1)
   }
 
   const removeDMMessage = (recipientDid: string, messageId: string) => {
@@ -438,6 +443,7 @@ export function createAppStore(): AppStore {
         msgs.filter((m) => m.id !== messageId)
       )
     }
+    setDmMsgVersion((v) => v + 1)
   }
 
   const markDMRead = (recipientDid: string) => {
@@ -725,8 +731,10 @@ export function createAppStore(): AppStore {
 
   // Per-channel message cache
   const channelMessageCache = new Map<string, MessageData[]>()
+  const [channelMsgVersion, setChannelMsgVersion] = createSignal(0)
 
   const channelMessages = (channelId: string): MessageData[] => {
+    channelMsgVersion() // track reactivity
     return channelMessageCache.get(channelId) ?? []
   }
 
@@ -734,10 +742,12 @@ export function createAppStore(): AppStore {
     const existing = channelMessageCache.get(channelId) ?? []
     if (existing.some((e) => e.id === m.id)) return
     channelMessageCache.set(channelId, [...existing, m])
+    setChannelMsgVersion((v) => v + 1)
   }
 
   const setChannelMessages = (channelId: string, msgs: MessageData[]) => {
     channelMessageCache.set(channelId, msgs)
+    setChannelMsgVersion((v) => v + 1)
   }
 
   const updateMessage = (channelId: string, messageId: string, newContent: string) => {
@@ -751,6 +761,7 @@ export function createAppStore(): AppStore {
     }
     // Also update global messages
     setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, content: newContent, edited: true } : m)))
+    setChannelMsgVersion((v) => v + 1)
   }
 
   const removeMessage = (channelId: string, messageId: string) => {
@@ -762,6 +773,7 @@ export function createAppStore(): AppStore {
       )
     }
     setMessages((prev) => prev.filter((m) => m.id !== messageId))
+    setChannelMsgVersion((v) => v + 1)
   }
 
   const searchMessages = (query: string): MessageData[] => {

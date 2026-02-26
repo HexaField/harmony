@@ -27,6 +27,8 @@ export type MessageType =
   | 'member.update'
   | 'member.kick'
   | 'member.ban'
+  | 'community.ban'
+  | 'community.unban'
   | 'presence.update'
   | 'sync.request'
   | 'sync.state'
@@ -50,6 +52,8 @@ export type MessageType =
   | 'community.member.updated'
   | 'community.member.kicked'
   | 'community.member.banned'
+  | 'community.ban.applied'
+  | 'community.unban.applied'
   | 'community.member.reconciled'
   | 'community.auto-joined'
   | 'channel.created'
@@ -135,6 +139,8 @@ export const CLIENT_TO_SERVER_TYPES: MessageType[] = [
   'member.update',
   'member.kick',
   'member.ban',
+  'community.ban',
+  'community.unban',
   'presence.update',
   'sync.request',
   'sync.state',
@@ -186,6 +192,8 @@ export const SERVER_TO_CLIENT_TYPES: MessageType[] = [
   'community.member.updated',
   'community.member.kicked',
   'community.member.banned',
+  'community.ban.applied',
+  'community.unban.applied',
   'community.member.reconciled',
   'community.auto-joined',
   'channel.created',

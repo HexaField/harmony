@@ -619,6 +619,7 @@ export class HarmonyServer {
   private communitySubscriptions: Map<string, Set<string>> = new Map() // communityId → connection IDs
   private keyPackages: Map<string, Uint8Array[]> = new Map() // DID → key packages (serialized)
   private voiceChannelParticipants: Map<string, Set<string>> = new Map() // channelId → Set<connId>
+  private bannedUsers: Map<string, Set<string>> = new Map() // communityId → Set<DID>
 
   constructor(config: ServerConfig) {
     this.config = config
@@ -873,6 +874,12 @@ export class HarmonyServer {
       case 'community.leave':
         await this.handleCommunityLeave(conn, msg)
         break
+      case 'community.ban':
+        await this.handleCommunityBan(conn, msg)
+        break
+      case 'community.unban':
+        await this.handleCommunityUnban(conn, msg)
+        break
       case 'channel.create':
         await this.handleChannelCreate(conn, msg)
         break
@@ -954,6 +961,19 @@ export class HarmonyServer {
         })
         return
       }
+    }
+
+    // Check ban list on send
+    if (this.isUserBanned(payload.communityId, conn.did)) {
+      this.sendToConnection(conn, {
+        id: `ban-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'BANNED', message: 'You are banned from this community' }
+      })
+      conn.ws.close(4003, 'Banned')
+      return
     }
 
     // Store message
@@ -1090,6 +1110,20 @@ export class HarmonyServer {
 
   private async handleCommunityJoin(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
     const payload = msg.payload as { communityId: string; membershipVC: VerifiableCredential }
+
+    // Check ban list
+    if (this.isUserBanned(payload.communityId, conn.did)) {
+      this.sendToConnection(conn, {
+        id: `ban-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'BANNED', message: 'You are banned from this community' }
+      })
+      conn.ws.close(4003, 'Banned')
+      return
+    }
+
     const result = await this.communityManager.join({
       communityId: payload.communityId,
       memberDID: conn.did,
@@ -1136,6 +1170,110 @@ export class HarmonyServer {
       timestamp: new Date().toISOString(),
       sender: conn.did,
       payload: { communityId: payload.communityId, memberDID: conn.did }
+    })
+  }
+
+  // ── Ban Management ──
+
+  private isUserBanned(communityId: string, did: string): boolean {
+    return this.bannedUsers.get(communityId)?.has(did) ?? false
+  }
+
+  private async isAdmin(communityId: string, did: string): Promise<boolean> {
+    const info = await this.communityManager.getInfo(communityId)
+    if (!info) return false
+    if (info.creatorDID === did) return true
+    // Check for admin role in member quads
+    const members = await this.communityManager.getMembers(communityId)
+    const member = members.find((m) => m.did === did)
+    return member?.roles.includes('admin') ?? false
+  }
+
+  private async handleCommunityBan(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { communityId: string; targetDID: string; reason?: string }
+
+    // Admin check
+    if (!(await this.isAdmin(payload.communityId, conn.did))) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'FORBIDDEN', message: 'Only admins can ban users' }
+      })
+      return
+    }
+
+    // Cannot ban yourself
+    if (payload.targetDID === conn.did) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'INVALID', message: 'Cannot ban yourself' }
+      })
+      return
+    }
+
+    // Add to ban list
+    if (!this.bannedUsers.has(payload.communityId)) {
+      this.bannedUsers.set(payload.communityId, new Set())
+    }
+    this.bannedUsers.get(payload.communityId)!.add(payload.targetDID)
+
+    // Confirm ban to admin
+    this.sendToConnection(conn, {
+      id: `ban-ok-${Date.now()}`,
+      type: 'community.ban.applied',
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: { communityId: payload.communityId, targetDID: payload.targetDID }
+    })
+
+    // Disconnect banned user if currently connected
+    for (const [connId, otherConn] of this._connections) {
+      if (otherConn.did === payload.targetDID && otherConn.communities.includes(payload.communityId)) {
+        this.sendToConnection(otherConn, {
+          id: `banned-${Date.now()}`,
+          type: 'error',
+          timestamp: new Date().toISOString(),
+          sender: 'server',
+          payload: { code: 'BANNED', message: 'You are banned from this community' }
+        })
+        // Remove from community subscriptions
+        otherConn.communities = otherConn.communities.filter((c) => c !== payload.communityId)
+        this.communitySubscriptions.get(payload.communityId)?.delete(connId)
+        otherConn.ws.close(4003, 'Banned')
+      }
+    }
+  }
+
+  private async handleCommunityUnban(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { communityId: string; targetDID: string }
+
+    // Admin check
+    if (!(await this.isAdmin(payload.communityId, conn.did))) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'FORBIDDEN', message: 'Only admins can unban users' }
+      })
+      return
+    }
+
+    // Remove from ban list
+    this.bannedUsers.get(payload.communityId)?.delete(payload.targetDID)
+
+    // Confirm unban
+    this.sendToConnection(conn, {
+      id: `unban-ok-${Date.now()}`,
+      type: 'community.unban.applied',
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: { communityId: payload.communityId, targetDID: payload.targetDID }
     })
   }
 

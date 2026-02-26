@@ -423,10 +423,175 @@ describe('7. Federation (Instance-to-Instance)', () => {
 // ── 8. Moderation Flow ──
 
 describe('8. Moderation Flow', () => {
-  it.skip('should ban user, terminate connection, prevent reconnect, and unban (requires server-side ban list integration which is not wired — server accepts any valid VP)', async () => {
-    // HarmonyServer authenticates via VP verification. There's no ban list check in authenticateConnection.
-    // The ModerationPlugin handles rules but isn't integrated into HarmonyServer's message/connection flow.
-    // A full integration test would need the server to consult ModerationPlugin during auth and message handling.
+  it('should ban user, terminate connection, prevent reconnect, and unban', async () => {
+    const { server, port } = await createServerOnRandomPort()
+    servers.push(server)
+
+    const admin = await createIdentityAndVP()
+    const user = await createIdentityAndVP()
+
+    // Helper: wait for a message of specific type on a WS
+    const waitMsg = (ws: WebSocket, type: string, timeout = 3000) =>
+      new Promise<any>((resolve, reject) => {
+        const t = setTimeout(() => {
+          ws.removeListener('message', h)
+          reject(new Error('timeout:' + type))
+        }, timeout)
+        const h = (d: any) => {
+          const m = JSON.parse(d.toString())
+          if (m.type === type) {
+            clearTimeout(t)
+            ws.removeListener('message', h)
+            resolve(m)
+          }
+        }
+        ws.on('message', h)
+      })
+
+    // Admin raw WS — connect & auth
+    const wsAdmin = new WebSocket('ws://127.0.0.1:' + port)
+    await new Promise<void>((r) => wsAdmin.on('open', r))
+    const authP = waitMsg(wsAdmin, 'sync.response')
+    wsAdmin.send(
+      JSON.stringify({
+        id: 'a1',
+        type: 'sync.state',
+        timestamp: new Date().toISOString(),
+        sender: admin.identity.did,
+        payload: admin.vp
+      })
+    )
+    await authP
+
+    // Admin creates community
+    const ccP = waitMsg(wsAdmin, 'community.updated')
+    wsAdmin.send(
+      JSON.stringify({
+        id: 'cc1',
+        type: 'community.create',
+        timestamp: new Date().toISOString(),
+        sender: admin.identity.did,
+        payload: { name: 'Ban Test' }
+      })
+    )
+    const ccResp = await ccP
+    const communityId = ccResp.payload.communityId
+
+    // User raw WS — connect & auth
+    const wsUser = new WebSocket('ws://127.0.0.1:' + port)
+    await new Promise<void>((r) => wsUser.on('open', r))
+    const authP2 = waitMsg(wsUser, 'sync.response')
+    wsUser.send(
+      JSON.stringify({
+        id: 'a2',
+        type: 'sync.state',
+        timestamp: new Date().toISOString(),
+        sender: user.identity.did,
+        payload: user.vp
+      })
+    )
+    await authP2
+
+    // User joins community
+    const joinP = waitMsg(wsUser, 'community.updated')
+    wsUser.send(
+      JSON.stringify({
+        id: 'cj1',
+        type: 'community.join',
+        timestamp: new Date().toISOString(),
+        sender: user.identity.did,
+        payload: { communityId, membershipVC: {} }
+      })
+    )
+    await joinP
+
+    // Admin bans user
+    const userClosed = new Promise<number>((r) => wsUser.on('close', (code) => r(code)))
+    const banP = waitMsg(wsAdmin, 'community.ban.applied')
+    wsAdmin.send(
+      JSON.stringify({
+        id: 'b1',
+        type: 'community.ban',
+        timestamp: new Date().toISOString(),
+        sender: admin.identity.did,
+        payload: { communityId, targetDID: user.identity.did }
+      })
+    )
+    await banP
+    const closeCode = await userClosed
+    expect(closeCode).toBe(4003)
+
+    // Banned user cannot rejoin
+    const wsUser2 = new WebSocket('ws://127.0.0.1:' + port)
+    await new Promise<void>((r) => wsUser2.on('open', r))
+    const authP3 = waitMsg(wsUser2, 'sync.response')
+    wsUser2.send(
+      JSON.stringify({
+        id: 'a3',
+        type: 'sync.state',
+        timestamp: new Date().toISOString(),
+        sender: user.identity.did,
+        payload: user.vp
+      })
+    )
+    await authP3
+
+    const user2Closed = new Promise<number>((r) => wsUser2.on('close', (code) => r(code)))
+    wsUser2.send(
+      JSON.stringify({
+        id: 'cj2',
+        type: 'community.join',
+        timestamp: new Date().toISOString(),
+        sender: user.identity.did,
+        payload: { communityId, membershipVC: {} }
+      })
+    )
+    const closeCode2 = await user2Closed
+    expect(closeCode2).toBe(4003)
+
+    // Admin unbans user
+    const unbanP = waitMsg(wsAdmin, 'community.unban.applied')
+    wsAdmin.send(
+      JSON.stringify({
+        id: 'ub1',
+        type: 'community.unban',
+        timestamp: new Date().toISOString(),
+        sender: admin.identity.did,
+        payload: { communityId, targetDID: user.identity.did }
+      })
+    )
+    await unbanP
+
+    // Unbanned user can rejoin
+    const wsUser3 = new WebSocket('ws://127.0.0.1:' + port)
+    await new Promise<void>((r) => wsUser3.on('open', r))
+    const authP4 = waitMsg(wsUser3, 'sync.response')
+    wsUser3.send(
+      JSON.stringify({
+        id: 'a4',
+        type: 'sync.state',
+        timestamp: new Date().toISOString(),
+        sender: user.identity.did,
+        payload: user.vp
+      })
+    )
+    await authP4
+
+    const rejoinP = waitMsg(wsUser3, 'community.updated')
+    wsUser3.send(
+      JSON.stringify({
+        id: 'cj3',
+        type: 'community.join',
+        timestamp: new Date().toISOString(),
+        sender: user.identity.did,
+        payload: { communityId, membershipVC: {} }
+      })
+    )
+    const joinResp = await rejoinP
+    expect(joinResp.payload.communityId).toBe(communityId)
+
+    wsUser3.close()
+    wsAdmin.close()
   })
 
   it('should enforce moderation rules (slow mode, rate limit)', async () => {

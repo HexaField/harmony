@@ -2111,4 +2111,284 @@ describe('@harmony/server', () => {
       ws.close()
     })
   })
+
+  describe('Ban Enforcement', () => {
+    it('MUST allow admin to ban a user and disconnect them', async () => {
+      const admin = await createIdentity()
+      const user = await createIdentity()
+
+      const wsAdmin = await connectAndAuth(admin.vp)
+      const wsUser = await connectAndAuth(user.vp)
+
+      // Admin creates community
+      const createMsg: ProtocolMessage = {
+        id: 'cc-ban-1',
+        type: 'community.create',
+        timestamp: new Date().toISOString(),
+        sender: admin.did,
+        payload: { name: 'Ban Test', creatorKeyPair: admin.keyPair }
+      }
+      const createResp = await sendAndWait(wsAdmin, createMsg)
+      const communityId = (createResp.payload as any).communityId
+
+      // User joins community
+      const joinMsg: ProtocolMessage = {
+        id: 'cj-ban-1',
+        type: 'community.join',
+        timestamp: new Date().toISOString(),
+        sender: user.did,
+        payload: { communityId, membershipVC: user.memberVC }
+      }
+      await sendAndWait(wsUser, joinMsg)
+
+      // Drain pending community.member.joined broadcast on admin ws
+      await waitForMessage(wsAdmin, 1000).catch(() => {})
+
+      // Admin bans user
+      const userClosed = new Promise<number>((resolve) => {
+        wsUser.on('close', (code) => resolve(code))
+      })
+
+      const banMsg: ProtocolMessage = {
+        id: 'ban-1',
+        type: 'community.ban' as any,
+        timestamp: new Date().toISOString(),
+        sender: admin.did,
+        payload: { communityId, targetDID: user.did, reason: 'test ban' }
+      }
+      const banResp = await sendAndWait(wsAdmin, banMsg)
+      expect((banResp.payload as any).targetDID).toBe(user.did)
+
+      // User should be disconnected
+      const closeCode = await userClosed
+      expect(closeCode).toBe(4003)
+
+      wsAdmin.close()
+    })
+
+    it('MUST prevent banned user from reconnecting to community', async () => {
+      const admin = await createIdentity()
+      const user = await createIdentity()
+
+      const wsAdmin = await connectAndAuth(admin.vp)
+
+      // Admin creates community
+      const createMsg: ProtocolMessage = {
+        id: 'cc-ban-2',
+        type: 'community.create',
+        timestamp: new Date().toISOString(),
+        sender: admin.did,
+        payload: { name: 'Ban Reconnect Test', creatorKeyPair: admin.keyPair }
+      }
+      const createResp = await sendAndWait(wsAdmin, createMsg)
+      const communityId = (createResp.payload as any).communityId
+
+      // Ban the user before they even connect
+      const banMsg: ProtocolMessage = {
+        id: 'ban-2',
+        type: 'community.ban' as any,
+        timestamp: new Date().toISOString(),
+        sender: admin.did,
+        payload: { communityId, targetDID: user.did }
+      }
+      await sendAndWait(wsAdmin, banMsg)
+
+      // User connects and tries to join
+      const wsUser = await connectAndAuth(user.vp)
+      const joinMsg: ProtocolMessage = {
+        id: 'cj-ban-2',
+        type: 'community.join',
+        timestamp: new Date().toISOString(),
+        sender: user.did,
+        payload: { communityId, membershipVC: user.memberVC }
+      }
+
+      const userClosed = new Promise<number>((resolve) => {
+        wsUser.on('close', (code) => resolve(code))
+      })
+
+      wsUser.send(serialise(joinMsg))
+      const closeCode = await userClosed
+      expect(closeCode).toBe(4003)
+
+      wsAdmin.close()
+    })
+
+    it('MUST allow admin to unban a user so they can reconnect', async () => {
+      const admin = await createIdentity()
+      const user = await createIdentity()
+
+      const wsAdmin = await connectAndAuth(admin.vp)
+
+      // Admin creates community
+      const createMsg: ProtocolMessage = {
+        id: 'cc-ban-3',
+        type: 'community.create',
+        timestamp: new Date().toISOString(),
+        sender: admin.did,
+        payload: { name: 'Unban Test', creatorKeyPair: admin.keyPair }
+      }
+      const createResp = await sendAndWait(wsAdmin, createMsg)
+      const communityId = (createResp.payload as any).communityId
+
+      // Ban then unban
+      const banMsg: ProtocolMessage = {
+        id: 'ban-3',
+        type: 'community.ban' as any,
+        timestamp: new Date().toISOString(),
+        sender: admin.did,
+        payload: { communityId, targetDID: user.did }
+      }
+      await sendAndWait(wsAdmin, banMsg)
+
+      const unbanMsg: ProtocolMessage = {
+        id: 'unban-3',
+        type: 'community.unban' as any,
+        timestamp: new Date().toISOString(),
+        sender: admin.did,
+        payload: { communityId, targetDID: user.did }
+      }
+      const unbanResp = await sendAndWait(wsAdmin, unbanMsg)
+      expect((unbanResp.payload as any).targetDID).toBe(user.did)
+
+      // User can now join
+      const wsUser = await connectAndAuth(user.vp)
+      const joinMsg: ProtocolMessage = {
+        id: 'cj-ban-3',
+        type: 'community.join',
+        timestamp: new Date().toISOString(),
+        sender: user.did,
+        payload: { communityId, membershipVC: user.memberVC }
+      }
+      const joinResp = await sendAndWait(wsUser, joinMsg)
+      expect((joinResp.payload as any).communityId).toBe(communityId)
+
+      wsUser.close()
+      wsAdmin.close()
+    })
+
+    it('MUST reject ban from non-admin user', async () => {
+      const admin = await createIdentity()
+      const user1 = await createIdentity()
+      const user2 = await createIdentity()
+
+      const wsAdmin = await connectAndAuth(admin.vp)
+      const wsUser1 = await connectAndAuth(user1.vp)
+
+      // Admin creates community
+      const createMsg: ProtocolMessage = {
+        id: 'cc-ban-4',
+        type: 'community.create',
+        timestamp: new Date().toISOString(),
+        sender: admin.did,
+        payload: { name: 'Non-admin Ban Test', creatorKeyPair: admin.keyPair }
+      }
+      const createResp = await sendAndWait(wsAdmin, createMsg)
+      const communityId = (createResp.payload as any).communityId
+
+      // User1 joins
+      const joinMsg: ProtocolMessage = {
+        id: 'cj-ban-4',
+        type: 'community.join',
+        timestamp: new Date().toISOString(),
+        sender: user1.did,
+        payload: { communityId, membershipVC: user1.memberVC }
+      }
+      await sendAndWait(wsUser1, joinMsg)
+
+      // Drain pending community.member.joined broadcast on admin ws
+      await waitForMessage(wsAdmin, 1000).catch(() => {})
+
+      // User1 tries to ban user2 — should fail
+      const banMsg: ProtocolMessage = {
+        id: 'ban-4',
+        type: 'community.ban' as any,
+        timestamp: new Date().toISOString(),
+        sender: user1.did,
+        payload: { communityId, targetDID: user2.did }
+      }
+      const banResp = await sendAndWait(wsUser1, banMsg)
+      expect((banResp.payload as any).code).toBe('FORBIDDEN')
+
+      wsUser1.close()
+      wsAdmin.close()
+    })
+
+    it('MUST reject channel.send from banned user', async () => {
+      const admin = await createIdentity()
+      const user = await createIdentity()
+
+      const wsAdmin = await connectAndAuth(admin.vp)
+      const wsUser = await connectAndAuth(user.vp)
+
+      // Admin creates community
+      const createMsg: ProtocolMessage = {
+        id: 'cc-ban-5',
+        type: 'community.create',
+        timestamp: new Date().toISOString(),
+        sender: admin.did,
+        payload: { name: 'Ban Send Test', creatorKeyPair: admin.keyPair }
+      }
+      const createResp = await sendAndWait(wsAdmin, createMsg)
+      const communityId = (createResp.payload as any).communityId
+      const channelId = ((createResp.payload as any).channels as any[])[0]?.id ?? 'channel:general'
+
+      // User joins
+      const joinMsg: ProtocolMessage = {
+        id: 'cj-ban-5',
+        type: 'community.join',
+        timestamp: new Date().toISOString(),
+        sender: user.did,
+        payload: { communityId, membershipVC: user.memberVC }
+      }
+      await sendAndWait(wsUser, joinMsg)
+
+      // Drain pending community.member.joined broadcast on admin ws
+      await waitForMessage(wsAdmin, 1000).catch(() => {})
+
+      // Admin bans user — user gets disconnected
+      const userClosed = new Promise<number>((resolve) => {
+        wsUser.on('close', (code) => resolve(code))
+      })
+
+      const banMsg: ProtocolMessage = {
+        id: 'ban-5',
+        type: 'community.ban' as any,
+        timestamp: new Date().toISOString(),
+        sender: admin.did,
+        payload: { communityId, targetDID: user.did }
+      }
+      await sendAndWait(wsAdmin, banMsg)
+      await userClosed
+
+      // User reconnects and tries to send (they're still banned)
+      const wsUser2 = await connectAndAuth(user.vp)
+      // Manually join without going through community.join (simulating a reconnect scenario)
+      // Actually they can't join because they're banned — so channel.send should fail too
+      // Since they can't be in the community, the send would fail because communityId isn't in their list
+      // But let's test that channel.send also checks ban list directly
+      const sendMsg: ProtocolMessage = {
+        id: 'send-ban-5',
+        type: 'channel.send',
+        timestamp: new Date().toISOString(),
+        sender: user.did,
+        payload: {
+          communityId,
+          channelId,
+          content: { text: 'hello' },
+          nonce: 'n1',
+          clock: { counter: 1, nodeId: user.did }
+        }
+      }
+
+      const user2Closed = new Promise<number>((resolve) => {
+        wsUser2.on('close', (code) => resolve(code))
+      })
+      wsUser2.send(serialise(sendMsg))
+      const closeCode = await user2Closed
+      expect(closeCode).toBe(4003)
+
+      wsAdmin.close()
+    })
+  })
 })

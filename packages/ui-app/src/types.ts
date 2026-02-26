@@ -88,9 +88,11 @@ export interface VoiceControlsProps {
   muted: boolean
   deafened: boolean
   videoOn: boolean
+  screenSharing: boolean
   onToggleMute: () => void
   onToggleDeafen: () => void
   onToggleVideo: () => void
+  onToggleScreenShare: () => void
   onLeave: () => void
 }
 export interface VoiceParticipantProps {
@@ -358,6 +360,8 @@ export interface VoiceParticipantInfo {
   muted: boolean
   deafened: boolean
   speaking: boolean
+  videoEnabled: boolean
+  screenSharing: boolean
 }
 export interface DMConversationInfo {
   id: string

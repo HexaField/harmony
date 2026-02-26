@@ -28,4 +28,19 @@ export class E2EEBridge {
   hasKey(): boolean {
     return this.currentKey !== null
   }
+
+  /**
+   * Creates an encoded transform for WebRTC Insertable Streams.
+   * In production, this encrypts/decrypts media frames using the MLS group key.
+   * Requires browser support for RTCRtpScriptTransform / Insertable Streams API.
+   */
+  createEncodedTransform(direction: 'sender' | 'receiver', key?: Uint8Array): { direction: string; hasKey: boolean } {
+    const activeKey = key ?? this.currentKey
+    // In production: return a TransformStream that encrypts/decrypts frames
+    // For MVP: return metadata indicating transform readiness
+    return {
+      direction,
+      hasKey: activeKey !== null
+    }
+  }
 }

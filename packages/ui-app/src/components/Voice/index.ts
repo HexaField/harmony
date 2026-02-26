@@ -11,11 +11,14 @@ export function VoiceControls(props: VoiceControlsProps) {
     muted: props.muted,
     deafened: props.deafened,
     videoOn: props.videoOn,
+    screenSharing: props.screenSharing,
     onToggleMute: props.onToggleMute,
     onToggleDeafen: props.onToggleDeafen,
     onToggleVideo: props.onToggleVideo,
+    onToggleScreenShare: props.onToggleScreenShare,
     onLeave: props.onLeave,
-    muteLabel: props.muted ? t('VOICE_UNMUTE') : t('VOICE_MUTE')
+    muteLabel: props.muted ? t('VOICE_UNMUTE') : t('VOICE_MUTE'),
+    screenShareLabel: props.screenSharing ? t('VOICE_STOP_SCREEN_SHARE') : t('VOICE_SCREEN_SHARE')
   }
 }
 

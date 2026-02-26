@@ -393,5 +393,94 @@ describe('@harmony/voice', () => {
       await conn.stopScreenShare()
       expect(conn.participants.find((p) => p.did === 'did:key:alice')!.screenSharing).toBe(false)
     })
+
+    it('MUST enable/disable video via injectable media provider', async () => {
+      const room = await manager.createRoom('comm1', 'ch1')
+      const token = await manager.generateJoinToken(room.id, 'did:key:alice', makeZCAPProof())
+      const mockMedia: any = {
+        getUserMedia: async () => ({ getTracks: () => [{ stop: () => {} }] }),
+        getDisplayMedia: async () => ({ getTracks: () => [{ stop: () => {} }] })
+      }
+      const voiceClient = new VoiceClient(mockMedia)
+      const conn = await voiceClient.joinRoom(token)
+
+      await conn.enableVideo()
+      expect(conn.localVideoEnabled).toBe(true)
+
+      await conn.disableVideo()
+      expect(conn.localVideoEnabled).toBe(false)
+    })
+
+    it('MUST throw clear error when media devices unavailable for video', async () => {
+      const room = await manager.createRoom('comm1', 'ch1')
+      const token = await manager.generateJoinToken(room.id, 'did:key:alice', makeZCAPProof())
+      const failMedia: any = {
+        getUserMedia: async () => {
+          throw new Error('Not available')
+        },
+        getDisplayMedia: async () => {
+          throw new Error('Not available')
+        }
+      }
+      const voiceClient = new VoiceClient(failMedia)
+      const conn = await voiceClient.joinRoom(token)
+
+      await expect(conn.enableVideo()).rejects.toThrow('Failed to enable video')
+    })
+
+    it('MUST clean up video and screen share on disconnect', async () => {
+      const room = await manager.createRoom('comm1', 'ch1')
+      const token = await manager.generateJoinToken(room.id, 'did:key:alice', makeZCAPProof())
+      const stopped: string[] = []
+      const mockMedia: any = {
+        getUserMedia: async () => ({ getTracks: () => [{ stop: () => stopped.push('video') }] }),
+        getDisplayMedia: async () => ({ getTracks: () => [{ stop: () => stopped.push('screen') }] })
+      }
+      const voiceClient = new VoiceClient(mockMedia)
+      const conn = await voiceClient.joinRoom(token)
+
+      const self: VoiceParticipant = {
+        did: 'did:key:alice',
+        joinedAt: new Date().toISOString(),
+        audioEnabled: true,
+        videoEnabled: false,
+        screenSharing: false,
+        speaking: false
+      }
+      ;(conn as any).simulateParticipantJoined(self)
+
+      await conn.enableVideo()
+      await conn.startScreenShare()
+      await conn.disconnect()
+
+      expect(stopped).toContain('video')
+      expect(stopped).toContain('screen')
+      expect(conn.localVideoEnabled).toBe(false)
+      expect((conn as any).localScreenSharing).toBe(false)
+    })
+
+    it('MUST track multiple participants with correct states', async () => {
+      const room = await manager.createRoom('comm1', 'ch1')
+      manager.addParticipant(room.id, 'did:key:alice', { audioEnabled: true, videoEnabled: true })
+      manager.addParticipant(room.id, 'did:key:bob', { audioEnabled: false, videoEnabled: false })
+
+      const roomState = await manager.getRoom(room.id)
+      expect(roomState!.participants).toHaveLength(2)
+
+      const alice = roomState!.participants.find((p) => p.did === 'did:key:alice')!
+      expect(alice.audioEnabled).toBe(true)
+      expect(alice.videoEnabled).toBe(true)
+
+      const bob = roomState!.participants.find((p) => p.did === 'did:key:bob')!
+      expect(bob.audioEnabled).toBe(false)
+      expect(bob.videoEnabled).toBe(false)
+    })
+
+    it('MUST track screen sharing state per participant in room', async () => {
+      const room = await manager.createRoom('comm1', 'ch1')
+      manager.addParticipant(room.id, 'did:key:alice')
+      const alice = (await manager.getRoom(room.id))!.participants[0]
+      expect(alice.screenSharing).toBe(false)
+    })
   })
 })

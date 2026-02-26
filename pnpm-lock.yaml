@@ -705,6 +705,9 @@ importers:
       '@harmony/vocab':
         specifier: workspace:*
         version: link:../vocab
+      '@harmony/voice':
+        specifier: workspace:*
+        version: link:../voice
       '@harmony/zcap':
         specifier: workspace:*
         version: link:../zcap

@@ -167,6 +167,10 @@ export interface AppStore {
   setMuted: (m: boolean) => void
   isDeafened: () => boolean
   setDeafened: (d: boolean) => void
+  isVideoEnabled: () => boolean
+  setVideoEnabled: (v: boolean) => void
+  isScreenSharing: () => boolean
+  setScreenSharing: (s: boolean) => void
   speakingUsers: () => Set<string>
   setSpeaking: (did: string, isSpeaking: boolean) => void
 
@@ -512,6 +516,8 @@ export function createAppStore(): AppStore {
   const [voiceUsers, setVoiceUsers] = createSignal<string[]>([])
   const [isMuted, setMuted] = createSignal(false)
   const [isDeafened, setDeafened] = createSignal(false)
+  const [isVideoEnabled, setVideoEnabled] = createSignal(false)
+  const [isScreenSharing, setScreenSharing] = createSignal(false)
   const [speakingUsers, _setSpeakingUsers] = createSignal<Set<string>>(new Set())
   const setSpeaking = (did: string, isSpeaking: boolean) => {
     _setSpeakingUsers((prev) => {
@@ -1430,6 +1436,10 @@ export function createAppStore(): AppStore {
     setMuted,
     isDeafened,
     setDeafened,
+    isVideoEnabled,
+    setVideoEnabled,
+    isScreenSharing,
+    setScreenSharing,
     speakingUsers,
     setSpeaking,
     friends,

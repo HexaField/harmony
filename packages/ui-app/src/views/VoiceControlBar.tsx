@@ -21,6 +21,8 @@ export const VoiceControlBar: Component = () => {
     store.setVoiceUsers([])
     store.setMuted(false)
     store.setDeafened(false)
+    store.setVideoEnabled(false)
+    store.setScreenSharing(false)
   }
 
   const handleToggleMute = () => {
@@ -31,6 +33,14 @@ export const VoiceControlBar: Component = () => {
     const newDeafened = !store.isDeafened()
     store.setDeafened(newDeafened)
     if (newDeafened) store.setMuted(true)
+  }
+
+  const handleToggleVideo = () => {
+    store.setVideoEnabled(!store.isVideoEnabled())
+  }
+
+  const handleToggleScreenShare = () => {
+    store.setScreenSharing(!store.isScreenSharing())
   }
 
   return (
@@ -93,6 +103,30 @@ export const VoiceControlBar: Component = () => {
             data-testid="voice-deafen-btn"
           >
             {store.isDeafened() ? '🔇' : '🎧'}
+          </button>
+          <button
+            onClick={handleToggleVideo}
+            class="p-1.5 rounded hover:bg-[var(--bg-input)] transition-colors text-sm"
+            classList={{
+              'text-[var(--accent)]': store.isVideoEnabled(),
+              'text-[var(--text-muted)]': !store.isVideoEnabled()
+            }}
+            title={store.isVideoEnabled() ? t('VOICE_VIDEO_OFF') : t('VOICE_VIDEO_ON')}
+            data-testid="voice-video-btn"
+          >
+            {store.isVideoEnabled() ? '📹' : '📷'}
+          </button>
+          <button
+            onClick={handleToggleScreenShare}
+            class="p-1.5 rounded hover:bg-[var(--bg-input)] transition-colors text-sm"
+            classList={{
+              'text-[var(--accent)]': store.isScreenSharing(),
+              'text-[var(--text-muted)]': !store.isScreenSharing()
+            }}
+            title={store.isScreenSharing() ? t('VOICE_STOP_SCREEN_SHARE') : t('VOICE_SCREEN_SHARE')}
+            data-testid="voice-screen-share-btn"
+          >
+            {store.isScreenSharing() ? '🖥️' : '💻'}
           </button>
           <div class="flex-1" />
           <button

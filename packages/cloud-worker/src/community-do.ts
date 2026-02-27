@@ -45,6 +45,15 @@ export class CommunityDurableObject extends DurableObject {
         topic TEXT,
         created_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS voice_participants (
+        room_id TEXT NOT NULL,
+        did TEXT NOT NULL,
+        audio_enabled INTEGER NOT NULL DEFAULT 1,
+        video_enabled INTEGER NOT NULL DEFAULT 0,
+        joined_at TEXT NOT NULL,
+        PRIMARY KEY (room_id, did)
+      );
     `)
   }
 
@@ -217,6 +226,15 @@ export class CommunityDurableObject extends DurableObject {
         break
       case 'sync.request':
         await this.handleSyncRequest(ws, meta)
+        break
+      case 'voice.join':
+        await this.handleVoiceJoin(ws, meta, msg)
+        break
+      case 'voice.leave':
+        await this.handleVoiceLeave(ws, meta, msg)
+        break
+      case 'voice.mute':
+        await this.handleVoiceMute(ws, meta, msg)
         break
       default:
         this.sendError(ws, `Unsupported message type: ${msg.type}`)
@@ -468,6 +486,132 @@ export class CommunityDurableObject extends DurableObject {
         payload: { members, channels }
       })
     )
+  }
+
+  // ── Voice ──
+
+  private async handleVoiceJoin(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { channelId: string; audioEnabled?: boolean; videoEnabled?: boolean }
+    const roomId = payload.channelId // One voice room per channel
+    const now = new Date().toISOString()
+
+    // Add participant to voice room
+    this.ctx.storage.sql.exec(
+      'INSERT OR REPLACE INTO voice_participants (room_id, did, audio_enabled, video_enabled, joined_at) VALUES (?, ?, ?, ?, ?)',
+      roomId,
+      meta.did,
+      payload.audioEnabled !== false ? 1 : 0,
+      payload.videoEnabled ? 1 : 0,
+      now
+    )
+
+    // Get current participants for this room
+    const participants = this.getVoiceParticipants(roomId)
+
+    // Notify the joining client
+    ws.send(
+      serialise({
+        id: msg.id,
+        type: 'voice.joined',
+        timestamp: now,
+        sender: 'server',
+        payload: { channelId: roomId, participants }
+      })
+    )
+
+    // Broadcast to all other clients
+    this.broadcast(
+      serialise({
+        id: crypto.randomUUID(),
+        type: 'voice.participant.joined',
+        timestamp: now,
+        sender: 'server',
+        payload: {
+          channelId: roomId,
+          did: meta.did,
+          audioEnabled: payload.audioEnabled !== false,
+          videoEnabled: payload.videoEnabled ?? false
+        }
+      }),
+      ws
+    )
+  }
+
+  private async handleVoiceLeave(_ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { channelId: string }
+    const roomId = payload.channelId
+
+    this.ctx.storage.sql.exec('DELETE FROM voice_participants WHERE room_id = ? AND did = ?', roomId, meta.did)
+
+    this.broadcast(
+      serialise({
+        id: msg.id,
+        type: 'voice.participant.left',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { channelId: roomId, did: meta.did }
+      })
+    )
+
+    // Clean up empty room
+    const remaining = this.getVoiceParticipants(roomId)
+    if (remaining.length === 0) {
+      // Room is empty — no cleanup needed for DO storage, participants table is empty
+    }
+  }
+
+  private async handleVoiceMute(_ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { channelId: string; trackKind: 'audio' | 'video'; muted: boolean }
+    const roomId = payload.channelId
+
+    if (payload.trackKind === 'audio') {
+      this.ctx.storage.sql.exec(
+        'UPDATE voice_participants SET audio_enabled = ? WHERE room_id = ? AND did = ?',
+        payload.muted ? 0 : 1,
+        roomId,
+        meta.did
+      )
+    } else {
+      this.ctx.storage.sql.exec(
+        'UPDATE voice_participants SET video_enabled = ? WHERE room_id = ? AND did = ?',
+        payload.muted ? 0 : 1,
+        roomId,
+        meta.did
+      )
+    }
+
+    this.broadcast(
+      serialise({
+        id: msg.id,
+        type: 'voice.participant.muted',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: {
+          channelId: roomId,
+          did: meta.did,
+          trackKind: payload.trackKind,
+          muted: payload.muted
+        }
+      })
+    )
+  }
+
+  private getVoiceParticipants(
+    roomId: string
+  ): Array<{ did: string; audioEnabled: boolean; videoEnabled: boolean; joinedAt: string }> {
+    const result: Array<{ did: string; audioEnabled: boolean; videoEnabled: boolean; joinedAt: string }> = []
+    for (const row of this.ctx.storage.sql.exec(
+      'SELECT did, audio_enabled, video_enabled, joined_at FROM voice_participants WHERE room_id = ?',
+      roomId
+    )) {
+      result.push({
+        did: row.did as string,
+        audioEnabled: (row.audio_enabled as number) === 1,
+        videoEnabled: (row.video_enabled as number) === 1,
+        joinedAt: row.joined_at as string
+      })
+    }
+    return result
   }
 
   // ── Helpers ──

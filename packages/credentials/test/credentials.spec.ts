@@ -129,15 +129,9 @@ describe('@harmony/credentials', () => {
       expect(selfType.def.issuerPolicy.kind).toBe('self-attest')
     })
 
-    it.skip('MUST reject registration without admin ZCAP', async () => {
-      // Source does not currently enforce ZCAP verification on registration
-      // When implemented, should reject registerType calls without valid admin ZCAP
-    })
+    it.todo('MUST reject registration without admin ZCAP (ZCAP verification not yet enforced on registration)')
 
-    it.skip('MUST reject issuance from unauthorized issuer', async () => {
-      // Source checkIssuerPolicy is a no-op stub
-      // When implemented, should reject issuance from non-admin/non-role-holder
-    })
+    it.todo('MUST reject issuance from unauthorized issuer (checkIssuerPolicy is a no-op stub)')
 
     it('MUST support peer attestation threshold', async () => {
       const peerType = await registry.registerType(

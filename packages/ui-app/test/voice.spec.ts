@@ -113,16 +113,9 @@ describe('Voice i18n strings', () => {
 })
 
 describe('Voice WebRTC', () => {
-  it.skip('getUserMedia requires browser environment — cannot test in jsdom', () => {
-    // Would test: joining voice channel triggers navigator.mediaDevices.getUserMedia
-  })
+  it.todo('getUserMedia requires browser environment — cannot test in jsdom')
 
-  it.skip('RTCPeerConnection requires browser environment — cannot test in jsdom', () => {
-    // Would test: creating peer connections for each participant
-    // and exchanging offers/answers/ICE candidates
-  })
+  it.todo('RTCPeerConnection requires browser environment — cannot test in jsdom')
 
-  it.skip('AnalyserNode speaking detection requires Web Audio API — cannot test in jsdom', () => {
-    // Would test: audio level detection via AnalyserNode for speaking indicators
-  })
+  it.todo('AnalyserNode speaking detection requires Web Audio API — cannot test in jsdom')
 })

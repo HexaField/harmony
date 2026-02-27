@@ -21,7 +21,7 @@ const zcapService = new ZCAPService(crypto)
 let server: HarmonyServer
 let store: MemoryQuadStore
 let revocationStore: MemoryRevocationStore
-const PORT = 19876
+const PORT = 0 // Auto-assign to avoid port conflicts in parallel test runs
 
 // DID document cache for resolver
 const didDocs: Map<string, DIDDocument> = new Map()
@@ -60,7 +60,7 @@ async function createIdentity(): Promise<{
 
 // Helper to connect and authenticate
 async function connectAndAuth(vp: VerifiablePresentation): Promise<WebSocket> {
-  const ws = new WebSocket(`ws://127.0.0.1:${PORT}`)
+  const ws = new WebSocket(`ws://127.0.0.1:${server.port}`)
   await new Promise<void>((resolve, reject) => {
     ws.on('open', resolve)
     ws.on('error', reject)
@@ -135,14 +135,14 @@ describe('@harmony/server', () => {
 
   describe('Connection', () => {
     it('MUST accept WebSocket connections', async () => {
-      const ws = new WebSocket(`ws://127.0.0.1:${PORT}`)
+      const ws = new WebSocket(`ws://127.0.0.1:${server.port}`)
       await new Promise<void>((resolve) => ws.on('open', resolve))
       expect(ws.readyState).toBe(WebSocket.OPEN)
       ws.close()
     })
 
     it('MUST require authentication before accepting messages', async () => {
-      const ws = new WebSocket(`ws://127.0.0.1:${PORT}`)
+      const ws = new WebSocket(`ws://127.0.0.1:${server.port}`)
       await new Promise<void>((resolve) => ws.on('open', resolve))
 
       const response = await sendAndWait(ws, {
@@ -159,7 +159,7 @@ describe('@harmony/server', () => {
     })
 
     it('MUST reject connections with invalid VPs', async () => {
-      const ws = new WebSocket(`ws://127.0.0.1:${PORT}`)
+      const ws = new WebSocket(`ws://127.0.0.1:${server.port}`)
       await new Promise<void>((resolve) => ws.on('open', resolve))
 
       const fakeVP = {
@@ -250,7 +250,7 @@ describe('@harmony/server', () => {
         credentials: [expiredVC]
       })
 
-      const ws = new WebSocket(`ws://127.0.0.1:${PORT}`)
+      const ws = new WebSocket(`ws://127.0.0.1:${server.port}`)
       await new Promise<void>((resolve) => ws.on('open', resolve))
       const response = await sendAndWait(ws, {
         id: 'auth',
@@ -267,7 +267,7 @@ describe('@harmony/server', () => {
       const { did, vp, memberVC } = await createIdentity()
       await revocationStore.revoke(memberVC.id)
 
-      const ws = new WebSocket(`ws://127.0.0.1:${PORT}`)
+      const ws = new WebSocket(`ws://127.0.0.1:${server.port}`)
       await new Promise<void>((resolve) => ws.on('open', resolve))
       const response = await sendAndWait(ws, {
         id: 'auth',

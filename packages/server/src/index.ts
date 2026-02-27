@@ -666,6 +666,13 @@ interface Role {
 
 export class HarmonyServer {
   private wss: WebSocketServer | null = null
+
+  /** Get the actual port the server is listening on (useful when port 0 is used for auto-assign) */
+  get port(): number {
+    const addr = this.wss?.address()
+    if (addr && typeof addr === 'object') return addr.port
+    return this.config.port
+  }
   private _connections: Map<string, ServerConnection> = new Map()
   private messageStore: MessageStore
   private communityManager: CommunityManager
@@ -733,6 +740,11 @@ export class HarmonyServer {
 
   async start(): Promise<void> {
     this.wss = new WebSocketServer({ port: this.config.port, host: this.config.host, maxPayload: 1024 * 1024 })
+
+    // Wait for server to be listening before continuing
+    await new Promise<void>((resolve) => {
+      this.wss!.on('listening', resolve)
+    })
 
     this.wss.on('connection', (ws: WebSocket, _req: IncomingMessage) => {
       const connId = 'conn:' + Array.from(randomBytes(8), (b) => b.toString(16).padStart(2, '0')).join('')

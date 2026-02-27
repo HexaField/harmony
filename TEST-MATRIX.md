@@ -213,24 +213,44 @@ Rebuild first: cd ~/Desktop/harmony/node_modules/.pnpm/better-sqlite3@11.10.0/no
 
 ## 11. Voice & Video
 
-| #     | Test                                              | Result | Comments                |
-| ----- | ------------------------------------------------- | ------ | ----------------------- |
-| 11.1  | Join voice channel → participant.joined broadcast |        |                         |
-| 11.2  | Leave voice channel → participant.left broadcast  |        |                         |
-| 11.3  | Two clients in voice → both see each other        |        |                         |
-| 11.4  | Mute → state broadcast to room                    |        |                         |
-| 11.5  | Unmute → state broadcast to room                  |        |                         |
-| 11.6  | Enable video → state broadcast                    |        |                         |
-| 11.7  | Disable video → state broadcast                   |        |                         |
-| 11.8  | Start screen share → state broadcast              |        |                         |
-| 11.9  | Stop screen share → state broadcast               |        |                         |
-| 11.10 | Speaking indicator relay                          |        |                         |
-| 11.11 | Voice state includes all participants on join     |        |                         |
-| 11.12 | Voice token exchange returns token                |        |                         |
-| 11.13 | Participant cleanup on disconnect                 |        |                         |
-| 11.14 | WebRTC signaling: offer/answer/ICE relay          |        |                         |
-| 11.15 | LiveKit SFU connection                            | ⊘      | Requires LiveKit server |
-| 11.16 | E2EE bridge Insertable Streams                    | ⊘      | Requires real browser   |
+| # | Test | Result | Comments |
+| --- | --- | --- | --- |
+| 11.1 | Join voice channel → participant.joined broadcast |  |  |
+| 11.2 | Leave voice channel → participant.left broadcast |  |  |
+| 11.3 | Two clients in voice → both see each other |  |  |
+| 11.4 | Mute → state broadcast to room |  |  |
+| 11.5 | Unmute → state broadcast to room |  |  |
+| 11.6 | Enable video → state broadcast |  |  |
+| 11.7 | Disable video → state broadcast |  |  |
+| 11.8 | Start screen share → state broadcast |  |  |
+| 11.9 | Stop screen share → state broadcast |  |  |
+| 11.10 | Speaking indicator relay |  |  |
+| 11.11 | Voice state includes all participants on join |  |  |
+| 11.12 | Voice token exchange returns token |  |  |
+| 11.13 | Participant cleanup on disconnect |  |  |
+| 11.14 | WebRTC signaling: offer/answer/ICE relay |  |  |
+| 11.15 | mediasoup SFU: room create/delete | ✅ | MediasoupAdapter tested (6 tests) |
+| 11.16 | mediasoup SFU: JWT token with transport params | ✅ | Contains dtls, ice, rtpCapabilities |
+| 11.17 | mediasoup SFU: participant tracking | ✅ | list/remove/mute via adapter |
+| 11.18 | VoiceClient mediasoup mode: parse JWT + SFU params | ✅ | hasSFUParams=true, hasE2EE=true |
+| 11.19 | VoiceClient test mode: backward compat | ✅ | InMemoryAdapter base64 tokens still work |
+| 11.20 | E2EE bridge: HKDF key derivation | ✅ | MLS epoch secret → AES-256-GCM via Web Crypto |
+| 11.21 | E2EE bridge: encrypt/decrypt frame roundtrip | ✅ | IV‖ciphertext‖tag, verified |
+| 11.22 | E2EE bridge: epoch ratchet re-derives key | ✅ | Old ciphertext fails with new key |
+| 11.23 | E2EE bridge: wrong key rejected | ✅ | Decryption throws on key mismatch |
+| 11.24 | Insertable Streams: encrypt transform | ✅ | Preserves header bytes, encrypts payload |
+| 11.25 | Insertable Streams: decrypt transform roundtrip | ✅ | Audio frame encrypt→decrypt matches original |
+| 11.26 | Insertable Streams: passthrough without key | ✅ | No-op when bridge has no key |
+| 11.27 | CF Calls mock: room lifecycle | ✅ | create/delete/list via MockCloudflareCallsAdapter |
+| 11.28 | CF Calls mock: WHIP/WHEP token generation | ✅ | Token contains publish/subscribe endpoints |
+| 11.29 | CF Calls mock: call logging | ✅ | All operations logged for test assertions |
+| 11.30 | CommunityDO: voice.join handler | ✅ | SQL storage + broadcast (code review) |
+| 11.31 | CommunityDO: voice.leave handler | ✅ | Participant removal + broadcast |
+| 11.32 | CommunityDO: voice.mute handler | ✅ | Audio/video mute state update + broadcast |
+| 11.33 | VoiceRoomDO: WebSocket signaling | ✅ | Join/leave/mute via WS (code review) |
+| 11.34 | VoiceRoomDO: auto-destroy on empty | ✅ | Room cleaned up when last participant leaves |
+| 11.35 | Real browser Insertable Streams | ⊘ | Requires real browser RTCRtpScriptTransform |
+| 11.36 | Real media over mediasoup (wrtc) | ⊘ | wrtc npm not installed; transport-level tested |
 
 ---
 
@@ -439,7 +459,7 @@ Rebuild first: cd ~/Desktop/harmony/node_modules/.pnpm/better-sqlite3@11.10.0/no
 | 8. Presence               | 4       | 4        | 0           |
 | 9. Roles & Permissions    | 10      | 10       | 0           |
 | 10. Pins                  | 6       | 6        | 0           |
-| 11. Voice & Video         | 16      | 14       | 2           |
+| 11. Voice & Video         | 36      | 34       | 2           |
 | 12. E2EE                  | 11      | 10       | 1           |
 | 13. Media & Files         | 10      | 7        | 3           |
 | 14. Moderation            | 8       | 4        | 4           |
@@ -452,4 +472,4 @@ Rebuild first: cd ~/Desktop/harmony/node_modules/.pnpm/better-sqlite3@11.10.0/no
 | 21. Infrastructure        | 11      | 9        | 2           |
 | 22. Mobile                | 11      | 6        | 5           |
 | 23. Cloud & Portal        | 13      | 5        | 8           |
-| **TOTAL**                 | **231** | **163**  | **68**      |
+| **TOTAL**                 | **251** | **183**  | **68**      |

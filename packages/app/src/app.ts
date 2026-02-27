@@ -129,14 +129,17 @@ export class HarmonyApp {
     const dbPath = join(this.dataDir, 'harmony.db')
     const mediaPath = join(this.dataDir, 'media')
 
+    const serverHost = process.env.HARMONY_HOST ?? '127.0.0.1'
+    const announcedIp = process.env.HARMONY_ANNOUNCED_IP ?? serverHost
+
     const config: RuntimeConfig = {
-      server: { host: '127.0.0.1', port: this.state.serverPort },
+      server: { host: serverHost, port: this.state.serverPort },
       storage: { database: dbPath, media: mediaPath },
       identity: this.loadIdentityConfig(),
       federation: { enabled: false },
       relay: { enabled: false },
       moderation: {},
-      voice: { enabled: true, mediasoup: { listenIp: '127.0.0.1', announcedIp: '127.0.0.1', numWorkers: 1 } },
+      voice: { enabled: true, mediasoup: { listenIp: '0.0.0.0', announcedIp, numWorkers: 1 } },
       portal: { enabled: false },
       logging: { level: 'info', format: 'json' },
       limits: {

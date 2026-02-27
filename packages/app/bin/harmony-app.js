@@ -11,7 +11,7 @@ const harmonyApp = new HarmonyApp()
 let mainWindow = null
 let tray = null
 
-const isDev = process.env.NODE_ENV !== 'production'
+const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production'
 const uiDevUrl = process.env.HARMONY_UI_DEV_URL ?? 'http://localhost:5173'
 
 async function createWindow() {
@@ -26,7 +26,7 @@ async function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: join(import.meta.dirname ?? __dirname, 'preload.js')
+      preload: join(import.meta.dirname ?? __dirname, '..', 'bin', 'preload.js')
     }
   })
 
@@ -35,9 +35,15 @@ async function createWindow() {
     await mainWindow.loadURL(uiDevUrl)
     // mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
-    const uiDistPath = join(import.meta.dirname ?? __dirname, '..', '..', 'ui-app', 'dist', 'index.html')
+    // In packaged app: resources/ui/index.html (extraResources)
+    // In dev layout: ../../ui-app/dist/index.html
+    const resourcesPath = process.resourcesPath ?? join(import.meta.dirname ?? __dirname, '..')
+    const uiDistPath = join(resourcesPath, 'ui', 'index.html')
+    const devUiPath = join(import.meta.dirname ?? __dirname, '..', '..', 'ui-app', 'dist', 'index.html')
     if (existsSync(uiDistPath)) {
       await mainWindow.loadFile(uiDistPath)
+    } else if (existsSync(devUiPath)) {
+      await mainWindow.loadFile(devUiPath)
     } else {
       await mainWindow.loadURL(uiDevUrl)
     }
@@ -128,9 +134,11 @@ function registerIPC() {
   ipcMain.handle('harmony:cancel-migration', () => harmonyApp.cancelMigration())
 
   // Server lifecycle IPC
+  const serverHost = process.env.HARMONY_HOST ?? '127.0.0.1'
+
   ipcMain.handle('harmony:start-server', async () => {
     await harmonyApp.startServer()
-    return { serverUrl: `ws://127.0.0.1:${harmonyApp.getState().serverPort}` }
+    return { serverUrl: `ws://${serverHost}:${harmonyApp.getState().serverPort}` }
   })
 
   ipcMain.handle('harmony:stop-server', async () => {
@@ -141,7 +149,7 @@ function registerIPC() {
   ipcMain.handle('harmony:server-url', () => {
     const state = harmonyApp.getState()
     if (!state.running) return null
-    return `ws://127.0.0.1:${state.serverPort}`
+    return `ws://${serverHost}:${state.serverPort}`
   })
 
   ipcMain.handle('harmony:server-running', () => harmonyApp.getState().running)

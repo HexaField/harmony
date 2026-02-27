@@ -160,15 +160,21 @@ export class ServerRuntime {
 
     // Init mediasoup SFU if voice is enabled
     if (this.config.voice.enabled) {
-      const msOpts = this.config.voice.mediasoup
-      this.mediasoupAdapter = new MediasoupAdapter({
-        jwtSecret: 'harmony-' + (this.identityDID ?? 'default'),
-        listenIp: msOpts?.listenIp ?? '0.0.0.0',
-        announcedIp: msOpts?.announcedIp ?? '127.0.0.1'
-      })
-      await this.mediasoupAdapter.init(msOpts?.numWorkers)
-      this.server.setSFUAdapter(this.mediasoupAdapter)
-      this.logger.info('Voice SFU initialized (mediasoup)')
+      try {
+        const msOpts = this.config.voice.mediasoup
+        this.mediasoupAdapter = new MediasoupAdapter({
+          jwtSecret: 'harmony-' + (this.identityDID ?? 'default'),
+          listenIp: msOpts?.listenIp ?? '0.0.0.0',
+          announcedIp: msOpts?.announcedIp ?? '127.0.0.1'
+        })
+        await this.mediasoupAdapter.init(msOpts?.numWorkers)
+        this.server.setSFUAdapter(this.mediasoupAdapter)
+        this.logger.info('Voice SFU initialized (mediasoup)')
+      } catch (err) {
+        this.logger.warn(`Voice SFU failed to initialize (mediasoup worker unavailable): ${err}`)
+        this.logger.warn('Server will continue without voice support')
+        this.mediasoupAdapter = null
+      }
     }
 
     // Init migration endpoint

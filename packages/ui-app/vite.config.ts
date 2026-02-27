@@ -12,6 +12,7 @@ export default defineConfig({
     target: 'esnext',
     outDir: 'dist'
   },
+  base: './',
   resolve: {
     conditions: ['development', 'browser']
   }

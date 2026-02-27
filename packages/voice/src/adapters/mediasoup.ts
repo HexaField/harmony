@@ -59,11 +59,16 @@ export class MediasoupAdapter implements SFUAdapter {
   async init(numWorkers?: number): Promise<void> {
     const count = numWorkers ?? Math.min(require('os').cpus().length, 4)
     for (let i = 0; i < count; i++) {
-      const worker = await mediasoup.createWorker({
+      const workerOptions: Record<string, unknown> = {
         rtcMinPort: 19923,
         rtcMaxPort: 19999,
         logLevel: 'warn'
-      })
+      }
+      // In Electron packaged app, mediasoup worker binary is in app.asar.unpacked
+      if (process.env.MEDIASOUP_WORKER_BIN) {
+        workerOptions.workerBin = process.env.MEDIASOUP_WORKER_BIN
+      }
+      const worker = await mediasoup.createWorker(workerOptions as any)
       worker.on('died', () => {
         console.error(`mediasoup Worker ${worker.pid} died, restarting...`)
         this.workers = this.workers.filter((w) => w !== worker)

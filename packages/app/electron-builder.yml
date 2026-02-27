@@ -7,25 +7,35 @@ directories:
   buildResources: build
 
 files:
-  - "bin/**/*"
-  - "src/**/*"
+  - "dist/main.mjs"
+  - "bin/preload.js"
   - "package.json"
   - "!**/*.spec.*"
   - "!**/*.test.*"
 
+extraResources:
+  - from: "../ui-app/dist"
+    to: "ui"
+    filter:
+      - "**/*"
+
 extraMetadata:
-  main: bin/harmony-app.js
+  main: dist/main.mjs
 
 nodeGypRebuild: false
 npmRebuild: true
+
+asarUnpack:
+  - "node_modules/mediasoup/**/*"
+  - "node_modules/better-sqlite3/**/*"
 
 mac:
   category: public.app-category.social-networking
   target:
     - target: dmg
-      arch: [universal]
+      arch: [arm64]
     - target: zip
-      arch: [universal]
+      arch: [arm64]
   icon: build/icon.icns
   hardenedRuntime: true
   entitlements: build/entitlements.mac.plist

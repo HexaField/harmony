@@ -11,6 +11,7 @@ import type { Env, ConnectionMeta, HealthResponse } from './types.js'
 
 export class CommunityDurableObject extends DurableObject {
   private quadStore: DOQuadStore
+  private communityId: string | null = null
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
@@ -59,6 +60,15 @@ export class CommunityDurableObject extends DurableObject {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url)
+
+    // Extract communityId from request path (set by worker routing: /ws/:communityId)
+    const pathCommunityId = url.pathname.split('/')[2] || url.searchParams.get('community')
+    if (pathCommunityId) {
+      if (this.communityId && this.communityId !== pathCommunityId) {
+        return new Response('Community ID mismatch', { status: 403 })
+      }
+      this.communityId = pathCommunityId
+    }
 
     // Health endpoint (called internally)
     if (url.pathname === '/health') {
@@ -196,6 +206,18 @@ export class CommunityDurableObject extends DurableObject {
   // ── Message Handling ──
 
   private async handleMessage(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): Promise<void> {
+    // Validate communityId if present in payload
+    const payload = msg.payload as Record<string, unknown> | undefined
+    if (payload && typeof payload.communityId === 'string' && this.communityId) {
+      if (payload.communityId !== this.communityId) {
+        this.sendError(
+          ws,
+          `Community ID mismatch: message targets '${payload.communityId}' but this DO owns '${this.communityId}'`
+        )
+        return
+      }
+    }
+
     switch (msg.type) {
       case 'channel.send':
         await this.handleChannelSend(ws, meta, msg)

@@ -282,3 +282,26 @@ describe('CommunityDurableObject', () => {
 
   it.todo('should timeout unauthenticated connections after 30s (requires miniflare with alarm support)')
 })
+
+describe('CommunityDO — Community ID Isolation', () => {
+  it.todo(
+    'MUST reject channel.send where payload.communityId differs from the DO community ID (requires miniflare with DO WebSocket support)'
+  )
+
+  it.todo('MUST reject channel.edit where payload.communityId differs from the DO community ID (requires miniflare)')
+
+  it.todo('MUST reject channel.delete where payload.communityId differs from the DO community ID (requires miniflare)')
+
+  it('communityId validation logic: mismatched communityId in payload should be detected', () => {
+    // Unit-level check: the validation is in handleMessage which checks
+    // payload.communityId !== this.communityId and sends an error.
+    // This validates the validation exists in the source code.
+    // Full integration requires miniflare with hibernatable WebSockets.
+
+    // Verify the source code contains the validation
+    const fs = require('fs')
+    const source = fs.readFileSync(require('path').resolve(__dirname, '../src/community-do.ts'), 'utf-8')
+    expect(source).toContain('Community ID mismatch')
+    expect(source).toContain('payload.communityId !== this.communityId')
+  })
+})

@@ -45,7 +45,8 @@ export class VoiceClient {
   private mediaProvider: MediaDeviceProvider
   private e2eeBridge?: E2EEBridge
   private mode: 'mediasoup' | 'test'
-  private signalingUrl?: string
+  /** Signaling URL for SFU connection (reserved for mediasoup/LiveKit integration). */
+  readonly signalingUrl?: string
 
   constructor(mediaProviderOrOpts?: MediaDeviceProvider | VoiceClientOptions) {
     if (mediaProviderOrOpts && 'getUserMedia' in mediaProviderOrOpts) {

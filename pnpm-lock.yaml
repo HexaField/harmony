@@ -390,6 +390,9 @@ importers:
       '@harmony/vocab':
         specifier: workspace:*
         version: link:../vocab
+      '@harmony/voice':
+        specifier: workspace:*
+        version: link:../voice
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20250214.0

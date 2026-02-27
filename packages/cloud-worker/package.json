@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@harmony/protocol": "workspace:*",
-    "@harmony/vocab": "workspace:*"
+    "@harmony/vocab": "workspace:*",
+    "@harmony/voice": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250214.0",

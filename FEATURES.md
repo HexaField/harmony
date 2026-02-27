@@ -1,6 +1,6 @@
 # Harmony — Feature Matrix
 
-_Generated 2026-02-26. Based on codebase analysis of ~32,000+ LOC across 36 packages._
+_Generated 2026-02-27. Based on codebase analysis of ~32,000+ LOC across 36 packages._
 
 ## Legend
 
@@ -168,8 +168,11 @@ _Generated 2026-02-26. Based on codebase analysis of ~32,000+ LOC across 36 pack
 | Voice control bar | ➖ | ➖ | ✅ | ➖ | ➖ | ✅ |
 | Voice channel panel (participant indicators) | ➖ | ➖ | ✅ | ➖ | ➖ | ✅ |
 | Voice PiP (picture-in-picture) | ➖ | ➖ | 🔧 | ➖ | ➖ | 🔧 |
-| LiveKit adapter (SFU) | 📋 | 📋 | 📋 | ➖ | ➖ | 📋 |
-| E2EE bridge (Insertable Streams) | ✅ | ➖ | ✅ | ➖ | ➖ | 🔧 |
+| SFUAdapter interface (pluggable) | ✅ | ✅ | ✅ | ➖ | ✅ | ✅ |
+| Mediasoup adapter (self-hosted SFU) | ✅ | ✅ | ✅ | ➖ | ➖ | 🔧 |
+| Cloudflare Realtime adapter (cloud SFU) | ➖ | ➖ | ➖ | ➖ | ✅ | ➖ |
+| VoiceRoomDO (cloud voice coordination) | ➖ | ➖ | ➖ | ➖ | ✅ | ➖ |
+| E2EE bridge (Insertable Streams + HKDF) | ✅ | ➖ | ✅ | ➖ | ➖ | 🔧 |
 | Voice token exchange | ✅ | ✅ | ✅ | ➖ | ✅ | ✅ |
 
 ## E2EE (End-to-End Encryption)
@@ -443,14 +446,14 @@ _Generated 2026-02-26. Based on codebase analysis of ~32,000+ LOC across 36 pack
 
 | Metric                        | Count        |
 | ----------------------------- | ------------ |
-| **Total features catalogued** | **189**      |
-| **✅ Fully implemented**      | **~87**      |
+| **Total features catalogued** | **192**      |
+| **✅ Fully implemented**      | **~90**      |
 | **🔧 Partially implemented**  | **~42**      |
 | **📋 Stub/interface only**    | **~38**      |
 | **❌ Not implemented**        | **~22**      |
-| **Tests passing**             | **2,275**    |
+| **Tests passing**             | **2,336**    |
 | **Tests skipped**             | **62**       |
-| **Test files**                | **95**       |
+| **Test files**                | **104**      |
 | **Packages**                  | **36**       |
 | **Total LOC**                 | **~32,000+** |
 
@@ -458,7 +461,7 @@ _Generated 2026-02-26. Based on codebase analysis of ~32,000+ LOC across 36 pack
 
 **Production-ready areas:** Identity (DID:key), messaging (full CRUD + reactions + replies), communities & channels (full lifecycle), E2EE (MLS groups + DM encryption), ZCAP single-level delegation, media upload, threads, ban enforcement, Docker deployment, Electron packaging, mobile Capacitor shell, PWA.
 
-**Implemented but needs polish:** Voice/video (works peer-to-peer, no SFU in production), search (index works, UI incomplete), role management (server solid, UI partially wired), migration wizard, friend finder.
+**Implemented but needs polish:** Voice/video (SFUAdapter with mediasoup self-hosted + CF Realtime cloud adapters, E2EE bridge with HKDF key derivation, VoiceRoomDO for cloud coordination — needs real media testing), search (index works, UI incomplete), role management (server solid, UI partially wired), migration wizard, friend finder.
 
 **Architecture exists, implementation stubbed:** Governance (full type system + engine skeleton, ~900 LOC, no server integration), bot API (host/context/dispatch exist, not production-tested), moderation rules (types + engine defined, not enforced by server), credentials (type registry/reputation/portfolio classes exist, not wired to UI), federation (peer structures defined, no actual connectivity).
 

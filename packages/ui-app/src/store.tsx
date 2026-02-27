@@ -3,6 +3,7 @@ import { pseudonymFromDid } from './utils/pseudonym.js'
 import type { KeyPair } from '@harmony/crypto'
 import type { Identity } from '@harmony/identity'
 import { HarmonyClient, LocalStoragePersistence } from '@harmony/client'
+import { VoiceClient } from '@harmony/voice'
 import type { ServerConnection } from '@harmony/client'
 import type {
   CommunityInfo,
@@ -1376,7 +1377,8 @@ export function createAppStore(): AppStore {
       persistenceAdapter: new LocalStoragePersistence(),
       wsFactory: (url: string) => new WebSocket(url) as any,
       identity: id,
-      keyPair: kp
+      keyPair: kp,
+      voiceClient: new VoiceClient({ mode: 'mediasoup' })
     })
 
     _setClient(client)

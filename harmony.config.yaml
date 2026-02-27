@@ -1,0 +1,18 @@
+server:
+  host: 0.0.0.0
+  port: 9999
+
+storage:
+  database: ./harmony.db
+  media: ./media
+
+voice:
+  enabled: true
+  mediasoup:
+    listenIp: 127.0.0.1
+    announcedIp: 127.0.0.1
+    numWorkers: 1
+
+logging:
+  level: info
+  format: text

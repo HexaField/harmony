@@ -136,7 +136,7 @@ export class HarmonyApp {
       federation: { enabled: false },
       relay: { enabled: false },
       moderation: {},
-      voice: { enabled: false },
+      voice: { enabled: true, mediasoup: { listenIp: '127.0.0.1', announcedIp: '127.0.0.1', numWorkers: 1 } },
       portal: { enabled: false },
       logging: { level: 'info', format: 'json' },
       limits: {

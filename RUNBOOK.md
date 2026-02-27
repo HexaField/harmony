@@ -8,7 +8,7 @@ _Living document. Update as procedures change._
 
 ### Prerequisites
 
-- Node.js 22+ (24 recommended)
+- Node.js 24+ (required for native module compatibility)
 - pnpm 10+
 - Docker Desktop (for container testing)
 
@@ -47,8 +47,8 @@ pnpm run build
 If `better-sqlite3` fails with `NODE_MODULE_VERSION` mismatch:
 
 ```bash
-cd node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3
-npm rebuild
+cd node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3
+npx node-gyp rebuild --release
 ```
 
 ---
@@ -63,7 +63,7 @@ npm rebuild
 npx vitest run
 ```
 
-Expected: 2336+ passing, 62 skipped, 0 failures.
+Expected: 2364+ passing, 10 skipped, 114 todo, 0 failures.
 
 **Voice package specifically:**
 
@@ -77,14 +77,36 @@ npx vitest run --reporter=verbose packages/voice
 npx vitest run packages/<package-name>
 ```
 
+### 2.1b Playwright Integration Tests (Discord)
+
+Requires `.env.test` with Discord credentials (gitignored):
+
+```bash
+npx playwright test
+```
+
+Expected: 13 passing, 0 skipped. Tests cover Discord bot API, OAuth flow, and migration E2E.
+
+### 2.1c Type Check & Lint
+
+```bash
+# TypeScript — 0 errors expected
+pnpm run check
+
+# Lint — 7 warnings expected (SolidJS ref false positives, unfixable)
+npx oxlint
+
+# Build (verifies ui-app Vite build)
+pnpm run build
+```
+
 ### 2.2 Docker Smoke Test
 
 Run this before any deployment:
 
 ```bash
-# Build images
+# Build server image (only Docker artifact — no UI or bot images)
 docker build -f packages/docker/Dockerfile.server -t harmony-server:local .
-docker build -f packages/docker/Dockerfile.ui -t harmony-ui:local .
 
 # Start server
 docker run --rm -d --name harmony-smoke \
@@ -327,13 +349,53 @@ sqlite3 /var/harmony/data/harmony.db "SELECT version FROM schema_version;"
 | WS connection refused | Server not listening, firewall, TLS mismatch | Verify port, check `docker compose ps` |
 | `NODE_MODULE_VERSION` error | Node version changed, native modules stale | `npm rebuild` in better-sqlite3 dir |
 | SQLite "database is locked" | Multiple processes accessing same DB file | Ensure only one server instance per DB |
-| Tests fail with 38 SQLite errors | better-sqlite3 needs rebuild | See "Native Module Issues" above |
+| Tests fail with 38 SQLite errors | better-sqlite3 needs rebuild | `cd node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3 && npx node-gyp rebuild --release` |
 | UI loads but can't connect | Wrong `VITE_DEFAULT_SERVER_URL` | Check `.env` or container env vars |
 | Docker build fails | Missing package.json in Dockerfile COPY | Check `packages/docker/Dockerfile.server` has all deps |
+| ZCAP verification fails unexpectedly | Wrong validation order | Server enforces: ban check → ZCAP → membership (in that order) |
+| Migration import 404 | Wrong port | Migration API is on health port (server_port + 1), not WS port |
+| Migration import fails | Wrong request body | Wrap payload in `{ bundle: ... }` object |
+| WebSocket message silently dropped | Message too large | Server enforces 1MB maxPayload on WebSocket |
+| `INVALID_MESSAGE` error | Malformed JSON | Server validates all messages before `handleMessage()` |
+| `UNKNOWN_TYPE` error | Unrecognised message type | Server rejects unknown message types with error response |
 
 ---
 
-## 6. Configuration Reference
+## 6. Security Notes
+
+### Input Validation
+
+- All WebSocket messages validated before `handleMessage()` — parse errors return `INVALID_MESSAGE`, unknown types return `UNKNOWN_TYPE`
+- Field validation helpers: `validateRequiredStrings`, `validateStringLength`, `validateMembership`, `sanitizeFilename`
+- Max WebSocket payload: 1MB (`maxPayload: 1024 * 1024`)
+
+### Validation Order
+
+Server enforces: **ban check → ZCAP verification → membership**. This order matters — banned users are rejected before any ZCAP processing.
+
+### OAuth Security
+
+- State tokens use `crypto.randomBytes(32)` (256-bit entropy), not `Math.random()`
+- `redirect_uri` validated against `ALLOWED_REDIRECT_URIS` whitelist
+- `javascript:`, `data:`, `vbscript:` protocols blocked
+
+### Cloud Worker Isolation
+
+- Each CommunityDurableObject tracks its `communityId`
+- `fetch()` guard returns 403 if request targets wrong community
+- `handleMessage()` validates `communityId` in every payload
+
+### Dependency Audit
+
+```bash
+pnpm audit   # should return 0 vulnerabilities
+```
+
+All 9 historical vulnerabilities resolved via `pnpm.overrides` in root `package.json`.
+
+---
+
+## 7. Configuration Reference
 
 ### Environment Variables
 

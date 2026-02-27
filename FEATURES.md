@@ -268,16 +268,19 @@ _Generated 2026-02-27. Based on codebase analysis of ~32,000+ LOC across 36 pack
 
 ## Search
 
-| Feature                | Electron | Local Server | Cloud Web UI | Portal | Cloud Server | Mobile |
-| ---------------------- | -------- | ------------ | ------------ | ------ | ------------ | ------ |
-| Tokenizer              | 🔧       | 🔧           | 🔧           | ➖     | ➖           | 🔧     |
-| Inverted index         | 🔧       | 🔧           | 🔧           | ➖     | ➖           | 🔧     |
-| Query parser           | 🔧       | 🔧           | 🔧           | ➖     | ➖           | 🔧     |
-| Snippet extraction     | 🔧       | 🔧           | 🔧           | ➖     | ➖           | 🔧     |
-| Metadata index         | 🔧       | 🔧           | 🔧           | ➖     | ➖           | 🔧     |
-| Search overlay UI      | ➖       | ➖           | 🔧           | ➖     | ➖           | 🔧     |
-| Search bar + filters   | ➖       | ➖           | 📋           | ➖     | ➖           | 📋     |
-| Search results display | ➖       | ➖           | 📋           | ➖     | ➖           | 📋     |
+| Feature                  | Electron | Local Server | Cloud Web UI | Portal | Cloud Server | Mobile |
+| ------------------------ | -------- | ------------ | ------------ | ------ | ------------ | ------ |
+| Tokenizer                | ✅       | ✅           | ✅           | ➖     | ➖           | ✅     |
+| Inverted index           | ✅       | ✅           | ✅           | ➖     | ➖           | ✅     |
+| Query parser             | ✅       | ✅           | ✅           | ➖     | ➖           | ✅     |
+| Snippet extraction       | ✅       | ✅           | ✅           | ➖     | ➖           | ✅     |
+| Metadata index           | ✅       | ✅           | ✅           | ➖     | ➖           | ✅     |
+| Client-side FTS indexing | ✅       | ✅           | ✅           | ➖     | ➖           | ✅     |
+| Server metadata search   | ✅       | ✅           | ✅           | ➖     | ✅           | ✅     |
+| Search overlay UI        | ➖       | ➖           | ✅           | ➖     | ➖           | ✅     |
+| Search result navigation | ➖       | ➖           | ✅           | ➖     | ➖           | ✅     |
+| Search highlight         | ➖       | ➖           | ✅           | ➖     | ➖           | ✅     |
+| Search bar + filters     | ➖       | ➖           | 📋           | ➖     | ➖           | 📋     |
 
 ## Social Features
 
@@ -298,6 +301,11 @@ _Generated 2026-02-27. Based on codebase analysis of ~32,000+ LOC across 36 pack
 | Migration service (transform + import)  | ✅       | ✅           | ➖           | ➖     | ➖           | ➖     |
 | User data encryption (export bundles)   | ✅       | ✅           | ➖           | ➖     | ➖           | ➖     |
 | User data transform                     | ✅       | ✅           | ➖           | ➖     | ➖           | ➖     |
+| Embed transform (url/title/desc/thumb)  | ✅       | ✅           | ➖           | ➖     | ➖           | ➖     |
+| Sticker transform                       | ✅       | ✅           | ➖           | ➖     | ➖           | ➖     |
+| Thread fetching (active + archived)     | ✅       | ✅           | ➖           | ➖     | ➖           | ➖     |
+| Reaction user resolution (per-emoji)    | ✅       | ✅           | ➖           | ➖     | ➖           | ➖     |
+| Attachment download (Discord CDN)       | ✅       | ✅           | ➖           | ➖     | ➖           | ➖     |
 | Migration bot (Discord side)            | ➖       | ✅           | ➖           | ➖     | ➖           | ➖     |
 | Migration wizard UI                     | ➖       | ➖           | ✅           | ➖     | ➖           | ✅     |
 | Migration client (UI integration)       | ➖       | ➖           | ✅           | ➖     | ➖           | ✅     |
@@ -412,7 +420,7 @@ _Generated 2026-02-27. Based on codebase analysis of ~32,000+ LOC across 36 pack
 | CreateChannelModal | ✅ | Channel creation form |
 | ChannelSettingsModal | ✅ | Edit channel name/topic |
 | RoleManagerView | 🔧 | UI exists, wiring to server partially tested |
-| SearchOverlayView | 🔧 | Basic search UI, backend integration incomplete |
+| SearchOverlayView | ✅ | Search UI with highlights, navigation, result display |
 | MigrationWizard | ✅ | Step-by-step Discord migration |
 | DataBrowserView | 🔧 | RDF quad browser |
 | DataClaimView | 🔧 | Data sovereignty claims |
@@ -443,25 +451,29 @@ _Generated 2026-02-27. Based on codebase analysis of ~32,000+ LOC across 36 pack
 
 ## Stats
 
-| Metric                        | Count        |
-| ----------------------------- | ------------ |
-| **Total features catalogued** | **192**      |
-| **✅ Fully implemented**      | **~90**      |
-| **🔧 Partially implemented**  | **~42**      |
-| **📋 Stub/interface only**    | **~38**      |
-| **❌ Not implemented**        | **~22**      |
-| **Tests passing**             | **2,336**    |
-| **Tests skipped**             | **37**       |
-| **Tests todo**                | **85**       |
-| **Test files**                | **104**      |
-| **Packages**                  | **36**       |
-| **Total LOC**                 | **~32,000+** |
+| Metric                        | Count                           |
+| ----------------------------- | ------------------------------- |
+| **Total features catalogued** | **197**                         |
+| **✅ Fully implemented**      | **~100**                        |
+| **🔧 Partially implemented**  | **~37**                         |
+| **📋 Stub/interface only**    | **~38**                         |
+| **❌ Not implemented**        | **~22**                         |
+| **Tests passing**             | **2,364**                       |
+| **Tests skipped**             | **10**                          |
+| **Tests todo**                | **114**                         |
+| **Playwright tests**          | **13**                          |
+| **Test files**                | **104**                         |
+| **Packages**                  | **36**                          |
+| **Total LOC**                 | **~32,000+**                    |
+| **TypeScript errors**         | **0**                           |
+| **Oxlint warnings**           | **7** (SolidJS false positives) |
+| **Vulnerabilities**           | **0**                           |
 
 ### Assessment Summary
 
-**Production-ready areas:** Identity (DID:key), messaging (full CRUD + reactions + replies), communities & channels (full lifecycle), E2EE (MLS groups + DM encryption), ZCAP single-level delegation, media upload, threads, ban enforcement, Docker deployment, Electron packaging, mobile Capacitor shell, PWA.
+**Production-ready areas:** Identity (DID:key), messaging (full CRUD + reactions + replies), communities & channels (full lifecycle), E2EE (MLS groups + DM encryption), ZCAP single-level delegation, media upload, threads, ban enforcement, Docker deployment, Electron packaging, mobile Capacitor shell, PWA, search (client-side FTS + server metadata + UI overlay with highlights/navigation, 39 tests), Discord migration (full export with embeds/threads/reactions/attachments + import + wizard UI, 13 Playwright tests).
 
-**Implemented but needs polish:** Voice/video (SFUAdapter with mediasoup self-hosted + CF Realtime cloud adapters, E2EE bridge with HKDF key derivation, VoiceRoomDO for cloud coordination — needs real media testing), search (index works, UI incomplete), role management (server solid, UI partially wired), migration wizard, friend finder.
+**Implemented but needs polish:** Voice/video (SFUAdapter with mediasoup self-hosted + CF Realtime cloud adapters, E2EE bridge with HKDF key derivation, VoiceRoomDO for cloud coordination — needs real media testing), role management (server solid, UI partially wired), friend finder.
 
 **Architecture exists, implementation stubbed:** Governance (full type system + engine skeleton, ~900 LOC, no server integration), bot API (host/context/dispatch exist, not production-tested), moderation rules (types + engine defined, not enforced by server), credentials (type registry/reputation/portfolio classes exist, not wired to UI), federation (peer structures defined, no actual connectivity).
 

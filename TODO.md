@@ -81,6 +81,30 @@
 
 ---
 
+## Launch Requirements
+
+### Discord Migration — Manual Verification Needed
+
+Infrastructure exists and is mostly/completely working: `migration-bot` (Discord API), `migration` (export parser, data transform, encryption), `migration-client.ts` (UI), `migration-endpoint.ts` (server-runtime), integration tests, e2e tests.
+
+- [ ] Manual end-to-end verification: run migration bot against a real Discord server
+- [ ] Verify channel/message/role/member mapping completeness
+- [ ] Verify media attachment migration
+- [ ] Verify deduplication logic (migration-dedup.spec.ts covers this in tests)
+- [ ] Confirm UI flow works in browser (migration-client → server endpoint → community creation)
+
+### Full-Text Search — Needs FTS Index
+
+Server-side search exists (`MessageStore.search()`) but is **brute-force**: loads messages into memory, filters with `string.includes()`. Won't scale past a few hundred messages per channel. UI (`SearchOverlay`) and protocol (`search.query`/`search.results`) are wired up.
+
+- [ ] Add FTS5 index to SQLite message storage (or equivalent for quad store)
+- [ ] Relevance ranking (not just substring match)
+- [ ] Search across channels in a community (cross-channel already scaffolded but slow)
+- [ ] Verify search UI works end-to-end with indexed backend
+- [ ] Consider: search in encrypted messages requires client-side search index (E2EE constraint)
+
+---
+
 ## Post-Launch
 
 ### Federation

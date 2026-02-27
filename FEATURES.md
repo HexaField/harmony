@@ -167,7 +167,7 @@ _Generated 2026-02-27. Based on codebase analysis of ~32,000+ LOC across 36 pack
 | Screen share view | ➖ | ➖ | ✅ | ➖ | ➖ | 🔧 |
 | Voice control bar | ➖ | ➖ | ✅ | ➖ | ➖ | ✅ |
 | Voice channel panel (participant indicators) | ➖ | ➖ | ✅ | ➖ | ➖ | ✅ |
-| Voice PiP (picture-in-picture) | ➖ | ➖ | 🔧 | ➖ | ➖ | 🔧 |
+| Voice PiP (picture-in-picture) | ➖ | ➖ | ✅ | ➖ | ➖ | ✅ |
 | SFUAdapter interface (pluggable) | ✅ | ✅ | ✅ | ➖ | ✅ | ✅ |
 | Mediasoup adapter (self-hosted SFU) | ✅ | ✅ | ✅ | ➖ | ➖ | 🔧 |
 | Cloudflare Realtime adapter (cloud SFU) | ➖ | ➖ | ➖ | ➖ | ✅ | ➖ |
@@ -205,7 +205,7 @@ _Generated 2026-02-27. Based on codebase analysis of ~32,000+ LOC across 36 pack
 | Thumbnail generation | 📋 | 📋 | 📋 | ➖ | ➖ | 📋 |
 | File checksum verification | 📋 | 📋 | 📋 | ➖ | ➖ | 📋 |
 | Media storage (server-side) | ✅ | ✅ | ➖ | ✅ | 🔧 | ➖ |
-| Image gallery | ➖ | ➖ | 📋 | ➖ | ➖ | 📋 |
+| Image gallery | ➖ | ➖ | ✅ | ➖ | ➖ | ✅ |
 | R2 blob storage | ➖ | ➖ | ➖ | ✅ | ➖ | ➖ |
 
 ## Moderation

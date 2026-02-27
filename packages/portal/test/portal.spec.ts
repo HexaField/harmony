@@ -691,3 +691,53 @@ describe('@harmony/portal HTTP Friends & Discord Profile', () => {
     expect(res.status).toBe(404)
   })
 })
+
+describe('@harmony/portal OAuth Security', () => {
+  it('generateState MUST produce cryptographically random 64-char hex strings', async () => {
+    const portal = new PortalService(crypto)
+    await portal.initialize()
+    // Generate multiple states and verify entropy
+    const states: string[] = []
+    for (let i = 0; i < 10; i++) {
+      const result = await portal.initiateOAuthLink({ provider: 'discord', userDID: `did:key:z${i}` })
+      states.push(result.state)
+    }
+    // All unique
+    expect(new Set(states).size).toBe(10)
+    // All 64 chars (32 bytes hex)
+    for (const s of states) {
+      expect(s).toMatch(/^[0-9a-f]{64}$/)
+    }
+  })
+
+  it('OAuth callback MUST reject replayed state tokens', async () => {
+    const portal = new PortalService(crypto, didProvider)
+    const app = await createApp(portal)
+    const server = await new Promise<Server>((resolve) => {
+      const s = app.listen(0, () => resolve(s))
+    })
+    const addr = server.address() as any
+    const base = `http://127.0.0.1:${addr.port}`
+
+    try {
+      // Create a state
+      const { _pendingStates } = await import('../src/routes/oauth.js')
+      const fakeState = 'replayed-state-token-1234'
+      _pendingStates.set(fakeState, { userDID: 'did:key:zTest', createdAt: Date.now() })
+
+      // First callback consumes the state (will fail at Discord token exchange, but state is consumed)
+      await fetch(`${base}/api/oauth/discord/callback?code=fake&state=${fakeState}`)
+
+      // Second attempt with same state should fail
+      const res2 = await fetch(`${base}/api/oauth/discord/callback?code=fake&state=${fakeState}`)
+      expect(res2.status).toBe(400)
+      const body = await res2.json()
+      expect(body.error).toContain('Invalid or expired')
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    }
+  })
+
+  it.todo('OAuth redirect_uri MUST be validated against ALLOWED_REDIRECT_URIS whitelist')
+  it.todo('OAuth redirect_uri MUST reject javascript: protocol URIs')
+})

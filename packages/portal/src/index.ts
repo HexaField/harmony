@@ -1,4 +1,5 @@
 import type { KeyPair, CryptoProvider } from '@harmony/crypto'
+import { randomBytes } from 'crypto'
 import type { VerifiableCredential } from '@harmony/vc'
 import { VCService } from '@harmony/vc'
 import type { Invocation } from '@harmony/zcap'
@@ -54,7 +55,7 @@ export class PortalService {
     provider: 'discord' | 'github' | 'google'
     userDID: string
   }): Promise<{ redirectUrl: string; state: string }> {
-    const state = Array.from(new Uint8Array(16), () => Math.random().toString(36)[2]).join('')
+    const state = randomBytes(32).toString('hex')
     const redirectUrl = `https://oauth.example.com/${params.provider}/authorize?state=${state}&did=${params.userDID}`
     return { redirectUrl, state }
   }

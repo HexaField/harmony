@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express'
+import { randomBytes } from 'crypto'
 import type { PortalService } from '../index.js'
 import type { ReconciliationService } from '../reconciliation.js'
 
@@ -27,7 +28,7 @@ function cleanExpiredStates(): void {
 }
 
 function generateState(): string {
-  return Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('')
+  return randomBytes(32).toString('hex')
 }
 
 export function oauthRoutes(portal: PortalService, reconciliationService?: ReconciliationService): Router {
@@ -93,6 +94,30 @@ export function oauthRoutes(portal: PortalService, reconciliationService?: Recon
 
       const state = generateState()
       const redirectUri = req.query.redirectUri as string | undefined
+
+      // Validate redirect_uri against allowed origins
+      if (redirectUri) {
+        const allowedRedirects = (process.env.ALLOWED_REDIRECT_URIS || '')
+          .split(',')
+          .map((u) => u.trim())
+          .filter(Boolean)
+        try {
+          const parsed = new URL(redirectUri)
+          const origin = parsed.origin
+          if (allowedRedirects.length > 0 && !allowedRedirects.some((allowed) => redirectUri.startsWith(allowed))) {
+            res.status(400).json({ error: 'redirect_uri not in allowed list' })
+            return
+          }
+          // Block javascript: and data: URIs
+          if (['javascript:', 'data:', 'vbscript:'].includes(parsed.protocol)) {
+            res.status(400).json({ error: 'Invalid redirect_uri protocol' })
+            return
+          }
+        } catch {
+          res.status(400).json({ error: 'Invalid redirect_uri' })
+          return
+        }
+      }
 
       pendingStates.set(state, { userDID, redirectUri, createdAt: Date.now() })
 

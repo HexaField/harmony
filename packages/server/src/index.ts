@@ -935,6 +935,59 @@ export class HarmonyServer {
     }
   }
 
+  // ── Input Validation Helpers ──
+
+  private static readonly MAX_CONTENT_LENGTH = 4000
+  private static readonly MAX_NAME_LENGTH = 100
+  private static readonly MAX_DESCRIPTION_LENGTH = 1000
+  private static readonly MAX_TOPIC_LENGTH = 500
+  private static readonly MAX_QUERY_LENGTH = 200
+
+  private sendError(conn: ServerConnection, code: string, message: string): void {
+    this.sendToConnection(conn, {
+      id: `err-${Date.now()}`,
+      type: 'error',
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: { code, message }
+    })
+  }
+
+  /** Validate that required string fields exist and are non-empty strings */
+  private validateRequiredStrings(conn: ServerConnection, payload: Record<string, unknown>, fields: string[]): boolean {
+    for (const field of fields) {
+      if (typeof payload[field] !== 'string' || (payload[field] as string).trim() === '') {
+        this.sendError(conn, 'INVALID_INPUT', `Missing or invalid field: ${field}`)
+        return false
+      }
+    }
+    return true
+  }
+
+  /** Validate string length */
+  private validateStringLength(conn: ServerConnection, value: unknown, fieldName: string, maxLength: number): boolean {
+    if (typeof value === 'string' && value.length > maxLength) {
+      this.sendError(conn, 'INVALID_INPUT', `${fieldName} exceeds maximum length of ${maxLength}`)
+      return false
+    }
+    return true
+  }
+
+  /** Validate community membership */
+  private validateMembership(conn: ServerConnection, communityId: string): boolean {
+    if (!conn.communities.includes(communityId)) {
+      this.sendError(conn, 'NOT_MEMBER', 'Not a member of this community')
+      return false
+    }
+    return true
+  }
+
+  /** Sanitize filename — strip path traversal */
+  private static sanitizeFilename(filename: string): string {
+    // Remove path separators and traversal sequences
+    return filename.replace(/[/\\]/g, '_').replace(/\.\./g, '_')
+  }
+
   private async handleMessage(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
     switch (msg.type) {
       case 'channel.send':
@@ -1124,13 +1177,16 @@ export class HarmonyServer {
   }
 
   private async handleChannelSend(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as {
-      communityId: string
-      channelId: string
-      content: unknown
-      nonce: string
-      clock: LamportClock
-    }
+    const payload = msg.payload as Record<string, unknown>
+    if (!this.validateRequiredStrings(conn, payload, ['communityId', 'channelId'])) return
+    if (!this.validateMembership(conn, payload.communityId as string)) return
+
+    // Content length check (content may be encrypted object, check if string)
+    if (
+      typeof payload.content === 'string' &&
+      !this.validateStringLength(conn, payload.content, 'content', HarmonyServer.MAX_CONTENT_LENGTH)
+    )
+      return
 
     // Verify ZCAP if proof is present
     if (msg.proof) {
@@ -1186,8 +1242,11 @@ export class HarmonyServer {
   }
 
   private async handleChannelEdit(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as { communityId: string; channelId: string; messageId: string }
-    this.broadcastToCommunity(payload.communityId, {
+    const payload = msg.payload as Record<string, unknown>
+    if (!this.validateRequiredStrings(conn, payload, ['communityId', 'channelId', 'messageId'])) return
+    if (!this.validateMembership(conn, payload.communityId as string)) return
+
+    this.broadcastToCommunity(payload.communityId as string, {
       ...msg,
       type: 'channel.message.updated',
       sender: conn.did
@@ -1195,9 +1254,12 @@ export class HarmonyServer {
   }
 
   private async handleChannelDelete(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as { communityId: string; channelId: string; messageId: string }
-    await this.messageStore.deleteMessage(payload.messageId)
-    this.broadcastToCommunity(payload.communityId, {
+    const payload = msg.payload as Record<string, unknown>
+    if (!this.validateRequiredStrings(conn, payload, ['communityId', 'channelId', 'messageId'])) return
+    if (!this.validateMembership(conn, payload.communityId as string)) return
+
+    await this.messageStore.deleteMessage(payload.messageId as string)
+    this.broadcastToCommunity(payload.communityId as string, {
       ...msg,
       type: 'channel.message.deleted',
       sender: conn.did
@@ -1205,9 +1267,12 @@ export class HarmonyServer {
   }
 
   private async handleChannelTyping(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as { communityId: string; channelId: string }
+    const payload = msg.payload as Record<string, unknown>
+    if (!this.validateRequiredStrings(conn, payload, ['communityId', 'channelId'])) return
+    if (!this.validateMembership(conn, payload.communityId as string)) return
+
     this.broadcastToCommunity(
-      payload.communityId,
+      payload.communityId as string,
       {
         ...msg,
         type: 'channel.typing.indicator',
@@ -1218,8 +1283,11 @@ export class HarmonyServer {
   }
 
   private async handleReactionAdd(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as { communityId: string }
-    this.broadcastToCommunity(payload.communityId, {
+    const payload = msg.payload as Record<string, unknown>
+    if (!this.validateRequiredStrings(conn, payload, ['communityId'])) return
+    if (!this.validateMembership(conn, payload.communityId as string)) return
+
+    this.broadcastToCommunity(payload.communityId as string, {
       ...msg,
       type: 'channel.reaction.added',
       sender: conn.did
@@ -1227,8 +1295,11 @@ export class HarmonyServer {
   }
 
   private async handleReactionRemove(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as { communityId: string }
-    this.broadcastToCommunity(payload.communityId, {
+    const payload = msg.payload as Record<string, unknown>
+    if (!this.validateRequiredStrings(conn, payload, ['communityId'])) return
+    if (!this.validateMembership(conn, payload.communityId as string)) return
+
+    this.broadcastToCommunity(payload.communityId as string, {
       ...msg,
       type: 'channel.reaction.removed',
       sender: conn.did
@@ -1236,10 +1307,19 @@ export class HarmonyServer {
   }
 
   private async handleDMSend(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as { recipientDID: string }
+    const payload = msg.payload as Record<string, unknown>
+    if (!this.validateRequiredStrings(conn, payload, ['recipientDID'])) return
+
+    // Content length check
+    if (
+      typeof payload.content === 'string' &&
+      !this.validateStringLength(conn, payload.content, 'content', HarmonyServer.MAX_CONTENT_LENGTH)
+    )
+      return
+
     // Find recipient connection
     for (const [_id, otherConn] of this._connections) {
-      if (otherConn.did === payload.recipientDID) {
+      if (otherConn.did === (payload.recipientDID as string)) {
         this.sendToConnection(otherConn, {
           ...msg,
           type: 'dm.message',
@@ -1252,9 +1332,11 @@ export class HarmonyServer {
   }
 
   private async handleDMEdit(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as { recipientDID: string; messageId: string; newText: string }
+    const payload = msg.payload as Record<string, unknown>
+    if (!this.validateRequiredStrings(conn, payload, ['recipientDID', 'messageId'])) return
+
     for (const [_id, otherConn] of this._connections) {
-      if (otherConn.did === payload.recipientDID) {
+      if (otherConn.did === (payload.recipientDID as string)) {
         this.sendToConnection(otherConn, {
           ...msg,
           type: 'dm.edited',
@@ -1265,9 +1347,11 @@ export class HarmonyServer {
   }
 
   private async handleDMDelete(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as { recipientDID: string; messageId: string }
+    const payload = msg.payload as Record<string, unknown>
+    if (!this.validateRequiredStrings(conn, payload, ['recipientDID', 'messageId'])) return
+
     for (const [_id, otherConn] of this._connections) {
-      if (otherConn.did === payload.recipientDID) {
+      if (otherConn.did === (payload.recipientDID as string)) {
         this.sendToConnection(otherConn, {
           ...msg,
           type: 'dm.deleted',
@@ -1278,9 +1362,11 @@ export class HarmonyServer {
   }
 
   private async handleDMTyping(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as { recipientDID: string }
+    const payload = msg.payload as Record<string, unknown>
+    if (!this.validateRequiredStrings(conn, payload, ['recipientDID'])) return
+
     for (const [_id, otherConn] of this._connections) {
-      if (otherConn.did === payload.recipientDID) {
+      if (otherConn.did === (payload.recipientDID as string)) {
         this.sendToConnection(otherConn, {
           ...msg,
           type: 'dm.typing.indicator',
@@ -1291,9 +1377,11 @@ export class HarmonyServer {
   }
 
   private async handleDMKeyExchange(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as { recipientDID: string }
+    const payload = msg.payload as Record<string, unknown>
+    if (!this.validateRequiredStrings(conn, payload, ['recipientDID'])) return
+
     for (const [_id, otherConn] of this._connections) {
-      if (otherConn.did === payload.recipientDID) {
+      if (otherConn.did === (payload.recipientDID as string)) {
         this.sendToConnection(otherConn, {
           ...msg,
           type: 'dm.keyexchange',
@@ -1304,15 +1392,18 @@ export class HarmonyServer {
   }
 
   private async handleCommunityCreate(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as {
-      name: string
-      description?: string
-      defaultChannels?: string[]
-      creatorKeyPair?: KeyPair
-    }
+    const payload = msg.payload as Record<string, unknown>
+    if (!this.validateRequiredStrings(conn, payload, ['name'])) return
+    if (!this.validateStringLength(conn, payload.name, 'name', HarmonyServer.MAX_NAME_LENGTH)) return
+    if (
+      payload.description !== undefined &&
+      !this.validateStringLength(conn, payload.description, 'description', HarmonyServer.MAX_DESCRIPTION_LENGTH)
+    )
+      return
+
     // Note: in production, the client would send a ZCAP-signed community creation.
     // For simplicity, we use the server's crypto provider to create it.
-    const signingKP = payload.creatorKeyPair ?? (await this.crypto.generateSigningKeyPair())
+    const signingKP = (payload.creatorKeyPair as KeyPair | undefined) ?? (await this.crypto.generateSigningKeyPair())
     const result = await this.communityManager.create({
       name: payload.name,
       description: payload.description,

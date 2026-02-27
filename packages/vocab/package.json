@@ -11,10 +11,9 @@
     "check": "tsc --noEmit",
     "test": "vitest run"
   },
-  "dependencies": {},
   "devDependencies": {
     "@rollup/plugin-typescript": "^12.3.0",
-    "rollup": "^4.54.0",
+    "rollup": "^4.59.0",
     "tslib": "^2.8.1"
   }
 }

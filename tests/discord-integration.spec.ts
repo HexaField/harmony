@@ -190,7 +190,7 @@ test.describe('Migration E2E (export + import)', () => {
   let discordMembers: any[]
 
   test.beforeAll(async () => {
-    harmonyUrl = 'http://localhost:19926'
+    harmonyUrl = 'http://localhost:19927' // Health/API port is server port + 1
     // Start harmony server in background
     const { exec } = await import('node:child_process')
     const { promisify } = await import('node:util')
@@ -200,7 +200,7 @@ test.describe('Migration E2E (export + import)', () => {
       env: { ...process.env, HARMONY_PORT: '19926', HARMONY_HOST: '0.0.0.0' }
     })
 
-    // Wait for server to be ready
+    // Wait for server to be ready (health endpoint on port+1)
     for (let i = 0; i < 30; i++) {
       try {
         const res = await fetch(`${harmonyUrl}/health`)
@@ -254,9 +254,13 @@ test.describe('Migration E2E (export + import)', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        ciphertext: Buffer.from(bundle.ciphertext).toString('base64'),
-        nonce: Buffer.from(bundle.nonce).toString('base64'),
-        metadata: bundle.metadata,
+        bundle: {
+          ciphertext: Buffer.from(bundle.ciphertext).toString('base64'),
+          nonce: Buffer.from(bundle.nonce).toString('base64'),
+          metadata: bundle.metadata
+        },
+        adminDID: doc.id,
+        communityName: `Imported ${bundle.metadata.guildName || 'Discord Server'}`,
         adminKeyPair: {
           publicKey: Buffer.from(kp.publicKey).toString('base64'),
           secretKey: Buffer.from(kp.secretKey).toString('base64')

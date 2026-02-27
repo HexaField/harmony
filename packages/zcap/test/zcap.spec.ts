@@ -537,6 +537,181 @@ describe('@harmony/zcap', () => {
     })
   })
 
+  describe('Privilege Escalation Prevention', () => {
+    it('MUST reject delegation where member forges wider actions than parent allows', async () => {
+      const owner = await createTestIdentity()
+      const member = await createTestIdentity()
+      const attacker = await createTestIdentity()
+
+      const root = await zcapService.createRoot({
+        ownerDID: owner.did,
+        ownerKeyPair: owner.kp,
+        scope: { community: 'test' },
+        allowedAction: ['harmony:SendMessage']
+      })
+
+      // Owner delegates SendMessage only to member
+      const memberCap = await zcapService.delegate({
+        parentCapability: root,
+        delegatorKeyPair: owner.kp,
+        invokerDID: member.did,
+        allowedAction: ['harmony:SendMessage'],
+        scope: { community: 'test' }
+      })
+
+      // Member tries to delegate with extra actions (BanUser) beyond what they have
+      await expect(
+        zcapService.delegate({
+          parentCapability: memberCap,
+          delegatorKeyPair: member.kp,
+          invokerDID: attacker.did,
+          allowedAction: ['harmony:SendMessage', 'harmony:BanUser'],
+          scope: { community: 'test' }
+        })
+      ).rejects.toThrow()
+    })
+
+    it('MUST reject invocation of an expired ZCAP', async () => {
+      const owner = await createTestIdentity()
+      const delegate = await createTestIdentity()
+
+      const root = await zcapService.createRoot({
+        ownerDID: owner.did,
+        ownerKeyPair: owner.kp,
+        scope: {},
+        allowedAction: ['harmony:SendMessage']
+      })
+
+      const expired = await zcapService.delegate({
+        parentCapability: root,
+        delegatorKeyPair: owner.kp,
+        invokerDID: delegate.did,
+        allowedAction: ['harmony:SendMessage'],
+        scope: {},
+        caveats: [{ type: 'harmony:Expiry', value: '2020-06-01T00:00:00Z' }]
+      })
+
+      const inv = await zcapService.invoke({
+        capability: expired,
+        invokerKeyPair: delegate.kp,
+        action: 'harmony:SendMessage',
+        target: 'ch:1'
+      })
+
+      const result = await zcapService.verifyInvocation(inv, [root, expired], resolver)
+      expect(result.valid).toBe(false)
+      if (result.error) {
+        expect(result.error.toLowerCase()).toContain('expir')
+      }
+    })
+
+    it('MUST reject invocation signed by wrong DID (not the designated invoker)', async () => {
+      const owner = await createTestIdentity()
+      const delegate = await createTestIdentity()
+      const impersonator = await createTestIdentity()
+
+      const root = await zcapService.createRoot({
+        ownerDID: owner.did,
+        ownerKeyPair: owner.kp,
+        scope: {},
+        allowedAction: ['harmony:SendMessage']
+      })
+
+      const child = await zcapService.delegate({
+        parentCapability: root,
+        delegatorKeyPair: owner.kp,
+        invokerDID: delegate.did,
+        allowedAction: ['harmony:SendMessage'],
+        scope: {}
+      })
+
+      // Impersonator signs the invocation using child cap (which names delegate as invoker)
+      const inv = await zcapService.invoke({
+        capability: child,
+        invokerKeyPair: impersonator.kp,
+        action: 'harmony:SendMessage',
+        target: 'ch:1'
+      })
+
+      const result = await zcapService.verifyInvocation(inv, [root, child], resolver)
+      expect(result.valid).toBe(false)
+    })
+
+    it('MUST reject middle-link scope widening in A→B→C chain', async () => {
+      const A = await createTestIdentity()
+      const B = await createTestIdentity()
+      const C = await createTestIdentity()
+
+      // A creates root with SendMessage only
+      const root = await zcapService.createRoot({
+        ownerDID: A.did,
+        ownerKeyPair: A.kp,
+        scope: { community: 'test' },
+        allowedAction: ['harmony:SendMessage']
+      })
+
+      // A delegates to B with SendMessage
+      const bCap = await zcapService.delegate({
+        parentCapability: root,
+        delegatorKeyPair: A.kp,
+        invokerDID: B.did,
+        allowedAction: ['harmony:SendMessage'],
+        scope: { community: 'test' }
+      })
+
+      // B tries to delegate to C with SendMessage + BanUser (widening)
+      await expect(
+        zcapService.delegate({
+          parentCapability: bCap,
+          delegatorKeyPair: B.kp,
+          invokerDID: C.did,
+          allowedAction: ['harmony:SendMessage', 'harmony:BanUser'],
+          scope: { community: 'test' }
+        })
+      ).rejects.toThrow()
+    })
+
+    it('MUST reject verification when chain is incomplete (missing parent)', async () => {
+      const owner = await createTestIdentity()
+      const mid = await createTestIdentity()
+      const leaf = await createTestIdentity()
+
+      const root = await zcapService.createRoot({
+        ownerDID: owner.did,
+        ownerKeyPair: owner.kp,
+        scope: { community: 'test' },
+        allowedAction: ['harmony:SendMessage']
+      })
+
+      const level1 = await zcapService.delegate({
+        parentCapability: root,
+        delegatorKeyPair: owner.kp,
+        invokerDID: mid.did,
+        allowedAction: ['harmony:SendMessage'],
+        scope: { community: 'test' }
+      })
+
+      const level2 = await zcapService.delegate({
+        parentCapability: level1,
+        delegatorKeyPair: mid.kp,
+        invokerDID: leaf.did,
+        allowedAction: ['harmony:SendMessage'],
+        scope: { community: 'test' }
+      })
+
+      const inv = await zcapService.invoke({
+        capability: level2,
+        invokerKeyPair: leaf.kp,
+        action: 'harmony:SendMessage',
+        target: 'ch:1'
+      })
+
+      // Present only root and leaf — skip level1 in chain
+      const result = await zcapService.verifyInvocation(inv, [root, level2], resolver)
+      expect(result.valid).toBe(false)
+    })
+  })
+
   describe('Advanced Capabilities', () => {
     it.todo('MUST support rate-limited capabilities via caveats')
     it.todo('MUST support user-to-user delegation without admin')

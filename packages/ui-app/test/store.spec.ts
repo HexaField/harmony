@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { createRoot } from 'solid-js'
 import { createAppStore } from '../src/store.js'
 import { pseudonymFromDid } from '../src/utils/pseudonym.js'
@@ -349,7 +349,7 @@ describe('Self-Presence', () => {
     // After initClient, if connected, current user should be in members
     // The mock WS doesn't actually connect, so self-presence is only added
     // when client.isConnected() returns true. Test the logic via members API.
-    const selfMember = storeRef!.members().find((m: any) => m.did === 'did:key:z6MkSelf')
+    const _selfMember = storeRef!.members().find((m: any) => m.did === 'did:key:z6MkSelf')
     // Even if not connected (mock WS), verify no crash
     expect(storeRef!.members()).toBeDefined()
     disposeRef!()

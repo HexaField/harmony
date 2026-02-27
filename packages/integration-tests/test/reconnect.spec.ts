@@ -84,7 +84,7 @@ describe('Reconnect After Server Restart (18.5)', () => {
     return server
   }
 
-  async function createClient(): Promise<HarmonyClient> {
+  async function _createClient(): Promise<HarmonyClient> {
     const { identity, keyPair, vp } = await createIdentityAndVP()
     const client = new HarmonyClient({ wsFactory })
     await client.connect({

@@ -73,7 +73,7 @@ describe('@harmony/bot-api', () => {
       const limitedAuth = new ZCAPBotAuth()
       limitedAuth.grantAdmin('did:key:limited', 'comm1')
       // Override hasPermission to only allow SendMessage
-      const limitedHost = new BotHost(store, limitedAuth, sandbox)
+      const _limitedHost = new BotHost(store, limitedAuth, sandbox)
 
       // The admin has all perms by default... We need to test via a bot whose
       // requested perms exceed what's available. Simplest: make ManageChannels
@@ -654,7 +654,7 @@ describe('@harmony/bot-api', () => {
   })
 
   describe('Bot Lifecycle (additional)', () => {
-    it.skip('MUST restart errored bot with backoff (post-launch)', () => {
+    it.todo('MUST restart errored bot with backoff (post-launch)', () => {
       // Source BotHost does not implement automatic restart with backoff.
       // Would need a restartBot() method with exponential backoff logic.
     })
@@ -701,7 +701,7 @@ describe('@harmony/bot-api', () => {
       expect(received.map((e) => e.channelId)).toEqual(['ch1', 'ch3'])
     })
 
-    it.skip('MUST re-verify capabilities on ZCAP epoch change (post-launch)', () => {
+    it.todo('MUST re-verify capabilities on ZCAP epoch change (post-launch)', () => {
       // Source does not implement ZCAP epoch tracking/re-verification.
     })
   })
@@ -771,17 +771,17 @@ describe('@harmony/bot-api', () => {
   })
 
   describe('Webhooks Outbound (additional)', () => {
-    it.skip('MUST retry on transient failure (3 attempts, exponential backoff) (post-launch)', () => {
+    it.todo('MUST retry on transient failure (3 attempts, exponential backoff) (post-launch)', () => {
       // Source WebhookManager does not implement retry logic on individual dispatches.
     })
 
-    it.skip('MUST require ManageWebhooks capability to create (post-launch)', () => {
+    it.todo('MUST require ManageWebhooks capability to create (post-launch)', () => {
       // Source WebhookManager.createOutboundWebhook does not check ZCAP authorization.
     })
   })
 
   describe('Webhooks Inbound (additional)', () => {
-    it.skip('MUST rate limit inbound webhook messages (post-launch)', () => {
+    it.todo('MUST rate limit inbound webhook messages (post-launch)', () => {
       // Source WebhookManager.processInbound does not implement rate limiting.
     })
 

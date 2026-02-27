@@ -46,8 +46,6 @@ import type {
   AttachmentRef,
   Embed,
   LamportClock,
-  Proof,
-  ZCAPInvocationProof,
   ErrorCode
 } from '../src/index.js'
 

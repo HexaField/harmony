@@ -50,7 +50,7 @@ async function createIdentityAndVP(): Promise<{
   return { identity, keyPair, vp }
 }
 
-function createWSFactory(port: number): (url: string) => WebSocket {
+function _createWSFactory(_port: number): (url: string) => WebSocket {
   return (url: string) => new WebSocket(url) as unknown as WebSocket
 }
 

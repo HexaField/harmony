@@ -256,7 +256,7 @@ describe('Bot Commands', () => {
     msgs.set('ch1', bigChannel)
     slowGuild.messages = msgs
 
-    const slowAdapter = new DiscordJSAdapter(slowGuild, 1)
+    const _slowAdapter = new DiscordJSAdapter(slowGuild, 1)
 
     // The export completes too fast in tests. Instead, directly test the guard:
     // Manually set an active export

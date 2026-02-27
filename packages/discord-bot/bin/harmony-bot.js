@@ -3,7 +3,6 @@
 // Starts the Harmony Discord bot with slash commands
 
 import { HarmonyDiscordBot } from '../src/bot.ts'
-import { t } from '../src/strings.ts'
 
 const token = process.env.DISCORD_TOKEN ?? ''
 const portalUrl = process.env.HARMONY_PORTAL_URL ?? 'http://localhost:3001'

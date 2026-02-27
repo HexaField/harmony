@@ -168,14 +168,14 @@ export class HostingService {
       try {
         const result = await this._cloudAdapter.createInstance(params.name, params.ownerDID)
         instance.serverUrl = result.serverUrl
-      } catch (_err) {
+      } catch {
         // Cloudflare provisioning failed — instance created without server URL
       }
     } else {
       // Try to provision a real server-runtime process (local mode)
       try {
         await this._spawnServer(id, instance)
-      } catch (_err) {
+      } catch {
         // server-runtime not available — instance created without server URL
       }
     }

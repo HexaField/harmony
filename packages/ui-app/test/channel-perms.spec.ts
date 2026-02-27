@@ -171,15 +171,15 @@ describe('Channel Permissions i18n', () => {
 })
 
 describe('Channel Permissions - DOM tests', () => {
-  it.skip('renders settings icon for users with manage permission', () => {
+  it.todo('renders settings icon for users with manage permission', () => {
     // DOM test - requires jsdom/browser environment
   })
 
-  it.skip('ChannelSettingsModal opens when settings icon clicked', () => {
+  it.todo('ChannelSettingsModal opens when settings icon clicked', () => {
     // DOM test
   })
 
-  it.skip('DelegationView shows create form', () => {
+  it.todo('DelegationView shows create form', () => {
     // DOM test
   })
 })

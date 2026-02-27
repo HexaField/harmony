@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { MigrationEndpoint } from '../src/migration-endpoint.js'
 import { HarmonyType, HarmonyPredicate, RDFPredicate, HARMONY, XSDDatatype } from '@harmony/vocab'
 import type { Quad } from '@harmony/quads'
@@ -126,7 +126,7 @@ describe('extractImportData — idempotent re-import', () => {
       }
     ]
     const quads = makeQuads({ extraMessages })
-    const result = ep.extractImportData(quads)
+    const _result = ep.extractImportData(quads)
     // extractImportData doesn't return messages directly, but the quads contain them
     const messageQuads = quads.filter((q) => q.predicate === RDFPredicate.type && q.object === HarmonyType.Message)
     expect(messageQuads).toHaveLength(2)

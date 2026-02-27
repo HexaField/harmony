@@ -103,7 +103,6 @@ export function oauthRoutes(portal: PortalService, reconciliationService?: Recon
           .filter(Boolean)
         try {
           const parsed = new URL(redirectUri)
-          const origin = parsed.origin
           if (allowedRedirects.length > 0 && !allowedRedirects.some((allowed) => redirectUri.startsWith(allowed))) {
             res.status(400).json({ error: 'redirect_uri not in allowed list' })
             return

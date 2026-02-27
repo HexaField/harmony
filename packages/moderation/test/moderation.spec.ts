@@ -1,18 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { MemoryQuadStore } from '@harmony/quads'
 import { createCryptoProvider } from '@harmony/crypto'
 import { DIDKeyProvider } from '@harmony/did'
 import { VCService } from '@harmony/vc'
 import type { ProtocolMessage, DecryptedContent } from '@harmony/protocol'
 import { ModerationPlugin, ContentFilter, ModerationLog } from '../src/index.js'
-import type {
-  SlowModeRule,
-  RateLimitRule,
-  AccountAgeRule,
-  RaidDetectionRule,
-  VCRequirementRule,
-  ContentFilterRule
-} from '../src/index.js'
+import type { SlowModeRule, RateLimitRule, AccountAgeRule, RaidDetectionRule, VCRequirementRule } from '../src/index.js'
 
 const crypto = createCryptoProvider()
 const didProvider = new DIDKeyProvider(crypto)

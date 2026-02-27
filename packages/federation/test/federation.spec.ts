@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { WebSocketServer, WebSocket } from 'ws'
+import { WebSocketServer } from 'ws'
 import { createCryptoProvider } from '@harmony/crypto'
 import { DIDKeyProvider } from '@harmony/did'
 import type { DIDDocument } from '@harmony/did'
-import { VCService, MemoryRevocationStore } from '@harmony/vc'
+import { MemoryRevocationStore } from '@harmony/vc'
 import { ZCAPService } from '@harmony/zcap'
 import type { Capability } from '@harmony/zcap'
 import type { ProtocolMessage } from '@harmony/protocol'
-import { serialise, deserialise } from '@harmony/protocol'
+import { deserialise } from '@harmony/protocol'
 import { HarmonyAction } from '@harmony/vocab'
 import { FederationManager } from '../src/index.js'
 
@@ -15,7 +15,7 @@ const crypto = createCryptoProvider()
 const didProvider = new DIDKeyProvider(crypto)
 const zcapService = new ZCAPService(crypto)
 
-const PORT_A = 19878
+const _PORT_A = 19878
 const PORT_B = 19879
 
 let mockServerA: WebSocketServer | null = null
@@ -23,9 +23,9 @@ let mockServerB: WebSocketServer | null = null
 let revocationStore: MemoryRevocationStore
 
 const didDocs: Map<string, DIDDocument> = new Map()
-const didResolver = async (did: string) => didDocs.get(did) ?? null
+const _didResolver = async (did: string) => didDocs.get(did) ?? null
 
-async function createInstanceIdentity(name: string) {
+async function createInstanceIdentity(_name: string) {
   const kp = await crypto.generateSigningKeyPair()
   const doc = await didProvider.create(kp)
   didDocs.set(doc.id, doc)

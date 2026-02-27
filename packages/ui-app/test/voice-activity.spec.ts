@@ -120,15 +120,15 @@ describe('VoiceManager', () => {
     vm.destroy()
   })
 
-  it.skip('start acquires mic and sets up AnalyserNode — requires browser APIs', () => {
+  it.todo('start acquires mic and sets up AnalyserNode — requires browser APIs', () => {
     // Would test actual getUserMedia + AudioContext + AnalyserNode
   })
 
-  it.skip('addRemoteStream sets up remote speaking detection — requires Web Audio API', () => {
+  it.todo('addRemoteStream sets up remote speaking detection — requires Web Audio API', () => {
     // Would test AnalyserNode on remote streams
   })
 
-  it.skip('setDeafened suspends/resumes AudioContext — requires Web Audio API', () => {
+  it.todo('setDeafened suspends/resumes AudioContext — requires Web Audio API', () => {
     // Would test AudioContext suspend/resume
   })
 })

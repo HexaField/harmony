@@ -15,8 +15,6 @@ import type { KeyPair } from '@harmony/crypto'
 import type { Identity } from '@harmony/identity'
 import type { VerifiablePresentation } from '@harmony/vc'
 import type { ProtocolMessage } from '@harmony/protocol'
-import { serialise } from '@harmony/protocol'
-
 const crypto = createCryptoProvider()
 const didProvider = new DIDKeyProvider(crypto)
 const identityMgr = new IdentityManager(crypto)
@@ -90,7 +88,7 @@ async function connectClient(
 }
 
 // Helper to listen for raw WebSocket messages on a client
-function onRawMessage(client: HarmonyClient, predicate: (msg: any) => boolean): Promise<any> {
+function _onRawMessage(client: HarmonyClient, predicate: (msg: any) => boolean): Promise<any> {
   return new Promise((resolve) => {
     // The client emits (msg.type, msg) for unhandled types and ('message', msg) for channel messages
     // For handled types it emits (eventName, payload)
@@ -119,14 +117,14 @@ function createMsg(client: HarmonyClient, type: string, payload: any): ProtocolM
 
 describe('ZCAP Verification', () => {
   it('message with valid ZCAP chain is delivered', async () => {
-    const { server, port } = await startServer()
+    const { server: _server, port } = await startServer()
     const admin = await createIdentityAndVP()
     const member = await createIdentityAndVP()
     const client1 = await connectClient(port, admin)
     const client2 = await connectClient(port, member)
 
     // Capture rootCapability from community.updated event
-    const capPromise = new Promise<any>((resolve) => {
+    const _capPromise = new Promise<any>((resolve) => {
       client1.on('community.updated' as any, (payload: any) => {
         if (payload?.rootCapability) resolve(payload)
       })
@@ -150,7 +148,7 @@ describe('ZCAP Verification', () => {
   }, 10000)
 
   it('message with invalid/missing proof is rejected with ZCAP_INVALID', async () => {
-    const { server, port } = await startServer()
+    const { server: _server2, port } = await startServer()
     const admin = await createIdentityAndVP()
     const client1 = await connectClient(port, admin)
 

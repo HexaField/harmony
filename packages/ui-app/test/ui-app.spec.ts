@@ -12,10 +12,7 @@ import {
   ThreadView,
   ReactionPicker,
   TypingIndicator,
-  ChannelHeader,
-  PinnedMessages,
   VoiceChannel,
-  VoiceControls,
   MemberList,
   DMList,
   DMCompose,
@@ -383,7 +380,7 @@ describe('Shared Components', () => {
 
   it('VirtualList calculates visible range', () => {
     const items = Array.from({ length: 1000 }, (_, i) => ({ id: i }))
-    const vlist = VirtualList({ items, itemHeight: 40, renderItem: (item) => null as never })
+    const vlist = VirtualList({ items, itemHeight: 40, renderItem: (_item) => null as never })
     expect(vlist.totalHeight).toBe(40000)
     const range = vlist.getVisibleRange(0, 400)
     expect(range.start).toBe(0)

@@ -2,10 +2,10 @@
 // @harmony/app — Electron desktop application entrypoint
 // Starts ServerRuntime in main process, opens BrowserWindow with ui-app
 
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, protocol, shell } from 'electron'
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell } from 'electron'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
-import { HarmonyApp, getDataDir } from '../src/app.ts'
+import { HarmonyApp } from '../src/app.ts'
 
 const harmonyApp = new HarmonyApp()
 let mainWindow = null

@@ -119,9 +119,9 @@ describe('DiscordRESTAPI', () => {
 
   it('MUST paginate guild members', async () => {
     const originalFetch = globalThis.fetch
-    let callCount = 0
+    let _callCount = 0
     globalThis.fetch = vi.fn(async (url: any) => {
-      callCount++
+      _callCount++
       const urlStr = String(url)
       if (urlStr.includes('after=0')) {
         return {

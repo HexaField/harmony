@@ -601,9 +601,9 @@ describe('Flow 11: Client Event Types', () => {
   it('community.list is a valid ClientEvent (compile check)', async () => {
     // This test passes if it compiles — 'community.list' must be in ClientEvent union
     const client = await HarmonyClient.create({ cryptoProvider: crypto })
-    let called = false
+    let _called = false
     const unsub = client.on('community.list', () => {
-      called = true
+      _called = true
     })
     expect(typeof unsub).toBe('function')
     unsub() // clean up

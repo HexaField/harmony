@@ -106,7 +106,7 @@ describe('@harmony/governance', () => {
       expect(result.actionsExecuted).toBe(1)
     })
 
-    it.skip('MUST reject proposal creation without governance ZCAP', async () => {
+    it.todo('MUST reject proposal creation without governance ZCAP', async () => {
       // Source does not currently enforce ZCAP verification on proposal creation
     })
 
@@ -322,7 +322,7 @@ describe('@harmony/governance', () => {
       expect(updated!.status).toBe('contested')
     })
 
-    it.skip('MUST require higher quorum to override contest', async () => {
+    it.todo('MUST require higher quorum to override contest', async () => {
       // Source does not implement contest override with higher quorum
       // When implemented, contested proposals should need e.g. 2x threshold to proceed
     })

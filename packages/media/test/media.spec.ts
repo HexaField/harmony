@@ -128,7 +128,7 @@ describe('@harmony/media', () => {
     })
 
     it('MUST allow cancellation of in-progress upload', () => {
-      const file = makeFile('cancel me')
+      const _file = makeFile('cancel me')
       // Start upload then cancel immediately
       const uploadId = 'test-cancel'
       client.cancelUpload(uploadId)

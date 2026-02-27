@@ -293,7 +293,7 @@ describe('Regression: reactive author name resolution', () => {
 describe('Regression: fixed server port prevents stale reconnection', () => {
   it('store does not persist server URLs to localStorage', () => {
     createRoot((dispose) => {
-      const store = createAppStore()
+      const _store = createAppStore()
       // Before the fix, persisted server URLs with random ports became stale
       // Now servers come from the fixed port / backend config
       const allKeys = Object.keys(localStorage)

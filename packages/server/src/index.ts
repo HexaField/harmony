@@ -12,7 +12,7 @@ import { serialise, deserialise } from '@harmony/protocol'
 import { HarmonyPredicate, HarmonyType, HarmonyAction, HARMONY, RDFPredicate, XSDDatatype } from '@harmony/vocab'
 import type { DIDDocument } from '@harmony/did'
 import type { SFUAdapter } from '@harmony/voice'
-import { MetadataSearchIndex, type MetadataResult } from '@harmony/search'
+import { MetadataSearchIndex } from '@harmony/search'
 
 // ── Server Config ──
 
@@ -854,7 +854,7 @@ export class HarmonyServer {
           }
 
           await this.handleMessage(conn, msg)
-        } catch (err) {
+        } catch (_err) {
           // Silently ignore parse errors
         }
       })

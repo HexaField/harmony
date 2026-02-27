@@ -118,7 +118,7 @@ describe('Message population into MessageStore', () => {
   })
 
   it('extractImportData finds messages in quads', () => {
-    const ep = makeEndpoint()
+    const _ep = makeEndpoint()
     const quads = buildQuads()
     const messageQuads = quads.filter((q) => q.predicate === RDFPredicate.type && q.object === HarmonyType.Message)
     expect(messageQuads).toHaveLength(1)

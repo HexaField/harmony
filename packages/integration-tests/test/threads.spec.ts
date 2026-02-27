@@ -220,7 +220,7 @@ describe('Threads', () => {
   })
 
   it('thread.send to non-existent thread returns error', async () => {
-    const { client1, community, channelId } = await setupCommunityWith2Clients()
+    const { client1, community: _community, channelId: _channelId } = await setupCommunityWith2Clients()
 
     // Need to be in a community for the connection to work
     const errorReceived = new Promise<any>((resolve) => {

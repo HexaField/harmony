@@ -3,7 +3,6 @@ import { describe, it, expect } from 'vitest'
 import { createRoot } from 'solid-js'
 import { createAppStore } from '../src/store.js'
 import { en } from '../src/i18n/strings.js'
-import type { RoleInfo, MemberData } from '../src/types.js'
 
 describe('Roles store', () => {
   it('addRole adds a role and sorts by position', () => {
@@ -143,17 +142,17 @@ describe('Role assign to member', () => {
 })
 
 describe('RoleManagerView DOM', () => {
-  it.skip('renders role list (requires DOM environment with SolidJS)', () => {
+  it.todo('renders role list (requires DOM environment with SolidJS)', () => {
     // Needs jsdom + solid-js render setup — skipped for unit tests
   })
 })
 
 describe('MemberSidebarView DOM', () => {
-  it.skip('shows role badges with colors (requires DOM environment with SolidJS)', () => {
+  it.todo('shows role badges with colors (requires DOM environment with SolidJS)', () => {
     // Needs jsdom + solid-js render setup — skipped for unit tests
   })
 
-  it.skip('shows role assignment menu on click (requires DOM environment with SolidJS)', () => {
+  it.todo('shows role assignment menu on click (requires DOM environment with SolidJS)', () => {
     // Needs jsdom + solid-js render setup — skipped for unit tests
   })
 })

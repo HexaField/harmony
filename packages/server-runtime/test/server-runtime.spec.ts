@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { randomBytes } from 'node:crypto'
 
-import { parseConfig, validateConfig, loadConfig, type RuntimeConfig } from '../src/config.js'
+import { parseConfig, validateConfig, loadConfig } from '../src/config.js'
 import { createLogger } from '../src/logger.js'
 import { SQLiteQuadStore } from '../src/sqlite-quad-store.js'
 import { MediaFileStore } from '../src/media-store.js'

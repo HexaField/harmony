@@ -181,7 +181,7 @@ describe('Full E2E: Fresh Start → Community → Messages → Restart', () => {
     await new Promise((r) => setTimeout(r, 500))
 
     // Sync channel and collect messages
-    const messages = await new Promise<any[]>((resolve) => {
+    const _messages = await new Promise<any[]>((resolve) => {
       const msgs: any[] = []
       const unsub = client.on('message', (...args: unknown[]) => {
         const msg = args[0] as any

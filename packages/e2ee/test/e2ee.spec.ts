@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { createCryptoProvider } from '@harmony/crypto'
 import { SimplifiedMLSProvider, SimplifiedDMProvider, verifyKeyPackageSignature } from '../src/index.js'
-import type { MLSGroup, MLSCiphertext, Welcome, Commit } from '../src/index.js'
+import type { MLSGroup, MLSCiphertext } from '../src/index.js'
 
 const crypto = createCryptoProvider()
 const mlsProvider = new SimplifiedMLSProvider()
@@ -790,7 +790,7 @@ describe('@harmony/e2ee', () => {
         signingKeyPair: bobSig,
         encryptionKeyPair: bobEnc
       })
-      const { welcome, commit } = await group.addMember(bobKP)
+      const { welcome, commit: _commit } = await group.addMember(bobKP)
       const bobGroup = await mlsProvider.joinFromWelcome(welcome, {
         publicKey: bobEnc.publicKey,
         secretKey: bobSig.secretKey,

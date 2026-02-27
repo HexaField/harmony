@@ -6,8 +6,7 @@ import {
   identityShow,
   storeQuery,
   storeExport,
-  storeImport,
-  type CLIContext
+  storeImport
 } from '../src/index.js'
 
 describe('CLI Context', () => {

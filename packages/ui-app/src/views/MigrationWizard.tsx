@@ -636,7 +636,7 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
                         // Poll for completion
                         startMigrationOAuthPolling(portalUrl(), store.did())
                       }
-                    } catch (err) {
+                    } catch (_err) {
                       setError(t('ERROR_CONNECTION_FAILED', { url: portalUrl() }))
                     }
                   }}

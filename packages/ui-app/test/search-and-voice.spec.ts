@@ -205,13 +205,13 @@ describe('Search Result Navigation (14.3)', () => {
 
   it('SearchOverlay wires searchFn and navigation together', () => {
     const searchResults = [{ id: '1', type: 'message' as const, title: 'Test', preview: 'found it', channelId: 'ch1' }]
-    let navigated = false
+    let _navigated = false
     const ctrl = SearchOverlay({
       onClose: () => {},
       onSelect: () => {},
       searchFn: (q) => (q === 'found' ? searchResults : []),
       onNavigate: () => {
-        navigated = true
+        _navigated = true
       }
     })
     // Simulate search

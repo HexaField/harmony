@@ -1,8 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { tmpdir } from 'node:os'
-import { randomBytes } from 'node:crypto'
+import { describe, it, expect } from 'vitest'
 
 import { createProgram } from '../src/program.js'
 import {
@@ -20,8 +16,6 @@ import {
   cmdServerStop,
   cmdServerStatus,
   cmdMigrateDiscord,
-  cmdConfigShow,
-  cmdConfigSet,
   cmdFriendsList,
   cmdFriendsFind,
   cmdVersion,

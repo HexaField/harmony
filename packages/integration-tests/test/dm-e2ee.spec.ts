@@ -233,7 +233,7 @@ describe('DM E2EE — End-to-End Encrypted Direct Messages', () => {
     await startServer()
     const alice = await createClient()
 
-    const community = await alice.createCommunity({ name: 'Self DM' })
+    const _community = await alice.createCommunity({ name: 'Self DM' })
     await wait(200)
 
     // DM to self

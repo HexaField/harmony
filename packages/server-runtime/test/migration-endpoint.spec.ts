@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createServer, type Server } from 'node:http'
 import { MigrationEndpoint } from '../src/migration-endpoint.js'
 import { createLogger } from '../src/logger.js'

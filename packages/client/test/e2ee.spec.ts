@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { WebSocket } from 'ws'
 import { MemoryQuadStore } from '@harmony/quads'
 import { createCryptoProvider } from '@harmony/crypto'
@@ -6,9 +6,8 @@ import type { KeyPair } from '@harmony/crypto'
 import { DIDKeyProvider } from '@harmony/did'
 import type { DIDDocument } from '@harmony/did'
 import { VCService, MemoryRevocationStore } from '@harmony/vc'
-import type { VerifiablePresentation, VerifiableCredential } from '@harmony/vc'
+import type { VerifiablePresentation } from '@harmony/vc'
 import type { ProtocolMessage } from '@harmony/protocol'
-import { serialise, deserialise } from '@harmony/protocol'
 import { SimplifiedMLSProvider } from '@harmony/e2ee'
 import { HarmonyServer } from '@harmony/server'
 import { HarmonyClient } from '../src/index.js'
@@ -135,9 +134,9 @@ describe('E2EE Integration', () => {
     const channelId = community.channels[0].id
 
     // Capture the sent message to verify it's encrypted
-    const sentMessages: ProtocolMessage[] = []
-    const origSend = WebSocket.prototype.send
-    const originalSend = (client as any)._servers
+    const _sentMessages: ProtocolMessage[] = []
+    const _origSend = WebSocket.prototype.send
+    const _originalSend = (client as any)._servers
       .values()
       .next()
       .value.ws.send.bind((client as any)._servers.values().next().value.ws)
@@ -166,7 +165,7 @@ describe('E2EE Integration', () => {
       vp: alice.vp
     })
 
-    const community = await client.createCommunity({ name: 'Test', defaultChannels: ['general'] })
+    const _community = await client.createCommunity({ name: 'Test', defaultChannels: ['general'] })
     await new Promise((r) => setTimeout(r, 100))
 
     // The client should have uploaded a key package during community creation
@@ -378,7 +377,7 @@ describe('E2EE Unit - MLS Provider', () => {
     })
 
     // Alice adds Bob
-    const { welcome, commit } = await aliceGroup.addMember(bobKP)
+    const { welcome, commit: _commit } = await aliceGroup.addMember(bobKP)
 
     // Bob joins from welcome
     const bobGroup = await mlsProvider.joinFromWelcome(welcome, bobEncKP)

@@ -73,7 +73,7 @@ describe('P1 #5 — Display name resolution is reactive', () => {
 describe('P1 #7 — community.list in ClientEvent type', () => {
   it('community.list is a valid ClientEvent', async () => {
     // Import the type and verify it includes community.list
-    const {} = await import('@harmony/protocol')
+    await import('@harmony/protocol')
     // If this compiles, community.list is in the type union
     const event: import('@harmony/protocol').ClientEvent = 'community.list'
     expect(event).toBe('community.list')

@@ -10,7 +10,7 @@ import { DIDKeyProvider } from '@harmony/did'
 import { MemoryRevocationStore } from '@harmony/vc'
 import { MigrationEndpoint } from '../src/migration-endpoint.js'
 import { createLogger } from '../src/logger.js'
-import { HarmonyType, HarmonyPredicate, RDFPredicate, XSDDatatype } from '@harmony/vocab'
+import { HarmonyType, HarmonyPredicate, RDFPredicate } from '@harmony/vocab'
 import type { Quad } from '@harmony/quads'
 
 const logger = createLogger({ level: 'error', format: 'json', silent: true })

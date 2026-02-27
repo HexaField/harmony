@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { DOQuadStore, type Quad } from '../src/do-quad-store.js'
 import { parseVP, extractDID, extractPublicKeyFromDIDKey } from '../src/auth.js'
 import { createInstance, listInstances, deleteInstance } from '../src/provisioning.js'

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { createCryptoProvider } from '@harmony/crypto'
 import { DIDKeyProvider } from '@harmony/did'
 import { MigrationBot, type DiscordAPI } from '../src/index.js'
@@ -60,7 +60,7 @@ describe('Export fidelity', () => {
   it('message pagination: returns empty on subsequent call', async () => {
     let callCount = 0
     const api = createMockAPI()
-    api.getChannelMessages = async (_channelId: string, opts?: { before?: string; limit?: number }) => {
+    api.getChannelMessages = async (_channelId: string, _opts?: { before?: string; limit?: number }) => {
       callCount++
       if (callCount === 1) {
         return [
@@ -90,7 +90,7 @@ describe('Export fidelity', () => {
       callCount++
       return origGetGuild(id)
     }
-    const bot = new MigrationBot(crypto, api)
+    const _bot = new MigrationBot(crypto, api)
     // Make 5 rapid calls — should all succeed (rate limiter handles backoff)
     const results = await Promise.all(Array.from({ length: 5 }, () => api.getGuild('srv1')))
     expect(results).toHaveLength(5)

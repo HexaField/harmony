@@ -260,23 +260,23 @@ describe('DM message sorting', () => {
 })
 
 describe('DM UI components', () => {
-  it.skip('DMListView renders conversation list (needs DOM)', () => {
+  it.todo('DMListView renders conversation list (needs DOM)', () => {
     // Needs jsdom/happy-dom and SolidJS rendering context
   })
 
-  it.skip('DMConversationView renders messages (needs DOM)', () => {
+  it.todo('DMConversationView renders messages (needs DOM)', () => {
     // Needs jsdom/happy-dom and SolidJS rendering context
   })
 
-  it.skip('NewDMModal allows selecting member (needs DOM)', () => {
+  it.todo('NewDMModal allows selecting member (needs DOM)', () => {
     // Needs jsdom/happy-dom and SolidJS rendering context
   })
 
-  it.skip('DMConversationView sends message via client (needs server mock)', () => {
+  it.todo('DMConversationView sends message via client (needs server mock)', () => {
     // Needs mock HarmonyClient with sendDM method
   })
 
-  it.skip('typing indicator shows in DM conversation (needs DOM)', () => {
+  it.todo('typing indicator shows in DM conversation (needs DOM)', () => {
     // Needs jsdom/happy-dom and SolidJS rendering context
   })
 })

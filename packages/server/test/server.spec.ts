@@ -2394,7 +2394,8 @@ describe('@harmony/server', () => {
 
   describe('Input Validation & Security', () => {
     it('MUST reject oversized messages', async () => {
-      const { ws, close } = await connectAndAuth()
+      const { vp } = await createIdentity()
+      const ws = await connectAndAuth(vp)
       try {
         // Message larger than 1MB — ws library will close with maxPayload error
         const bigPayload = 'x'.repeat(1_100_000)
@@ -2413,12 +2414,13 @@ describe('@harmony/server', () => {
         // ws library closes with 1009 (message too big) when maxPayload exceeded
         expect(code).toBe(1009)
       } finally {
-        close()
+        ws.close()
       }
     })
 
     it('MUST reject malformed messages (missing type)', async () => {
-      const { ws, close } = await connectAndAuth()
+      const { vp } = await createIdentity()
+      const ws = await connectAndAuth(vp)
       try {
         const response = await new Promise<ProtocolMessage>((resolve) => {
           ws.on('message', (data) => {
@@ -2430,12 +2432,13 @@ describe('@harmony/server', () => {
         })
         expect((response.payload as any).code).toBe('INVALID_MESSAGE')
       } finally {
-        close()
+        ws.close()
       }
     })
 
     it('MUST reject channel.send with missing communityId', async () => {
-      const { ws, close } = await connectAndAuth()
+      const { vp } = await createIdentity()
+      const ws = await connectAndAuth(vp)
       try {
         const response = await new Promise<ProtocolMessage>((resolve) => {
           ws.on('message', (data) => {
@@ -2454,12 +2457,13 @@ describe('@harmony/server', () => {
         })
         expect((response.payload as any).code).toBe('INVALID_PAYLOAD')
       } finally {
-        close()
+        ws.close()
       }
     })
 
     it('MUST reject community.join with missing communityId', async () => {
-      const { ws, close } = await connectAndAuth()
+      const { vp } = await createIdentity()
+      const ws = await connectAndAuth(vp)
       try {
         const response = await new Promise<ProtocolMessage>((resolve) => {
           ws.on('message', (data) => {
@@ -2478,7 +2482,140 @@ describe('@harmony/server', () => {
         })
         expect((response.payload as any).code).toBe('INVALID_PAYLOAD')
       } finally {
-        close()
+        ws.close()
+      }
+    })
+
+    it('MUST reject channel.send to non-member community', async () => {
+      const { vp, did } = await createIdentity()
+      const ws = await connectAndAuth(vp)
+      try {
+        const response = await new Promise<ProtocolMessage>((resolve) => {
+          ws.on('message', (data) => {
+            const msg = deserialise<ProtocolMessage>(data.toString())
+            if (msg.type === 'error') resolve(msg)
+          })
+          ws.send(
+            serialise({
+              id: 'nonmember-send',
+              type: 'channel.send',
+              timestamp: new Date().toISOString(),
+              sender: did,
+              payload: {
+                communityId: 'non-existent-community',
+                channelId: 'ch1',
+                content: { text: 'should fail' },
+                nonce: 'n1',
+                clock: { counter: 1, nodeId: did }
+              }
+            })
+          )
+        })
+        expect((response.payload as any).code).toBe('NOT_MEMBER')
+      } finally {
+        ws.close()
+      }
+    })
+
+    it('MUST reject media upload with path traversal filename', async () => {
+      const { vp, did, keyPair } = await createIdentity()
+      const ws = await connectAndAuth(vp)
+
+      // First create community so user is a member
+      const createResp = await sendAndWait(ws, {
+        id: 'cc-path-trav',
+        type: 'community.create',
+        timestamp: new Date().toISOString(),
+        sender: did,
+        payload: { name: 'Path Traversal Test', creatorKeyPair: keyPair }
+      })
+      const communityId = (createResp.payload as any).communityId
+      const channelId = ((createResp.payload as any).channels as any[])[0]?.id ?? 'channel:general'
+
+      // Upload with path traversal filename
+      const uploadResp = await sendAndWait(ws, {
+        id: 'upload-traversal',
+        type: 'media.upload.request',
+        timestamp: new Date().toISOString(),
+        sender: did,
+        payload: {
+          communityId,
+          channelId,
+          filename: '../../../etc/passwd',
+          mimeType: 'image/png',
+          size: 100,
+          data: btoa('fake image data')
+        }
+      })
+      // Should succeed but with sanitized filename
+      expect(uploadResp.type).toBe('media.upload.complete')
+      const resultFilename = (uploadResp.payload as any).filename
+      expect(resultFilename).not.toContain('..')
+      expect(resultFilename).not.toContain('/')
+      ws.close()
+    })
+
+    it('MUST reject media upload with invalid MIME type', async () => {
+      const { vp, did, keyPair } = await createIdentity()
+      const ws = await connectAndAuth(vp)
+
+      const createResp = await sendAndWait(ws, {
+        id: 'cc-mime',
+        type: 'community.create',
+        timestamp: new Date().toISOString(),
+        sender: did,
+        payload: { name: 'MIME Test', creatorKeyPair: keyPair }
+      })
+      const communityId = (createResp.payload as any).communityId
+      const channelId = ((createResp.payload as any).channels as any[])[0]?.id ?? 'channel:general'
+
+      const response = await sendAndWait(ws, {
+        id: 'upload-exe',
+        type: 'media.upload.request',
+        timestamp: new Date().toISOString(),
+        sender: did,
+        payload: {
+          communityId,
+          channelId,
+          filename: 'malware.exe',
+          mimeType: 'application/x-executable',
+          size: 100,
+          data: btoa('MZ')
+        }
+      })
+      expect(response.type).toBe('error')
+      expect((response.payload as any).code).toBe('INVALID_MIME_TYPE')
+      ws.close()
+    })
+
+    it('MUST reject channel.send with empty communityId', async () => {
+      const { vp, did } = await createIdentity()
+      const ws = await connectAndAuth(vp)
+      try {
+        const response = await new Promise<ProtocolMessage>((resolve) => {
+          ws.on('message', (data) => {
+            const msg = deserialise<ProtocolMessage>(data.toString())
+            if (msg.type === 'error') resolve(msg)
+          })
+          ws.send(
+            serialise({
+              id: 'empty-community',
+              type: 'channel.send',
+              timestamp: new Date().toISOString(),
+              sender: did,
+              payload: {
+                communityId: '',
+                channelId: 'ch1',
+                content: { text: 'hi' },
+                nonce: 'n1',
+                clock: { counter: 1, nodeId: did }
+              }
+            })
+          )
+        })
+        expect((response.payload as any).code).toBe('INVALID_PAYLOAD')
+      } finally {
+        ws.close()
       }
     })
   })

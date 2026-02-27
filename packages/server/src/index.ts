@@ -732,10 +732,19 @@ export class HarmonyServer {
   }
 
   async start(): Promise<void> {
-    this.wss = new WebSocketServer({ port: this.config.port, host: this.config.host })
+    this.wss = new WebSocketServer({ port: this.config.port, host: this.config.host, maxPayload: 1024 * 1024 })
 
     this.wss.on('connection', (ws: WebSocket, _req: IncomingMessage) => {
       const connId = 'conn:' + Array.from(randomBytes(8), (b) => b.toString(16).padStart(2, '0')).join('')
+
+      // Handle WS errors (e.g., oversized messages)
+      ws.on('error', (err: Error) => {
+        // Max payload exceeded — ws library auto-closes with 1009
+        // Other errors are logged but connection is closed
+        if ((err as any).code !== 'WS_ERR_UNSUPPORTED_MESSAGE_LENGTH') {
+          console.error(`WS error for ${connId}:`, err.message)
+        }
+      })
 
       // Connection must authenticate within timeout
       let authenticated = false
@@ -818,6 +827,18 @@ export class HarmonyServer {
               })
               return
             }
+          }
+
+          // Validate message has required type field
+          if (!msg.type || typeof msg.type !== 'string') {
+            this.sendToConnection(conn, {
+              id: `err-${Date.now()}`,
+              type: 'error',
+              timestamp: new Date().toISOString(),
+              sender: 'server',
+              payload: { code: 'INVALID_MESSAGE', message: 'Missing or invalid message type' }
+            })
+            return
           }
 
           await this.handleMessage(conn, msg)
@@ -957,7 +978,7 @@ export class HarmonyServer {
   private validateRequiredStrings(conn: ServerConnection, payload: any, fields: string[]): boolean {
     for (const field of fields) {
       if (typeof payload[field] !== 'string' || (payload[field] as string).trim() === '') {
-        this.sendError(conn, 'INVALID_INPUT', `Missing or invalid field: ${field}`)
+        this.sendError(conn, 'INVALID_PAYLOAD', `Missing or invalid field: ${field}`)
         return false
       }
     }
@@ -967,7 +988,7 @@ export class HarmonyServer {
   /** Validate string length */
   private validateStringLength(conn: ServerConnection, value: unknown, fieldName: string, maxLength: number): boolean {
     if (typeof value === 'string' && value.length > maxLength) {
-      this.sendError(conn, 'INVALID_INPUT', `${fieldName} exceeds maximum length of ${maxLength}`)
+      this.sendError(conn, 'INVALID_PAYLOAD', `${fieldName} exceeds maximum length of ${maxLength}`)
       return false
     }
     return true
@@ -1171,7 +1192,14 @@ export class HarmonyServer {
         await this.handleChannelHistory(conn, msg)
         break
       default:
-        // Unknown message type — ignore
+        // Unknown message type — send error
+        this.sendToConnection(conn, {
+          id: `err-${Date.now()}`,
+          type: 'error',
+          timestamp: new Date().toISOString(),
+          sender: 'server',
+          payload: { code: 'UNKNOWN_TYPE', message: `Unknown message type: ${msg.type}` }
+        })
         break
     }
   }
@@ -3164,7 +3192,7 @@ export class HarmonyServer {
 
     // Validate size is a positive number
     if (typeof payload.size !== 'number' || payload.size <= 0) {
-      this.sendError(conn, 'INVALID_INPUT', 'Invalid file size')
+      this.sendError(conn, 'INVALID_PAYLOAD', 'Invalid file size')
       return
     }
 

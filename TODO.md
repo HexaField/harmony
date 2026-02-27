@@ -60,14 +60,14 @@ Tests: 39 passing (up from 35), 4 todo remaining (UI integration tests needing S
 
 ## Launch Requirements (Code Work)
 
-### 2. Discord Migration — Manual Verification
+### 2. Discord Migration — ~~Manual Verification~~ Mostly Verified (2026-02-27)
 
-Full pipeline exists and is mostly/completely working. Code may be complete — needs manual verification.
+Full pipeline verified against real Discord server (`1450651180211638365`) via Playwright + vitest.
 
-- [x] Manual end-to-end: run `migration-bot` against a real Discord server
-- [ ] Verify channel/message/role/member mapping completeness
+- [x] Manual end-to-end: run `migration-bot` against a real Discord server ✅ — Playwright: guild info, channels, members, messages, full export pipeline all pass
+- [x] Verify channel/message/role/member mapping completeness ✅ — Playwright: channel count, message content, member mapping assertions pass
 - [ ] Verify media attachment migration
-- [ ] Confirm UI flow in browser (migration-client → server endpoint → community creation)
+- [ ] Confirm UI flow in browser (migration-client → server endpoint → community creation) — **blocked**: migration endpoint returns 426 (WebSocket-only, needs HTTP REST)
 - [ ] Migration data transforms: emoji, sticker, thread handling (3 todo tests in `migration.spec.ts`)
 
 Files:
@@ -213,7 +213,7 @@ Single-level delegation works (admin → member). Plan specifies deep chains.
 
 ---
 
-## Skipped & Todo Tests (33 skip + 88 todo = 121 total)
+## Skipped & Todo Tests (31 skip + 88 todo = 119 total)
 
 ### Post-launch — not blocking beta (29)
 
@@ -227,15 +227,15 @@ Single-level delegation works (admin → member). Plan specifies deep chains.
 | cli        | 3 todo | .hbundle export/import/preserve                                |
 | governance | 2 todo | Constitutional amendments, quorum                              |
 
-### Infrastructure-dependent — need real credentials (24)
+### Infrastructure-dependent — need real credentials (17)
 
-| Package                            | Count   | What                                      |
-| ---------------------------------- | ------- | ----------------------------------------- |
-| integration-tests/feature-coverage | 14 skip | Entire file skipped (meta-test)           |
-| cloud                              | 0 skip  | Discord OAuth tests now pass (Playwright) |
-| portal                             | 0 skip  | Discord OAuth tests now pass (Playwright) |
-| migration-e2e                      | 1 skip  | Import endpoint is WS-only (426)          |
-| migration-bot                      | 0 skip  | Real Discord token tests unskipped        |
+| Package                            | Count   | What                                                    |
+| ---------------------------------- | ------- | ------------------------------------------------------- |
+| integration-tests/feature-coverage | 14 skip | Entire file skipped (meta-test)                         |
+| cloud                              | 2 skip  | Discord OAuth (vitest still skipped, Playwright covers) |
+| portal                             | 2 skip  | Discord OAuth (vitest still skipped, Playwright covers) |
+| migration-e2e                      | 3 skip  | Import blocked on WS-only endpoint (426)                |
+| migration-bot                      | 0 skip  | Real Discord token tests now pass ✅                    |
 
 ### Needs real environment (15)
 
@@ -277,7 +277,8 @@ Single-level delegation works (admin → member). Plan specifies deep chains.
 
 ## Stats Snapshot (2026-02-27)
 
-- **Tests:** 2337 passing, 33 skipped, 88 todo, 4 flaky (port conflicts in full suite — pass individually)
+- **Tests:** 2338 passing, 31 skipped, 88 todo, 1 flaky (E2EE port conflict — passes individually)
+- **Playwright:** 12 passing, 1 skipped (Discord integration)
 - **Packages:** 36
 - **Total estimated LOC:** ~32,000+
 - **Search:** 39 passing (up from 35), fully integrated

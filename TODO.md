@@ -68,7 +68,7 @@ Playwright tests pass against real Discord server. Bot API, OAuth, migration E2E
 - [x] Verify channel/message/role/member mapping completeness ✅
 - [x] Import to Harmony server via REST endpoint ✅ (port+1 health/API server)
 - [ ] Verify media attachment migration
-- [ ] Migration data transforms: emoji, sticker, thread handling (3 todo tests in `migration.spec.ts`)
+- [ ] Migration data transforms: emoji, sticker, thread handling (currently basic — may need enrichment)
 
 Files:
 

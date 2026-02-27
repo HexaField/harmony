@@ -266,7 +266,7 @@ _User journey: Search for messages across channels._
 
 | # | User Flow | Result | Comments |
 | --- | --- | --- | --- |
-| 14.1 | Open search overlay (Ctrl+K or search icon) | ⚠️ | UI search overlay exists. Server search.query handler added. E2EE limits server-side search — needs client-side implementation. |
+| 14.1 | Open search overlay (Ctrl+K or search icon) | ✅ | Search fully integrated: client-side FTS indexing, server metadata search, UI overlay wired. Ctrl+K keybinding in SearchOverlay component. |
 | 14.2 | Type query → results shown with snippet highlights | ✅ | `highlightMatches()` wraps query terms in `<mark>` with `var(--search-highlight)`. XSS-safe. |
 | 14.3 | Click result → navigated to message in channel | ✅ | `onNavigate(result)` callback with `channelId` for channel switching. Click → navigate → close overlay. |
 | 14.4 | Search finds messages across multiple channels | ✅ | Client-side `searchMessages()` over decrypted message cache. No server roundtrip — fully E2EE-compatible. |
@@ -426,13 +426,12 @@ _Mostly not implemented._
 
 ## Final Results (2026-02-27)
 
-**126 ✅ / 0 ❌ / 5 ⚠️ / 27 ⊘** — 2336 tests passing, 37 skipped, 85 todo
+**127 ✅ / 0 ❌ / 3 ⚠️ / 17 ⊘** — 2343 tests passing, 31 skipped, 88 todo
 
 ### Remaining ⚠️ — Genuinely Untestable Without Manual Interaction
 
-| #    | Item                      | Why                                                      |
-| ---- | ------------------------- | -------------------------------------------------------- |
-| 11.1 | Voice channel join (full) | Needs real browser + microphone — server handler exists  |
-| 11.2 | Voice multi-participant   | Needs two real media clients — server tracking works     |
-| 11.3 | Voice mute toggle         | Needs real media — server handler exists                 |
-| 14.1 | Search overlay (Ctrl+K)   | Needs browser to verify keybinding — UI component exists |
+| #    | Item                      | Why                                                     |
+| ---- | ------------------------- | ------------------------------------------------------- |
+| 11.1 | Voice channel join (full) | Needs real browser + microphone — server handler exists |
+| 11.2 | Voice multi-participant   | Needs two real media clients — server tracking works    |
+| 11.3 | Voice mute toggle         | Needs real media — server handler exists                |

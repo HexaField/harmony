@@ -1597,6 +1597,8 @@ export class HarmonyServer {
 
   private async handleCommunityBan(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
     const payload = msg.payload as { communityId: string; targetDID: string; reason?: string }
+    if (!this.validateRequiredStrings(conn, payload, ['communityId', 'targetDID'])) return
+    if (!this.validateMembership(conn, payload.communityId)) return
 
     // Admin check
     if (!(await this.isAdmin(payload.communityId, conn.did))) {
@@ -2719,6 +2721,9 @@ export class HarmonyServer {
       permissions: string[]
       position: number
     }
+    if (!this.validateRequiredStrings(conn, payload, ['communityId', 'name'])) return
+    if (!this.validateMembership(conn, payload.communityId)) return
+    if (!this.validateStringLength(conn, payload.name, 'name', HarmonyServer.MAX_NAME_LENGTH)) return
 
     if (!(await this.isAdmin(payload.communityId, conn.did))) {
       this.sendToConnection(conn, {
@@ -3150,21 +3155,20 @@ export class HarmonyServer {
       size: number
       data: string // base64
     }
+    if (!this.validateRequiredStrings(conn, payload, ['communityId', 'channelId', 'filename', 'mimeType'])) return
+    if (!this.validateMembership(conn, payload.communityId)) return
 
-    // Validate membership
-    if (!conn.communities.includes(payload.communityId)) {
-      this.sendToConnection(conn, {
-        id: `err-${Date.now()}`,
-        type: 'error',
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: { code: 'NOT_MEMBER', message: 'Not a member of this community' }
-      })
+    // Sanitize filename against path traversal
+    payload.filename = HarmonyServer.sanitizeFilename(payload.filename)
+
+    // Validate size is a positive number
+    if (typeof payload.size !== 'number' || payload.size <= 0) {
+      this.sendError(conn, 'INVALID_INPUT', 'Invalid file size')
       return
     }
 
     // Validate MIME type
-    if (!HarmonyServer.ALLOWED_MIME_TYPES.has(payload.mimeType as string)) {
+    if (!HarmonyServer.ALLOWED_MIME_TYPES.has(payload.mimeType)) {
       this.sendToConnection(conn, {
         id: `err-${Date.now()}`,
         type: 'error',
@@ -3176,7 +3180,7 @@ export class HarmonyServer {
     }
 
     // Validate size
-    if ((payload.size as number) > HarmonyServer.MAX_MEDIA_SIZE) {
+    if (payload.size > HarmonyServer.MAX_MEDIA_SIZE) {
       this.sendToConnection(conn, {
         id: `err-${Date.now()}`,
         type: 'error',
@@ -3305,6 +3309,8 @@ export class HarmonyServer {
       hasAttachment?: boolean
       limit?: number
     }
+    if (!this.validateRequiredStrings(conn, payload, ['communityId', 'query'])) return
+    if (!this.validateStringLength(conn, payload.query, 'query', HarmonyServer.MAX_QUERY_LENGTH)) return
 
     // Membership check
     if (!conn.communities.includes(payload.communityId)) {

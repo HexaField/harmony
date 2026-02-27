@@ -637,6 +637,52 @@ describe('@harmony/zcap', () => {
       expect(result.valid).toBe(false)
     })
 
+    it('MUST invalidate child when parent is revoked', async () => {
+      const owner = await createTestIdentity()
+      const mid = await createTestIdentity()
+      const leaf = await createTestIdentity()
+
+      const root = await zcapService.createRoot({
+        ownerDID: owner.did,
+        ownerKeyPair: owner.kp,
+        scope: { community: 'test' },
+        allowedAction: ['harmony:SendMessage']
+      })
+
+      const level1 = await zcapService.delegate({
+        parentCapability: root,
+        delegatorKeyPair: owner.kp,
+        invokerDID: mid.did,
+        allowedAction: ['harmony:SendMessage'],
+        scope: { community: 'test' }
+      })
+
+      const level2 = await zcapService.delegate({
+        parentCapability: level1,
+        delegatorKeyPair: mid.kp,
+        invokerDID: leaf.did,
+        allowedAction: ['harmony:SendMessage'],
+        scope: { community: 'test' }
+      })
+
+      // Revoke the middle capability (level1), child (level2) should also be invalid
+      const store = new MemoryRevocationStore()
+      await zcapService.revoke(level1.id, mid.kp, store)
+
+      const inv = await zcapService.invoke({
+        capability: level2,
+        invokerKeyPair: leaf.kp,
+        action: 'harmony:SendMessage',
+        target: 'ch:1'
+      })
+
+      const result = await zcapService.verifyInvocation(inv, [root, level1, level2], resolver, store)
+      expect(result.valid).toBe(false)
+      const revocationCheck = result.checks.find((c) => c.name.includes('Revocation') || c.name.includes('revocation'))
+      expect(revocationCheck).toBeDefined()
+      expect(revocationCheck!.passed).toBe(false)
+    })
+
     it('MUST reject middle-link scope widening in A→B→C chain', async () => {
       const A = await createTestIdentity()
       const B = await createTestIdentity()

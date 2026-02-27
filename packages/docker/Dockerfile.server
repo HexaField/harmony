@@ -17,6 +17,8 @@ COPY packages/federation/package.json packages/federation/
 COPY packages/moderation/package.json packages/moderation/
 COPY packages/voice/package.json packages/voice/
 COPY packages/media/package.json packages/media/
+COPY packages/migration/package.json packages/migration/
+COPY packages/migration-bot/package.json packages/migration-bot/
 RUN corepack enable && pnpm install --frozen-lockfile
 COPY packages/ packages/
 

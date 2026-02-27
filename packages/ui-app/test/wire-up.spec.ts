@@ -109,9 +109,9 @@ describe('Channel Creation', () => {
     })
   })
 
-  it.skip('CreateChannelModal renders and calls createChannel on submit', () => {
-    // Needs browser DOM with SolidJS rendering
-  })
+  it.todo(
+    'CreateChannelModal renders and calls createChannel on submit (requires SolidJS render with AppStoreProvider context)'
+  )
 })
 
 // ── Task 3: Message Editing ──
@@ -210,9 +210,7 @@ describe('Reactions', () => {
     expect(en.REACTION_PICKER_TITLE).toBeDefined()
   })
 
-  it.skip('addReaction/removeReaction wires to client API — needs running server', () => {
-    // Needs WebSocket connection to test actual protocol messages
-  })
+  it.todo('addReaction/removeReaction wires to client API (requires WebSocket mock with server handshake)')
 
   it('message reactions data structure is correct', () => {
     createRoot((dispose) => {
@@ -320,10 +318,7 @@ describe('Settings Persistence', () => {
     })
   })
 
-  it.skip('Save button calls client.setPresence — needs running server', () => {
-    // The SettingsView save button calls client.setPresence() which requires
-    // a connected WebSocket to actually send the message
-  })
+  it.todo('Save button calls client.setPresence (requires connected WebSocket)')
 })
 
 // ── Task 8: Search ──
@@ -479,16 +474,9 @@ describe('Search', () => {
 
 // ── Event Wiring ──
 describe('Event Wiring', () => {
-  it.skip('typing event from client updates store typingUsers — needs WebSocket mock with server response', () => {
-    // The client emits 'typing' events when receiving channel.typing.indicator
-    // messages from the server, which requires a full mock server handshake
-  })
+  it.todo('typing event from client updates store typingUsers (requires WebSocket mock with full server handshake)')
 
-  it.skip('message.edited event from client updates store — needs WebSocket', () => {
-    // Similar to above — requires server to send channel.message.updated
-  })
+  it.todo('message.edited event from client updates store (requires server to send channel.message.updated)')
 
-  it.skip('message.deleted event from client updates store — needs WebSocket', () => {
-    // Requires server to send channel.message.deleted
-  })
+  it.todo('message.deleted event from client updates store (requires server to send channel.message.deleted)')
 })

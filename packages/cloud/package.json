@@ -8,7 +8,6 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "rollup -c",
     "check": "tsc --noEmit",
     "start": "node --import tsx bin/harmony-cloud.js",
     "test": "vitest run"

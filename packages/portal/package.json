@@ -9,7 +9,6 @@
   },
   "scripts": {
     "start": "node --import tsx src/server.ts",
-    "build": "rollup -c",
     "check": "tsc --noEmit",
     "test": "vitest run"
   },

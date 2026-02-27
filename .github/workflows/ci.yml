@@ -1,4 +1,6 @@
 name: CI
+# Disabled until deployment pipeline is ready — avoid unnecessary GitHub Actions costs
+# To re-enable: remove the 'if: false' line below
 on:
   pull_request:
     branches:
@@ -9,6 +11,7 @@ on:
 
 jobs:
   build:
+    if: false  # DISABLED — re-enable when ready for deployment
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository 🛎️

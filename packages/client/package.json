@@ -8,7 +8,6 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "rollup -c",
     "check": "tsc --noEmit",
     "test": "vitest run"
   },

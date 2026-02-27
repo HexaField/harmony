@@ -131,6 +131,7 @@ export class DiscordRESTAPI implements DiscordAPI {
         message_reference?: { message_id?: string }
         reactions?: Array<{ emoji: { name: string }; count: number }>
         attachments?: Array<{ url: string; filename: string }>
+        sticker_items?: Array<{ id: string; name: string; format_type: number }>
       }>
     >(path)
 
@@ -141,7 +142,8 @@ export class DiscordRESTAPI implements DiscordAPI {
       content: msg.content,
       timestamp: msg.timestamp,
       replyTo: msg.message_reference?.message_id,
-      attachments: msg.attachments?.map((a) => ({ url: a.url, filename: a.filename }))
+      attachments: msg.attachments?.map((a) => ({ url: a.url, filename: a.filename })),
+      stickers: msg.sticker_items?.map((s) => ({ id: s.id, name: s.name, formatType: s.format_type }))
     }))
   }
 

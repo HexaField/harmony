@@ -2391,4 +2391,95 @@ describe('@harmony/server', () => {
       wsAdmin.close()
     })
   })
+
+  describe('Input Validation & Security', () => {
+    it('MUST reject oversized messages', async () => {
+      const { ws, close } = await connectAndAuth()
+      try {
+        // Message larger than 1MB — ws library will close with maxPayload error
+        const bigPayload = 'x'.repeat(1_100_000)
+        const msg: ProtocolMessage = {
+          id: 'big-1',
+          type: 'channel.send',
+          timestamp: new Date().toISOString(),
+          sender: 'test',
+          payload: { text: bigPayload }
+        }
+        const closePromise = new Promise<number>((resolve) => {
+          ws.on('close', (code) => resolve(code))
+        })
+        ws.send(serialise(msg))
+        const code = await closePromise
+        // ws library closes with 1009 (message too big) when maxPayload exceeded
+        expect(code).toBe(1009)
+      } finally {
+        close()
+      }
+    })
+
+    it('MUST reject malformed messages (missing type)', async () => {
+      const { ws, close } = await connectAndAuth()
+      try {
+        const response = await new Promise<ProtocolMessage>((resolve) => {
+          ws.on('message', (data) => {
+            const msg = deserialise<ProtocolMessage>(data.toString())
+            if (msg.type === 'error') resolve(msg)
+          })
+          // Send raw JSON missing required fields
+          ws.send(JSON.stringify({ id: 'x' }))
+        })
+        expect((response.payload as any).code).toBe('INVALID_MESSAGE')
+      } finally {
+        close()
+      }
+    })
+
+    it('MUST reject channel.send with missing communityId', async () => {
+      const { ws, close } = await connectAndAuth()
+      try {
+        const response = await new Promise<ProtocolMessage>((resolve) => {
+          ws.on('message', (data) => {
+            const msg = deserialise<ProtocolMessage>(data.toString())
+            if (msg.type === 'error') resolve(msg)
+          })
+          ws.send(
+            serialise({
+              id: 'bad-send',
+              type: 'channel.send',
+              timestamp: new Date().toISOString(),
+              sender: 'test',
+              payload: { channelId: 'ch1', content: { text: 'hi' }, nonce: 'n1' }
+            })
+          )
+        })
+        expect((response.payload as any).code).toBe('INVALID_PAYLOAD')
+      } finally {
+        close()
+      }
+    })
+
+    it('MUST reject community.join with missing communityId', async () => {
+      const { ws, close } = await connectAndAuth()
+      try {
+        const response = await new Promise<ProtocolMessage>((resolve) => {
+          ws.on('message', (data) => {
+            const msg = deserialise<ProtocolMessage>(data.toString())
+            if (msg.type === 'error') resolve(msg)
+          })
+          ws.send(
+            serialise({
+              id: 'bad-join',
+              type: 'community.join',
+              timestamp: new Date().toISOString(),
+              sender: 'test',
+              payload: {}
+            })
+          )
+        })
+        expect((response.payload as any).code).toBe('INVALID_PAYLOAD')
+      } finally {
+        close()
+      }
+    })
+  })
 })

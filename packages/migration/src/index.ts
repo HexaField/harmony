@@ -24,6 +24,7 @@ export interface DiscordMessage {
   replyTo?: string
   reactions?: Array<{ emoji: string; users: string[] }>
   attachments?: Array<{ url: string; filename: string }>
+  stickers?: Array<{ id: string; name: string; formatType: number }>
 }
 
 export interface DiscordChannel {
@@ -308,6 +309,30 @@ export class MigrationService {
               subject: msgURI,
               predicate: HarmonyPredicate.filename,
               object: { value: attachment.filename },
+              graph: channelGraph
+            })
+          }
+        }
+
+        if (msg.stickers) {
+          for (const sticker of msg.stickers) {
+            const stickerURI = `${msgURI}:sticker:${sticker.id}`
+            quads.push({
+              subject: msgURI,
+              predicate: `${HARMONY}sticker`,
+              object: stickerURI,
+              graph: channelGraph
+            })
+            quads.push({
+              subject: stickerURI,
+              predicate: `${HARMONY}stickerName`,
+              object: { value: sticker.name },
+              graph: channelGraph
+            })
+            quads.push({
+              subject: stickerURI,
+              predicate: `${HARMONY}stickerFormat`,
+              object: { value: String(sticker.formatType) },
               graph: channelGraph
             })
           }

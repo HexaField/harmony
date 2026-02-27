@@ -44,7 +44,8 @@ function createTestServerExport(): DiscordServerExport {
             content: 'Hi there!',
             timestamp: '2023-01-15T10:01:00Z',
             replyTo: 'msg1',
-            reactions: [{ emoji: '👍', users: ['user1'] }]
+            reactions: [{ emoji: '👍', users: ['user1'] }],
+            stickers: [{ id: 'sticker1', name: 'pepe_happy', formatType: 1 }]
           }
         ]
       ]
@@ -116,6 +117,21 @@ describe('@harmony/migration', () => {
       const { quads } = migration.transformServerExport(createTestServerExport(), doc.id)
       const threads = quads.filter((q) => q.object === HarmonyType.Thread)
       expect(threads).toHaveLength(1)
+    })
+
+    it('MUST preserve sticker data in migration', async () => {
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const { quads } = migration.transformServerExport(createTestServerExport(), doc.id)
+      const stickerQuads = quads.filter((q) => typeof q.predicate === 'string' && q.predicate.includes('sticker'))
+      // Should have: sticker link, stickerName, stickerFormat
+      expect(stickerQuads.length).toBeGreaterThanOrEqual(3)
+      const stickerName = stickerQuads.find((q) => q.predicate.includes('stickerName'))
+      expect(stickerName).toBeDefined()
+      expect(stickerName!.object).toEqual({ value: 'pepe_happy' })
+      const stickerFormat = stickerQuads.find((q) => q.predicate.includes('stickerFormat'))
+      expect(stickerFormat).toBeDefined()
+      expect(stickerFormat!.object).toEqual({ value: '1' })
     })
 
     it('MUST handle opt-out (excluded users)', async () => {

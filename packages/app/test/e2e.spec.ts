@@ -22,7 +22,6 @@ import type { BotManifest, BotEvent } from '@harmony/bot-api'
 
 // Governance
 import { GovernanceEngine, Constitution, DelegationManager, AgentAuthManager } from '@harmony/governance'
-import type { Proposal } from '@harmony/governance'
 
 // Credentials
 import {
@@ -37,7 +36,6 @@ import {
 import { CommunityManager } from '@harmony/server'
 
 // VC for credential issuance
-import { VCService } from '@harmony/vc'
 
 // ZCAPService for voice room manager
 import { ZCAPService } from '@harmony/zcap'
@@ -150,7 +148,7 @@ describe('Voice Call Flow', () => {
 
     const joined: string[] = []
     const left: string[] = []
-    ;(conn as any).onParticipantJoined?.call
+    // ;(conn as any).onParticipantJoined?.call
     conn.onParticipantJoined((p: any) => joined.push(p.did))
     conn.onParticipantLeft((did: string) => left.push(did))
 

@@ -9,9 +9,8 @@ import { VCService, MemoryRevocationStore } from '@harmony/vc'
 import type { VerifiablePresentation } from '@harmony/vc'
 import type { Identity } from '@harmony/identity'
 import { HarmonyServer } from '@harmony/server'
-import type { ProtocolMessage } from '@harmony/protocol'
-import { serialise, deserialise } from '@harmony/protocol'
-import { HarmonyClient, LocalStoragePersistence } from '../src/index.js'
+import { serialise } from '@harmony/protocol'
+import { HarmonyClient } from '../src/index.js'
 import type { PersistenceAdapter, PersistedState } from '../src/index.js'
 
 const crypto = createCryptoProvider()
@@ -60,7 +59,7 @@ async function createTestIdentity(): Promise<{
 }
 
 // WSLike adapter for ws module
-function createWsFactory(port: number) {
+function createWsFactory(_port: number) {
   return (url: string) => {
     const ws = new WebSocket(url)
     const wsLike = {
@@ -143,9 +142,9 @@ describe('@harmony/client', () => {
     it('MUST emit disconnected event on disconnect', async () => {
       const { identity, keyPair, vp } = await createTestIdentity()
       const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
-      let disconnected = false
+      let _disconnected = false
       client.on('disconnected', () => {
-        disconnected = true
+        _disconnected = true
       })
       await client.connect({ serverUrl: `ws://127.0.0.1:${PORT}`, identity, keyPair, vp })
       await client.disconnect()
@@ -540,11 +539,11 @@ describe('@harmony/client', () => {
 
   describe('Offline Queue', () => {
     it('MUST queue messages when disconnected', async () => {
-      const { identity, keyPair, vp } = await createTestIdentity()
+      const { identity: _identity, keyPair: _keyPair, vp: _vp } = await createTestIdentity()
       const client = new HarmonyClient({ wsFactory: createWsFactory(PORT) })
 
       // Send before connecting — should queue
-      const community = client.subscribeChannel('c1', 'ch1')
+      const _community = client.subscribeChannel('c1', 'ch1')
       expect(() => client.sendMessage('c1', 'ch1', 'queued')).not.toThrow()
     })
 
@@ -1337,7 +1336,7 @@ describe('@harmony/client', () => {
       expect(client.isConnected()).toBe(true)
       expect(client.myDID()).toBe(identity.did)
 
-      const community = await client.createCommunity({ name: 'Compat Test' })
+      const _community = await client.createCommunity({ name: 'Compat Test' })
       expect(client.communities().length).toBe(1)
 
       await client.disconnect()

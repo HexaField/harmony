@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, afterAll, beforeEach, afterEach } from 'vitest'
 import { WebSocket } from 'ws'
 import { MemoryQuadStore } from '@harmony/quads'
 import { createCryptoProvider } from '@harmony/crypto'
@@ -79,7 +79,7 @@ async function connectAndAuth(vp: VerifiablePresentation): Promise<WebSocket> {
   // Wait for auth response
   await new Promise<void>((resolve) => {
     ws.once('message', (data) => {
-      const msg = deserialise<ProtocolMessage>(data.toString())
+      const _msg = deserialise<ProtocolMessage>(data.toString())
       resolve()
     })
   })
@@ -339,7 +339,7 @@ describe('@harmony/server', () => {
     })
 
     it('MUST reject action not in allowed actions', async () => {
-      const { vp, did, keyPair } = await createIdentity()
+      const { vp, did, keyPair: _keyPair } = await createIdentity()
       const ws = await connectAndAuth(vp)
 
       // Message without valid proof should still be processed (simplified version)
@@ -529,7 +529,7 @@ describe('@harmony/server', () => {
 
       await new Promise((r) => setTimeout(r, 200))
       // No plaintext should be stored
-      const textQuads = await store.match({ predicate: 'https://harmony.example/vocab#content' })
+      const _textQuads = await store.match({ predicate: 'https://harmony.example/vocab#content' })
       // Content predicate should not contain plaintext — payload is serialised
       const stored = await server.messageStoreInstance.getMessage('enc-msg')
       const payload = stored?.payload as { content?: { ciphertext: unknown } }
@@ -703,7 +703,7 @@ describe('@harmony/server', () => {
       const cm = new CommunityManager(store, crypto)
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)
-      const community = await cm.create({ name: 'Test', creatorDID: doc.id, creatorKeyPair: kp })
+      const _community = await cm.create({ name: 'Test', creatorDID: doc.id, creatorKeyPair: kp })
 
       const channelQuads = await store.match({
         predicate: RDFPredicate.type,

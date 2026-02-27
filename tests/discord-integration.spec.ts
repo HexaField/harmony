@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { DiscordRESTAPI } from '../packages/migration-bot/src/discord-api.js'
-import { MigrationBot, type DiscordAPI } from '../packages/migration-bot/src/index.js'
+import { MigrationBot } from '../packages/migration-bot/src/index.js'
 import { createCryptoProvider } from '../packages/crypto/src/index.js'
 import { DIDKeyProvider } from '../packages/did/src/index.js'
 import { createApp } from '../packages/portal/src/server.js'
@@ -193,7 +193,7 @@ test.describe('Migration E2E (export + import)', () => {
     harmonyUrl = 'http://localhost:19927' // Health/API port is server port + 1
     // Start harmony server in background
     const { exec } = await import('node:child_process')
-    const { promisify } = await import('node:util')
+    const { promisify: _promisify } = await import('node:util')
 
     serverProcess = exec('node --import tsx packages/server-runtime/bin/harmony-server.js --port 19926', {
       cwd: process.cwd(),

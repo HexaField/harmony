@@ -1,14 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { WebSocket } from 'ws'
-import { createCryptoProvider, randomBytes } from '@harmony/crypto'
-import type { KeyPair, CryptoProvider } from '@harmony/crypto'
+import { createCryptoProvider } from '@harmony/crypto'
+import type { KeyPair } from '@harmony/crypto'
 import { DIDKeyProvider } from '@harmony/did'
 import { IdentityManager } from '@harmony/identity'
 import type { Identity } from '@harmony/identity'
 import { VCService, MemoryRevocationStore } from '@harmony/vc'
-import type { VerifiablePresentation, VerifiableCredential, DIDResolver } from '@harmony/vc'
+import type { VerifiablePresentation, DIDResolver } from '@harmony/vc'
 import { ZCAPService } from '@harmony/zcap'
-import { HarmonyServer, CommunityManager, MessageStore } from '@harmony/server'
+import { HarmonyServer } from '@harmony/server'
 import { HarmonyClient } from '@harmony/client'
 import { MemoryQuadStore } from '@harmony/quads'
 import type { QuadStore } from '@harmony/quads'
@@ -24,7 +24,7 @@ import {
   CrossCommunityService,
   VCPortfolio
 } from '@harmony/credentials'
-import { GovernanceEngine, Constitution, DelegationManager } from '@harmony/governance'
+import { GovernanceEngine, Constitution } from '@harmony/governance'
 import { BotHost, createBotContext, EventDispatcher, ZCAPBotAuth, SandboxEnforcer } from '@harmony/bot-api'
 import type { BotManifest } from '@harmony/bot-api'
 
@@ -214,7 +214,7 @@ describe('Journey 1: New User Onboarding', () => {
 describe('Journey 2: Discord Migration', () => {
   it('migrates Discord data to Harmony, verifies quads, connects to server, accesses data', async () => {
     const migrationService = new MigrationService(crypto)
-    const { identity: adminIdentity, keyPair: adminKP, mnemonic } = await identityMgr.create()
+    const { identity: adminIdentity, keyPair: adminKP, mnemonic: _mnemonic } = await identityMgr.create()
     const { identity: user2Identity, keyPair: user2KP } = await identityMgr.create()
 
     // Step 1: Create identities for two users (simulating Discord linking via VC)
@@ -589,7 +589,7 @@ describe('Journey 6: Federation', () => {
     )
 
     // Server B creates federation manager
-    const fedB = new FederationManager(
+    const _fedB = new FederationManager(
       { instanceDID: instanceDIDB, instanceKeyPair: kpB },
       { onMessage: (_peer, msg) => receivedB.push(msg) }
     )
@@ -674,8 +674,8 @@ describe('Journey 7: E2EE Private Messaging', () => {
 
     // User B creates identity and keys
     const kpB = await crypto.generateSigningKeyPair()
-    const encKpB = await crypto.deriveEncryptionKeyPair(kpB)
-    const didB = 'did:key:zUserB'
+    const _encKpB = await crypto.deriveEncryptionKeyPair(kpB)
+    const _didB = 'did:key:zUserB'
 
     // User C (outsider)
     const kpC = await crypto.generateSigningKeyPair()
@@ -747,7 +747,7 @@ describe('Journey 8: Credential Portfolio', () => {
     const store = createTestStore()
     const registry = new CredentialTypeRegistry(store)
     const credIssuer = new CredentialIssuer(crypto, registry)
-    const reputation = new ReputationEngine(store)
+    const _reputation = new ReputationEngine(store)
     const portfolio = new VCPortfolio(crypto)
     const crossCommunity = new CrossCommunityService(crypto)
 
@@ -756,7 +756,7 @@ describe('Journey 8: Credential Portfolio', () => {
     const { identity: aliceId, keyPair: aliceKP } = await identityMgr.create()
     const aliceDID = aliceId.did
     const communityA = 'community:alpha'
-    const communityB = 'community:beta'
+    const _communityB = 'community:beta'
 
     // Step 1: Discord linking VC (simulated OAuth)
     const discordVC = await vcService.issue({

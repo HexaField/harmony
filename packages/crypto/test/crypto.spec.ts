@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { createCryptoProvider, randomBytes, NobleCryptoProvider } from '../src/index.js'
-import type { KeyPair, EncryptedPayload, CryptoProvider } from '../src/index.js'
 
 const crypto = createCryptoProvider()
 

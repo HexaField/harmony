@@ -67,8 +67,8 @@ Playwright tests pass against real Discord server. Bot API, OAuth, migration E2E
 - [x] Manual end-to-end: run `migration-bot` against a real Discord server ✅
 - [x] Verify channel/message/role/member mapping completeness ✅
 - [x] Import to Harmony server via REST endpoint ✅ (port+1 health/API server)
-- [ ] Verify media attachment migration
-- [ ] Migration data transforms: emoji, sticker, thread handling (currently basic — may need enrichment)
+- [x] Media attachment migration ✅ — attachment download, embed transforms, thread fetching, reaction user lists
+- [x] Migration data transforms ✅ — embeds (url/title/desc/thumbnail as RDF), stickers (3 quads each), threads (active+archived auto-merged), reactions (per-user via API)
 
 Files:
 
@@ -267,18 +267,18 @@ Single-level delegation works (admin → member). Plan specifies deep chains.
 
 ### Other (4)
 
-| Package        | Count  | What                              |
-| -------------- | ------ | --------------------------------- |
-| protocol       | 4 todo | Future message types              |
-| server-runtime | 1 skip | Import messages edge case         |
-| migration      | 3 todo | Emoji, sticker, thread transforms |
-| cloud-worker   | 4 todo | DO integration (miniflare)        |
+| Package        | Count  | What                                                         |
+| -------------- | ------ | ------------------------------------------------------------ |
+| protocol       | 4 todo | Future message types                                         |
+| server-runtime | 1 skip | Import messages edge case                                    |
+| migration      | 3 todo | GDPR: opt-out, privacy notice, portable export (post-launch) |
+| cloud-worker   | 4 todo | DO integration (miniflare)                                   |
 
 ---
 
 ## Stats Snapshot (2026-02-27 19:00)
 
-- **Tests:** 2357 passing, 31 skipped, 93 todo, 0 failures
+- **Tests:** 2364 passing, 31 skipped, 93 todo, 0 failures
 - **Playwright:** 13 passing, 0 skipped (Discord integration)
 - **Packages:** 36
 - **Total estimated LOC:** ~32,000+

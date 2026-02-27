@@ -166,10 +166,21 @@ export class MigrationEndpoint {
     return false
   }
 
+  private static readonly MAX_BODY_SIZE = 5 * 1024 * 1024 // 5MB
+
   private async readBody(req: IncomingMessage): Promise<string> {
     return new Promise((resolve, reject) => {
       const chunks: Buffer[] = []
-      req.on('data', (chunk: Buffer) => chunks.push(chunk))
+      let totalSize = 0
+      req.on('data', (chunk: Buffer) => {
+        totalSize += chunk.length
+        if (totalSize > MigrationEndpoint.MAX_BODY_SIZE) {
+          req.destroy()
+          reject(new Error('Request body too large'))
+          return
+        }
+        chunks.push(chunk)
+      })
       req.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')))
       req.on('error', reject)
     })
@@ -225,6 +236,12 @@ export class MigrationEndpoint {
 
     if (!body.did || !body.ciphertext || !body.nonce) {
       this.json(res, 400, { error: 'Missing required fields: did, ciphertext, nonce' })
+      return
+    }
+
+    // Validate DID length to prevent storage abuse
+    if (body.did.length > 256) {
+      this.json(res, 400, { error: 'DID exceeds maximum length of 256 characters' })
       return
     }
 

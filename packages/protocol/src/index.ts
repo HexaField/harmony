@@ -203,6 +203,7 @@ export interface ChannelUpdatePayload {
   name?: string
   topic?: string
   type?: 'text' | 'voice' | 'announcement'
+  slowMode?: number
 }
 
 export interface ChannelDeleteAdminPayload {
@@ -287,4 +288,52 @@ export interface SyncStatePayload {
   communityId: string
   channelId: string
   clock: LamportClock
+}
+
+// ── Moderation ──
+
+export interface ModerationConfigUpdatePayload {
+  communityId: string
+  rules: Array<{
+    type: 'rateLimit' | 'accountAge' | 'raidDetection' | 'vcRequirement'
+    config: Record<string, unknown>
+  }>
+}
+
+export interface ModerationConfigGetPayload {
+  communityId: string
+}
+
+// ── Notifications ──
+
+export interface Notification {
+  id: string
+  type: 'mention' | 'dm' | 'reply'
+  fromDID: string
+  communityId?: string
+  channelId?: string
+  messageId: string
+  content: string
+  read: boolean
+  createdAt: string
+}
+
+export interface NotificationListPayload {
+  limit?: number
+  offset?: number
+  unreadOnly?: boolean
+}
+
+export interface NotificationListResponsePayload {
+  notifications: Notification[]
+  total: number
+}
+
+export interface NotificationMarkReadPayload {
+  notificationIds: string[]
+}
+
+export interface NotificationCountResponsePayload {
+  unread: number
+  byChannel: Record<string, number>
 }

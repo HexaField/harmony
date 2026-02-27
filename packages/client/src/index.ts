@@ -9,7 +9,8 @@ import type {
   RoleCreatePayload,
   DecryptedContent,
   ClientEvent,
-  EncryptedContent
+  EncryptedContent,
+  Notification
 } from '@harmony/protocol'
 import { serialise, deserialise } from '@harmony/protocol'
 import { CRDTLog, clockTick, clockMerge } from '@harmony/crdt'

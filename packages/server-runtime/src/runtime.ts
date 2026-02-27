@@ -204,6 +204,10 @@ export class ServerRuntime {
 
       // Add CORS headers to all responses
       res.setHeader('Access-Control-Allow-Origin', '*')
+      // Security headers
+      res.setHeader('X-Content-Type-Options', 'nosniff')
+      res.setHeader('X-Frame-Options', 'DENY')
+      res.setHeader('X-XSS-Protection', '1; mode=block')
 
       if (req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' })

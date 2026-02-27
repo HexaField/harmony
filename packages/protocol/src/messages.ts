@@ -122,11 +122,23 @@ export type MessageType =
   | 'mls.welcome'
   | 'mls.commit'
   | 'mls.group.setup'
+  // Notifications
+  | 'notification.list'
+  | 'notification.mark-read'
+  | 'notification.count'
+  | 'notification.list.response'
+  | 'notification.count.response'
+  | 'notification.new'
   // Search & History
   | 'search.query'
   | 'search.results'
   | 'channel.history'
   | 'channel.history.response'
+  // Moderation
+  | 'moderation.config.update'
+  | 'moderation.config.get'
+  | 'moderation.config.response'
+  | 'moderation.raid-detected'
   // Community management
   | 'community.kick'
   | 'community.list'
@@ -226,7 +238,14 @@ export const CLIENT_TO_SERVER_TYPES: MessageType[] = [
   'mls.keypackage.upload',
   'mls.keypackage.fetch',
   'mls.commit',
-  'mls.group.setup'
+  'mls.group.setup',
+  // Notifications
+  'notification.list',
+  'notification.mark-read',
+  'notification.count',
+  // Moderation
+  'moderation.config.update',
+  'moderation.config.get'
 ]
 
 export const SERVER_TO_CLIENT_TYPES: MessageType[] = [
@@ -277,7 +296,14 @@ export const SERVER_TO_CLIENT_TYPES: MessageType[] = [
   'bot.event',
   // E2EE / MLS
   'mls.keypackage.response',
-  'mls.welcome'
+  'mls.welcome',
+  // Notifications
+  'notification.list.response',
+  'notification.count.response',
+  'notification.new',
+  // Moderation
+  'moderation.config.response',
+  'moderation.raid-detected'
 ]
 
 export const FEDERATION_TYPES: MessageType[] = ['federation.relay', 'federation.sync', 'federation.presence']

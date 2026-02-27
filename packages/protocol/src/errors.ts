@@ -8,6 +8,7 @@ export type ErrorCode =
   | 'ZCAP_REVOKED'
   | 'NOT_FOUND'
   | 'RATE_LIMITED'
+  | 'SLOW_MODE'
   | 'FORBIDDEN'
   | 'CONFLICT'
   | 'INTERNAL'

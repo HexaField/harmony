@@ -7,12 +7,19 @@ import type { Capability } from '@harmony/zcap'
 import { ZCAPService } from '@harmony/zcap'
 import type { CryptoProvider, KeyPair } from '@harmony/crypto'
 import { createCryptoProvider, randomBytes } from '@harmony/crypto'
-import type { ProtocolMessage, PresenceUpdatePayload, LamportClock, MessageType } from '@harmony/protocol'
+import type {
+  ProtocolMessage,
+  PresenceUpdatePayload,
+  LamportClock,
+  MessageType,
+  Notification as HarmonyNotification
+} from '@harmony/protocol'
 import { serialise, deserialise } from '@harmony/protocol'
 import { HarmonyPredicate, HarmonyType, HarmonyAction, HARMONY, RDFPredicate, XSDDatatype } from '@harmony/vocab'
 import type { DIDDocument } from '@harmony/did'
 import type { SFUAdapter } from '@harmony/voice'
 import { MetadataSearchIndex } from '@harmony/search'
+import { ModerationPlugin } from '@harmony/moderation'
 
 // ── Server Config ──
 
@@ -709,9 +716,11 @@ export class HarmonyServer {
   private roles: Map<string, Map<string, Role>> = new Map() // communityId → roleId → Role
   private memberRoles: Map<string, Map<string, Set<string>>> = new Map() // communityId → DID → Set<roleId>
   private pins: Map<string, Set<string>> = new Map() // channelKey → Set<messageId>
+  private notifications: Map<string, HarmonyNotification[]> = new Map() // DID → notifications
   private sfuAdapter: SFUAdapter | null = null
   private sfuRooms: Set<string> = new Set() // channelIds with SFU rooms created
   private metadataIndex: MetadataSearchIndex
+  private moderationPlugin: ModerationPlugin
 
   constructor(config: ServerConfig) {
     this.config = config
@@ -722,6 +731,7 @@ export class HarmonyServer {
     this.zcapService = new ZCAPService(this.crypto)
     this.sfuAdapter = config.sfuAdapter ?? null
     this.metadataIndex = new MetadataSearchIndex(config.store)
+    this.moderationPlugin = new ModerationPlugin()
   }
 
   get messageStoreInstance(): MessageStore {
@@ -1203,6 +1213,21 @@ export class HarmonyServer {
       case 'channel.history':
         await this.handleChannelHistory(conn, msg)
         break
+      case 'notification.list':
+        this.handleNotificationList(conn, msg)
+        break
+      case 'notification.mark-read':
+        this.handleNotificationMarkRead(conn, msg)
+        break
+      case 'notification.count':
+        this.handleNotificationCount(conn, msg)
+        break
+      case 'moderation.config.update':
+        await this.handleModerationConfigUpdate(conn, msg)
+        break
+      case 'moderation.config.get':
+        await this.handleModerationConfigGet(conn, msg)
+        break
       default:
         // Unknown message type — send error
         this.sendToConnection(conn, {
@@ -1266,6 +1291,14 @@ export class HarmonyServer {
     // Verify membership (after ZCAP — ZCAP is the primary auth check)
     if (!this.validateMembership(conn, payload.communityId as string)) return
 
+    // Moderation check (slow mode, rate limit, lockdown)
+    const modDecision = await this.moderationPlugin.handleMessage(payload.communityId, msg)
+    if (!modDecision.allowed) {
+      const errorCode = modDecision.action === 'slowMode' ? 'SLOW_MODE' : 'RATE_LIMITED'
+      this.sendError(conn, errorCode, modDecision.reason ?? 'Message blocked by moderation')
+      return
+    }
+
     // Store message
     await this.messageStore.storeMessage(payload.communityId, payload.channelId, msg)
 
@@ -1289,6 +1322,44 @@ export class HarmonyServer {
       payload: msg.payload
     }
     this.broadcastToCommunity(payload.communityId, broadcastMsg)
+
+    // Create notifications for mentions
+    const contentPayload = payload as any
+    if (contentPayload.content?.mentions && Array.isArray(contentPayload.content.mentions)) {
+      for (const mentionDID of contentPayload.content.mentions) {
+        if (mentionDID !== conn.did) {
+          this.createNotification(mentionDID, {
+            type: 'mention',
+            fromDID: conn.did,
+            communityId: payload.communityId,
+            channelId: payload.channelId,
+            messageId: msg.id,
+            content: 'You were mentioned'
+          })
+        }
+      }
+    }
+
+    // Create notification for reply
+    if ((payload as any).replyTo) {
+      const replyToId = (payload as any).replyTo as string
+      const storedMessages = await this.messageStore.getHistory({
+        communityId: payload.communityId,
+        channelId: payload.channelId,
+        limit: 200
+      })
+      const originalMsg = storedMessages?.find((m: ProtocolMessage) => m.id === replyToId)
+      if (originalMsg && originalMsg.sender !== conn.did) {
+        this.createNotification(originalMsg.sender, {
+          type: 'reply',
+          fromDID: conn.did,
+          communityId: payload.communityId,
+          channelId: payload.channelId,
+          messageId: msg.id,
+          content: 'Replied to your message'
+        })
+      }
+    }
   }
 
   private async handleChannelEdit(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
@@ -1379,6 +1450,14 @@ export class HarmonyServer {
     }
     // Store DM
     await this.messageStore.storeMessage('dm', `${conn.did}:${payload.recipientDID}`, msg)
+
+    // Create DM notification
+    this.createNotification(payload.recipientDID, {
+      type: 'dm',
+      fromDID: conn.did,
+      messageId: msg.id,
+      content: 'New direct message'
+    })
   }
 
   private async handleDMEdit(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
@@ -1506,6 +1585,15 @@ export class HarmonyServer {
       })
       conn.ws.close(4003, 'Banned')
       return
+    }
+
+    // Moderation check (account age, VC requirement, raid detection)
+    if (payload.membershipVC) {
+      const joinDecision = await this.moderationPlugin.handleJoin(payload.communityId, conn.did, payload.membershipVC)
+      if (!joinDecision.allowed) {
+        this.sendError(conn, 'FORBIDDEN', joinDecision.reason ?? 'Join blocked by moderation')
+        return
+      }
     }
 
     const result = await this.communityManager.join({
@@ -1812,7 +1900,13 @@ export class HarmonyServer {
   }
 
   private async handleChannelUpdate(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as { communityId: string; channelId: string; name?: string; topic?: string }
+    const payload = msg.payload as {
+      communityId: string
+      channelId: string
+      name?: string
+      topic?: string
+      slowMode?: number
+    }
     if (!this.validateRequiredStrings(conn, payload, ['communityId', 'channelId'])) return
     if (!this.validateMembership(conn, payload.communityId)) return
     if (
@@ -1830,6 +1924,20 @@ export class HarmonyServer {
       name: payload.name,
       topic: payload.topic
     })
+
+    // Handle slowMode rule
+    if (payload.slowMode !== undefined) {
+      const ruleId = `slowmode:${payload.channelId}`
+      this.moderationPlugin.removeRule(payload.communityId, ruleId)
+      if (payload.slowMode > 0) {
+        this.moderationPlugin.addRule(payload.communityId, {
+          id: ruleId,
+          type: 'slowMode',
+          channelId: payload.channelId,
+          intervalSeconds: payload.slowMode
+        })
+      }
+    }
 
     this.broadcastToCommunity(payload.communityId, {
       ...msg,
@@ -3475,5 +3583,109 @@ export class HarmonyServer {
     const media = this.mediaStore.get(mediaId)
     if (!media) return null
     return { data: media.data, mimeType: media.mimeType, filename: media.filename }
+  }
+
+  // ── Notification Helpers ──
+
+  static parseMentions(text: string): string[] {
+    const matches = text.match(/@(did:key:[a-zA-Z0-9]+|[\w-]+)/g)
+    if (!matches) return []
+    return matches.map((m) => m.slice(1))
+  }
+
+  private createNotification(
+    recipientDID: string,
+    opts: {
+      type: 'mention' | 'dm' | 'reply'
+      fromDID: string
+      communityId?: string
+      channelId?: string
+      messageId: string
+      content: string
+    }
+  ): void {
+    const notification: HarmonyNotification = {
+      id: `notif-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      type: opts.type,
+      fromDID: opts.fromDID,
+      communityId: opts.communityId,
+      channelId: opts.channelId,
+      messageId: opts.messageId,
+      content: opts.content,
+      read: false,
+      createdAt: new Date().toISOString()
+    }
+
+    if (!this.notifications.has(recipientDID)) {
+      this.notifications.set(recipientDID, [])
+    }
+    this.notifications.get(recipientDID)!.push(notification)
+
+    // Send real-time notification if recipient is connected
+    for (const [_id, conn] of this._connections) {
+      if (conn.did === recipientDID) {
+        this.sendToConnection(conn, {
+          id: notification.id,
+          type: 'notification.new',
+          timestamp: notification.createdAt,
+          sender: 'server',
+          payload: notification
+        })
+      }
+    }
+  }
+
+  private handleNotificationList(conn: ServerConnection, msg: ProtocolMessage): void {
+    const payload = (msg.payload ?? {}) as { limit?: number; offset?: number; unreadOnly?: boolean }
+    let notifs = this.notifications.get(conn.did) ?? []
+    if (payload.unreadOnly) {
+      notifs = notifs.filter((n) => !n.read)
+    }
+    const total = notifs.length
+    const offset = payload.offset ?? 0
+    const limit = payload.limit ?? 50
+    const sliced = notifs.slice(offset, offset + limit)
+
+    this.sendToConnection(conn, {
+      id: `notif-list-${Date.now()}`,
+      type: 'notification.list.response',
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: { notifications: sliced, total }
+    })
+  }
+
+  private handleNotificationMarkRead(conn: ServerConnection, msg: ProtocolMessage): void {
+    const payload = (msg.payload ?? {}) as { notificationIds?: string[] }
+    const notifs = this.notifications.get(conn.did)
+    if (!notifs) return
+    const ids = payload.notificationIds ?? []
+    if (ids.length === 0) {
+      // Mark all as read
+      for (const n of notifs) n.read = true
+    } else {
+      for (const n of notifs) {
+        if (ids.includes(n.id)) n.read = true
+      }
+    }
+  }
+
+  private handleNotificationCount(conn: ServerConnection, _msg: ProtocolMessage): void {
+    const notifs = this.notifications.get(conn.did) ?? []
+    const unread = notifs.filter((n) => !n.read).length
+    const byChannel: Record<string, number> = {}
+    for (const n of notifs) {
+      if (!n.read && n.channelId) {
+        byChannel[n.channelId] = (byChannel[n.channelId] ?? 0) + 1
+      }
+    }
+
+    this.sendToConnection(conn, {
+      id: `notif-count-${Date.now()}`,
+      type: 'notification.count.response',
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: { unread, byChannel }
+    })
   }
 }

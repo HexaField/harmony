@@ -44,10 +44,13 @@ export interface CloudAdapter {
 // ── Cloudflare Adapter ──
 
 export class CloudflareAdapter implements CloudAdapter {
-  constructor(
-    private workerUrl: string,
-    private apiToken: string
-  ) {}
+  private workerUrl: string
+  private apiToken: string
+
+  constructor(workerUrl: string, apiToken: string) {
+    this.workerUrl = workerUrl
+    this.apiToken = apiToken
+  }
 
   async createInstance(name: string, ownerDID: string): Promise<{ serverUrl: string; instanceId: string }> {
     const res = await fetch(`${this.workerUrl}/api/instances`, {

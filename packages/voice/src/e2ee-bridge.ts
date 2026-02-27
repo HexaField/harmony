@@ -49,7 +49,7 @@ export class E2EEBridge {
 
     const crypto = getCrypto()
     // Import the epoch secret as HKDF key material
-    const keyMaterial = await crypto.subtle.importKey('raw', secret, 'HKDF', false, ['deriveKey'])
+    const keyMaterial = await crypto.subtle.importKey('raw', secret.buffer as ArrayBuffer, 'HKDF', false, ['deriveKey'])
 
     const info = new TextEncoder().encode('harmony-voice-e2ee')
     const salt = new Uint8Array(32) // zero salt, epoch secret has enough entropy
@@ -78,7 +78,7 @@ export class E2EEBridge {
     const encrypted = await crypto.subtle.encrypt(
       { name: 'AES-GCM', iv, additionalData: new Uint8Array(0) },
       cryptoKey,
-      payload
+      payload.buffer as ArrayBuffer
     )
 
     // IV (12) + ciphertext+tag

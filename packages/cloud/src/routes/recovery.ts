@@ -17,7 +17,7 @@ export function recoveryRoutes(recoveryService: RecoveryService): Router {
         configured: true,
         trustedDIDs: config.trustedDIDs,
         threshold: config.threshold,
-        createdAt: config.createdAt
+        createdAt: config.configuredAt
       })
     } catch (err: any) {
       res.status(500).json({ error: err.message })

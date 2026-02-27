@@ -13,6 +13,7 @@ async function isNative(): Promise<boolean> {
 export class CapacitorBiometricAuth implements BiometricAuth {
   private fallback = new InMemoryBiometricAuth()
   private native: boolean | null = null
+  // @ts-expect-error keyAccessEnabled is set but read only by native bridge
   private keyAccessEnabled = false
 
   private async useNative(): Promise<boolean> {

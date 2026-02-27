@@ -3,7 +3,7 @@ import * as mediasoup from 'mediasoup'
 import type { types as msTypes } from 'mediasoup'
 import jwt from 'jsonwebtoken'
 
-const MEDIA_CODECS: msTypes.RtpCodecCapability[] = [
+const MEDIA_CODECS = [
   {
     kind: 'audio',
     mimeType: 'audio/opus',
@@ -79,7 +79,7 @@ export class MediasoupAdapter implements SFUAdapter {
     const worker = this.workers[this.nextWorkerIdx % this.workers.length]
     this.nextWorkerIdx++
 
-    const router = await worker.createRouter({ mediaCodecs: MEDIA_CODECS })
+    const router = await worker.createRouter({ mediaCodecs: MEDIA_CODECS as msTypes.RtpCodecCapability[] })
 
     this.rooms.set(roomId, {
       router,

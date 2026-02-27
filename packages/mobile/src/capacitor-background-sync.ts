@@ -15,6 +15,7 @@ export class CapacitorBackgroundSync implements BackgroundSyncService {
   private native: boolean | null = null
   private syncHandlers = new Map<string, (() => Promise<void>)[]>()
   private lastSyncTime: string | null = null
+  // @ts-expect-error minInterval is set but read only by native bridge
   private minInterval = 300
 
   private async useNative(): Promise<boolean> {

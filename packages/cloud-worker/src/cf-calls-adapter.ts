@@ -21,16 +21,12 @@ interface CFRoomState {
  * In tests, use the mock version.
  */
 export class CloudflareCallsAdapter implements SFUAdapter {
-  private readonly appId: string
   private readonly appSecret: string
-  private readonly accountId: string
   private baseUrl: string
   private rooms = new Map<string, CFRoomState>()
 
   constructor(opts: { appId: string; appSecret: string; accountId: string; baseUrl?: string }) {
-    this.appId = opts.appId
     this.appSecret = opts.appSecret
-    this.accountId = opts.accountId
     this.baseUrl = opts.baseUrl ?? `https://rtc.live.cloudflare.com/v1/apps/${opts.appId}`
   }
 

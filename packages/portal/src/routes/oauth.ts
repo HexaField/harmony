@@ -253,7 +253,7 @@ setTimeout(() => { try { window.close(); } catch(e) {} }, 2000);
 
   // GET /api/oauth/result/:did — Poll for OAuth completion (used by desktop app)
   router.get('/oauth/result/:did', (req: Request, res: Response) => {
-    const did = decodeURIComponent(req.params.did)
+    const did = decodeURIComponent(req.params.did as string)
     const result = completedResults.get(did)
     if (result) {
       completedResults.delete(did) // one-time read

@@ -12,6 +12,7 @@ export { VoiceClient, BrowserMediaProvider } from './voice-client.js'
 export type { MediaDeviceProvider } from './voice-client.js'
 export { InMemoryAdapter } from './adapters/in-memory.js'
 export { E2EEBridge } from './e2ee-bridge.js'
+export { createEncryptTransform, createDecryptTransform } from './insertable-streams.js'
 
 // Backward compat alias
 export { InMemoryAdapter as InMemoryLiveKitAdapter } from './adapters/in-memory.js'

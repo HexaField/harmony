@@ -64,7 +64,7 @@ Tests: 39 passing (up from 35), 4 todo remaining (UI integration tests needing S
 
 Full pipeline exists and is mostly/completely working. Code may be complete — needs manual verification.
 
-- [ ] Manual end-to-end: run `migration-bot` against a real Discord server
+- [x] Manual end-to-end: run `migration-bot` against a real Discord server
 - [ ] Verify channel/message/role/member mapping completeness
 - [ ] Verify media attachment migration
 - [ ] Confirm UI flow in browser (migration-client → server endpoint → community creation)
@@ -229,13 +229,13 @@ Single-level delegation works (admin → member). Plan specifies deep chains.
 
 ### Infrastructure-dependent — need real credentials (24)
 
-| Package                            | Count   | What                                    |
-| ---------------------------------- | ------- | --------------------------------------- |
-| integration-tests/feature-coverage | 14 skip | Entire file skipped (meta-test)         |
-| cloud                              | 2 skip  | Discord OAuth (needs DISCORD_CLIENT_ID) |
-| portal                             | 2 skip  | Discord OAuth (needs real credentials)  |
-| migration-e2e                      | 4 skip  | Bot token + OAuth flow                  |
-| migration-bot                      | 2 skip  | Discord API credentials                 |
+| Package                            | Count   | What                                      |
+| ---------------------------------- | ------- | ----------------------------------------- |
+| integration-tests/feature-coverage | 14 skip | Entire file skipped (meta-test)           |
+| cloud                              | 0 skip  | Discord OAuth tests now pass (Playwright) |
+| portal                             | 0 skip  | Discord OAuth tests now pass (Playwright) |
+| migration-e2e                      | 1 skip  | Import endpoint is WS-only (426)          |
+| migration-bot                      | 0 skip  | Real Discord token tests unskipped        |
 
 ### Needs real environment (15)
 

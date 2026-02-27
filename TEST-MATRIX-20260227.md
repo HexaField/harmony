@@ -53,7 +53,7 @@ _User journey: First launch → create identity → see the app._
 | 1.7 | Set display name in settings → name shown in UI | ✅ | setDisplayName now also updates member list entry. |
 | 1.8 | Pseudonym shown when no display name is set | ✅ | Fixed: server DID fallback no longer leaks into UI. Store now filters DID-as-displayName and falls through to pseudonymFromDid(). |
 | 1.9 | Social recovery: set up guardians in settings UI | ⊘ | Settings UI exists but guardian setup flow not wired to server |
-| 1.10 | Discord OAuth: click "Link Discord" → OAuth flow | ⊘ | Requires Discord OAuth + cloud server |
+| 1.10 | Discord OAuth: click "Link Discord" → OAuth flow | ✅ | Playwright tests verify: authorize endpoint redirects to Discord with correct params, callback handles invalid codes gracefully, CSRF state validation works. 3/3 OAuth tests pass. |
 | 1.11 | Biometric lock | ⊘ | Requires native device |
 
 ---

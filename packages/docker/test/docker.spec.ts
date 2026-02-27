@@ -16,8 +16,6 @@ const pkgDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 const composeContent = readFileSync(join(pkgDir, 'docker-compose.yml'), 'utf-8')
 const serverDockerfile = readFileSync(join(pkgDir, 'Dockerfile.server'), 'utf-8')
-const uiDockerfile = readFileSync(join(pkgDir, 'Dockerfile.ui'), 'utf-8')
-const botDockerfile = readFileSync(join(pkgDir, 'Dockerfile.bot'), 'utf-8')
 const envExample = readFileSync(join(pkgDir, '.env.example'), 'utf-8')
 const configExample = readFileSync(join(pkgDir, 'harmony.config.example.yaml'), 'utf-8')
 
@@ -39,18 +37,9 @@ describe('Docker', () => {
     expect(serverDockerfile).toContain('HEALTHCHECK')
   })
 
-  it('T3: UI Dockerfile is valid', () => {
-    const result = validateDockerfile(uiDockerfile)
-    expect(result.valid).toBe(true)
-    expect(uiDockerfile).toContain('FROM nginx')
-    expect(uiDockerfile).toContain('EXPOSE 8080')
-  })
+  it.todo('T3: UI Dockerfile is valid (Dockerfile.ui removed — not shipping)')
 
-  it('T4: Bot Dockerfile is valid', () => {
-    const result = validateDockerfile(botDockerfile)
-    expect(result.valid).toBe(true)
-    expect(botDockerfile).toContain('DISCORD_TOKEN')
-  })
+  it.todo('T4: Bot Dockerfile is valid (Dockerfile.bot removed — not shipping)')
 
   it('T5: Server has health check defined', () => {
     expect(composeContent).toContain('healthcheck:')
@@ -91,8 +80,6 @@ describe('Docker', () => {
     expect(files.composeFile).toContain('docker-compose.yml')
     expect(files.envExampleFile).toContain('.env.example')
     expect(files.serverDockerfile).toContain('Dockerfile.server')
-    expect(files.uiDockerfile).toContain('Dockerfile.ui')
-    expect(files.botDockerfile).toContain('Dockerfile.bot')
     expect(files.configExampleFile).toContain('harmony.config.example.yaml')
   })
 
@@ -133,9 +120,7 @@ describe('Docker', () => {
     expect((serverDockerfile.match(/FROM /g) || []).length).toBeGreaterThanOrEqual(2)
   })
 
-  it('T19: UI Dockerfile uses multi-stage build', () => {
-    expect(uiDockerfile).toContain('AS builder')
-  })
+  it.todo('T19: UI Dockerfile uses multi-stage build (Dockerfile.ui removed — not shipping)')
 
   it('T20: Server Dockerfile installs pnpm', () => {
     expect(serverDockerfile).toContain('corepack enable')

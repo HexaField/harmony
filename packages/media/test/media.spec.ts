@@ -366,10 +366,7 @@ describe('@harmony/media', () => {
   })
 
   describe('Download (additional)', () => {
-    it.skip('MUST handle partial download failure gracefully', () => {
-      // Source MediaClient.downloadFile does not implement partial download recovery.
-      // Would need streaming download with resume capability.
-    })
+    it.todo('MUST handle partial download failure gracefully (requires streaming download with resume capability)')
   })
 
   describe('Thumbnail Generation (additional)', () => {
@@ -384,28 +381,17 @@ describe('@harmony/media', () => {
   })
 
   describe('Link Previews (additional)', () => {
-    it.skip('MUST proxy preview images through server (privacy)', () => {
-      // Source LinkPreviewService does not implement image proxying.
-      // imageUrl is returned as-is from og:image. Server would need a proxy endpoint.
-    })
+    it.todo('MUST proxy preview images through server for privacy (requires server proxy endpoint)')
   })
 
   describe('Integration', () => {
-    it.skip('MUST attach MediaRef to message EncryptedContent', () => {
-      // Integration with @harmony/protocol message types not implemented in media package.
-    })
+    it.todo('MUST attach MediaRef to message EncryptedContent (requires @harmony/protocol integration)')
 
-    it.skip('MUST display file in message after client-side decryption', () => {
-      // UI integration not implemented in media package.
-    })
+    it.todo('MUST display file in message after client-side decryption (requires UI integration)')
 
-    it.skip('MUST display link preview inline in message', () => {
-      // UI integration not implemented in media package.
-    })
+    it.todo('MUST display link preview inline in message (requires UI integration)')
 
-    it.skip('MUST handle messages with multiple attachments', () => {
-      // Integration with message system not implemented in media package.
-    })
+    it.todo('MUST handle messages with multiple attachments (requires message system integration)')
   })
 
   describe('Image Gallery', () => {

@@ -3,6 +3,7 @@ import { pseudonymFromDid } from './utils/pseudonym.js'
 import type { KeyPair } from '@harmony/crypto'
 import type { Identity } from '@harmony/identity'
 import { HarmonyClient, LocalStoragePersistence } from '@harmony/client'
+import { ClientSearchIndex } from '@harmony/search'
 import { VoiceClient } from '@harmony/voice'
 import type { ServerConnection } from '@harmony/client'
 import type {
@@ -798,9 +799,36 @@ export function createAppStore(): AppStore {
 
   const searchMessages = (query: string): MessageData[] => {
     if (!query.trim()) return []
+    const client = _client()
+    if (client) {
+      try {
+        const results = client.search({ text: query, limit: 50 })
+        return results.map((r) => {
+          // Try to find the message in cache for author name
+          const channelMsgs = channelMessageCache.get(r.channelId) ?? []
+          const cached = channelMsgs.find((m) => m.id === r.messageId)
+          return {
+            id: r.messageId,
+            content: r.snippet,
+            authorDid: r.authorDID,
+            authorName:
+              cached?.authorName ||
+              (() => {
+                const member = members().find((mb) => mb.did === r.authorDID)
+                return member?.displayName || pseudonymFromDid(r.authorDID)
+              })(),
+            timestamp: r.timestamp,
+            channelId: r.channelId,
+            reactions: cached?.reactions ?? []
+          }
+        })
+      } catch {
+        // Search index not available, fall through to brute-force
+      }
+    }
+    // Fallback: brute-force search over cached messages
     const q = query.toLowerCase()
     const results: MessageData[] = []
-    // Search channel messages
     for (const [channelId, msgs] of channelMessageCache) {
       for (const m of msgs) {
         if (m.content.toLowerCase().includes(q) || m.authorName.toLowerCase().includes(q)) {
@@ -808,7 +836,6 @@ export function createAppStore(): AppStore {
         }
       }
     }
-    // Search DM messages
     for (const [recipientDid, msgs] of dmMessageCache) {
       for (const m of msgs) {
         if (m.content.toLowerCase().includes(q) || m.authorName.toLowerCase().includes(q)) {
@@ -1373,16 +1400,44 @@ export function createAppStore(): AppStore {
     // If client already exists, skip
     if (_client()) return
 
+    // Restore or create search index
+    let searchIndex: ClientSearchIndex
+    try {
+      const saved = localStorage.getItem('harmony:search-index')
+      if (saved) {
+        searchIndex = ClientSearchIndex.deserialize(JSON.parse(saved))
+      } else {
+        searchIndex = new ClientSearchIndex()
+      }
+    } catch {
+      searchIndex = new ClientSearchIndex()
+    }
+
     const client = await HarmonyClient.create({
       persistenceAdapter: new LocalStoragePersistence(),
       wsFactory: (url: string) => new WebSocket(url) as any,
       identity: id,
       keyPair: kp,
-      voiceClient: new VoiceClient({ mode: 'mediasoup' })
+      voiceClient: new VoiceClient({ mode: 'mediasoup' }),
+      searchIndex
     })
 
     _setClient(client)
     setupClientListeners(client)
+
+    // Debounced search index persistence
+    let searchPersistTimer: ReturnType<typeof setTimeout> | null = null
+    client.on('message', () => {
+      if (searchPersistTimer) clearTimeout(searchPersistTimer)
+      searchPersistTimer = setTimeout(() => {
+        try {
+          const data = searchIndex.serialize()
+          localStorage.setItem('harmony:search-index', JSON.stringify(data))
+        } catch {
+          // Ignore persistence errors (quota, etc.)
+        }
+      }, 5000)
+    })
     updateConnectionStateFromClient(client)
     refreshServers()
 

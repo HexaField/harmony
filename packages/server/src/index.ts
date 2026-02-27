@@ -12,6 +12,7 @@ import { serialise, deserialise } from '@harmony/protocol'
 import { HarmonyPredicate, HarmonyType, HarmonyAction, HARMONY, RDFPredicate, XSDDatatype } from '@harmony/vocab'
 import type { DIDDocument } from '@harmony/did'
 import type { SFUAdapter } from '@harmony/voice'
+import { MetadataSearchIndex, type MetadataResult } from '@harmony/search'
 
 // ── Server Config ──
 
@@ -703,6 +704,7 @@ export class HarmonyServer {
   private pins: Map<string, Set<string>> = new Map() // channelKey → Set<messageId>
   private sfuAdapter: SFUAdapter | null = null
   private sfuRooms: Set<string> = new Set() // channelIds with SFU rooms created
+  private metadataIndex: MetadataSearchIndex
 
   constructor(config: ServerConfig) {
     this.config = config
@@ -712,6 +714,7 @@ export class HarmonyServer {
     this.vcService = new VCService(this.crypto)
     this.zcapService = new ZCAPService(this.crypto)
     this.sfuAdapter = config.sfuAdapter ?? null
+    this.metadataIndex = new MetadataSearchIndex(config.store)
   }
 
   get messageStoreInstance(): MessageStore {
@@ -1159,6 +1162,17 @@ export class HarmonyServer {
 
     // Store message
     await this.messageStore.storeMessage(payload.communityId, payload.channelId, msg)
+
+    // Index metadata for search (server can only index metadata, not E2EE content)
+    this.metadataIndex.indexMessageMeta({
+      id: msg.id,
+      channelId: payload.channelId,
+      communityId: payload.communityId,
+      authorDID: conn.did,
+      timestamp: msg.timestamp,
+      hasAttachment: !!(payload as any).attachments?.length,
+      clock: payload.clock?.counter ?? 0
+    })
 
     // Broadcast to channel subscribers
     const broadcastMsg: ProtocolMessage = {
@@ -3133,7 +3147,16 @@ export class HarmonyServer {
   }
 
   private async handleSearchQuery(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as { communityId: string; query: string; channelId?: string; limit?: number }
+    const payload = msg.payload as {
+      communityId: string
+      query: string
+      channelId?: string
+      authorDID?: string
+      before?: string
+      after?: string
+      hasAttachment?: boolean
+      limit?: number
+    }
 
     // Membership check
     if (!conn.communities.includes(payload.communityId)) {
@@ -3147,24 +3170,79 @@ export class HarmonyServer {
       return
     }
 
-    // Get all channel IDs for cross-channel search
-    const channels = await this.communityManager.getChannels(payload.communityId)
-    const channelIds = channels.map((c) => c.id)
+    const limit = payload.limit ?? 50
 
-    const results = await this.messageStore.search({
+    // Use metadata index for structured filters (author, channel, date, attachment)
+    const metadataResults = this.metadataIndex.searchMetadata({
       communityId: payload.communityId,
-      query: payload.query,
-      channelId: payload.channelId,
-      channelIds,
-      limit: payload.limit ?? 50
+      filters: {
+        channelId: payload.channelId,
+        authorDID: payload.authorDID,
+        before: payload.before,
+        after: payload.after,
+        hasAttachment: payload.hasAttachment
+      },
+      limit: limit * 2, // fetch extra for text filtering
+      sort: 'newest'
     })
+
+    // If there's a text query, do text matching against stored messages
+    // Note: with E2EE this will only match unencrypted/plaintext messages
+    let results: ProtocolMessage[]
+    if (payload.query?.trim()) {
+      const matchedIds = new Set(metadataResults.map((r) => r.messageId))
+      const channels = await this.communityManager.getChannels(payload.communityId)
+      const channelIds = payload.channelId ? [payload.channelId] : channels.map((c) => c.id)
+
+      // Fall back to MessageStore.search for text matching, but scope to metadata-filtered results
+      const textResults = await this.messageStore.search({
+        communityId: payload.communityId,
+        query: payload.query,
+        channelId: payload.channelId,
+        channelIds,
+        limit: limit * 3
+      })
+
+      // If metadata index has entries, intersect; otherwise use text results as-is
+      if (metadataResults.length > 0 || payload.authorDID || payload.before || payload.after) {
+        results = textResults.filter((m) => matchedIds.has(m.id)).slice(0, limit)
+      } else {
+        results = textResults.slice(0, limit)
+      }
+    } else {
+      // No text query — return metadata matches with full messages
+      const messageIds = metadataResults.slice(0, limit).map((r) => r.messageId)
+      results = []
+      for (const mid of messageIds) {
+        // Fetch full message from store
+        const allChannels = await this.communityManager.getChannels(payload.communityId)
+        for (const ch of allChannels) {
+          const history = await this.messageStore.getHistory({
+            communityId: payload.communityId,
+            channelId: ch.id,
+            limit: 1000
+          })
+          const found = history.find((m) => m.id === mid)
+          if (found) {
+            results.push(found)
+            break
+          }
+        }
+      }
+    }
 
     this.sendToConnection(conn, {
       id: `sr-${Date.now()}`,
       type: 'search.results',
       timestamp: new Date().toISOString(),
       sender: 'server',
-      payload: { communityId: payload.communityId, query: payload.query, results }
+      payload: {
+        communityId: payload.communityId,
+        query: payload.query,
+        results,
+        // Include metadata results separately so client can merge with its own FTS
+        metadata: metadataResults.slice(0, limit)
+      }
     })
   }
 

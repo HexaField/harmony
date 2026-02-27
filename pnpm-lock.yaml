@@ -1026,6 +1026,9 @@ importers:
       '@harmony/quads':
         specifier: workspace:*
         version: link:../quads
+      '@harmony/search':
+        specifier: workspace:*
+        version: link:../search
       '@harmony/vc':
         specifier: workspace:*
         version: link:../vc

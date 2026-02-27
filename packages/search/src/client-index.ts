@@ -157,6 +157,24 @@ export class ClientSearchIndex {
     return this.entries.size
   }
 
+  /** Serialize index to a JSON-compatible object for persistence */
+  serialize(): { messages: IndexableMessage[] } {
+    const messages: IndexableMessage[] = []
+    for (const entry of this.entries.values()) {
+      messages.push(entry.message)
+    }
+    return { messages }
+  }
+
+  /** Restore index from serialized data */
+  static deserialize(data: { messages: IndexableMessage[] }): ClientSearchIndex {
+    const index = new ClientSearchIndex()
+    for (const msg of data.messages) {
+      index.indexMessage(msg)
+    }
+    return index
+  }
+
   private matchesFilters(msg: IndexableMessage, filters?: SearchFilters): boolean {
     if (!filters) return true
 

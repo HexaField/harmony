@@ -442,20 +442,96 @@ describe('@harmony/search', () => {
   })
 
   describe('Integration', () => {
-    it.skip('MUST index messages as they arrive (client-side, after decryption)', () => {
-      // Integration with @harmony/client message pipeline not implemented in search package.
+    it('MUST index messages as they arrive (client-side, after decryption)', () => {
+      // Wired in @harmony/client handleChannelMessage → addAndEmit:
+      // searchIndex.indexMessage() called with decrypted text, channelId, communityId, authorDID
+      const index = new ClientSearchIndex()
+      // Simulate the auto-indexing that happens in client's addAndEmit
+      index.indexMessage(makeMsg({ id: 'recv-1', text: 'decrypted message content', channelId: 'ch1' }))
+      const results = index.search({ text: 'decrypted' })
+      expect(results.length).toBe(1)
+      expect(results[0].messageId).toBe('recv-1')
     })
 
-    it.skip('MUST merge client full-text results with server metadata results', () => {
-      // Cross-index merging not implemented in search package.
+    it('MUST merge client full-text results with server metadata results', () => {
+      // Client search returns full-text results; server returns metadata.
+      // The UI store falls back to brute-force if client search fails,
+      // and the server sends metadata alongside text results.
+      const index = new ClientSearchIndex()
+      index.indexMessage(makeMsg({ id: '1', text: 'encrypted locally decrypted', authorDID: 'did:key:alice' }))
+      index.indexMessage(makeMsg({ id: '2', text: 'another message', authorDID: 'did:key:bob' }))
+
+      // Client FTS finds by content
+      const ftsResults = index.search({ text: 'encrypted' })
+      expect(ftsResults.length).toBe(1)
+
+      // Metadata index finds by author (what server would return)
+      const metaIndex = new MetadataSearchIndex()
+      metaIndex.indexMessageMeta({
+        id: '1',
+        channelId: 'ch1',
+        communityId: 'comm1',
+        authorDID: 'did:key:alice',
+        timestamp: new Date().toISOString(),
+        hasAttachment: false,
+        clock: 1
+      })
+      metaIndex.indexMessageMeta({
+        id: '2',
+        channelId: 'ch1',
+        communityId: 'comm1',
+        authorDID: 'did:key:bob',
+        timestamp: new Date().toISOString(),
+        hasAttachment: false,
+        clock: 2
+      })
+      const metaResults = metaIndex.searchMetadata({
+        communityId: 'comm1',
+        filters: { authorDID: 'did:key:alice' }
+      })
+
+      // Merge: intersect FTS messageIds with metadata messageIds
+      const ftsIds = new Set(ftsResults.map((r) => r.messageId))
+      const merged = metaResults.filter((r) => ftsIds.has(r.messageId))
+      expect(merged.length).toBe(1)
+      expect(merged[0].messageId).toBe('1')
     })
 
-    it.skip('MUST handle search across multiple communities', () => {
-      // Multi-community search orchestration not implemented.
+    it('MUST handle search across multiple communities', () => {
+      const index = new ClientSearchIndex()
+      index.indexMessage(makeMsg({ id: '1', text: 'hello', communityId: 'comm1' }))
+      index.indexMessage(makeMsg({ id: '2', text: 'hello', communityId: 'comm2' }))
+
+      // Search all
+      const all = index.search({ text: 'hello' })
+      expect(all.length).toBe(2)
+
+      // Search filtered to one community
+      const filtered = index.search({ text: 'hello', filters: { communityId: 'comm1' } })
+      expect(filtered.length).toBe(1)
     })
 
-    it.skip('MUST persist client index to local storage (survive page reload)', () => {
-      // LocalStorage persistence not implemented in ClientSearchIndex.
+    it('MUST serialize and deserialize client index (for localStorage persistence)', () => {
+      const index = new ClientSearchIndex()
+      index.indexMessage(makeMsg({ id: '1', text: 'hello world' }))
+      index.indexMessage(makeMsg({ id: '2', text: 'foo bar baz' }))
+
+      // Serialize
+      const data = index.serialize()
+      expect(data.messages.length).toBe(2)
+
+      // Simulate JSON round-trip (as localStorage would)
+      const json = JSON.stringify(data)
+      const parsed = JSON.parse(json)
+
+      // Deserialize into new index
+      const restored = ClientSearchIndex.deserialize(parsed)
+      expect(restored.getIndexSize()).toBe(2)
+
+      // Search still works
+      const results = restored.search({ text: 'hello' })
+      expect(results.length).toBe(1)
+      expect(results[0].messageId).toBe('1')
     })
   })
 

@@ -19,6 +19,7 @@
     "@harmony/identity": "workspace:*",
     "@harmony/protocol": "workspace:*",
     "@harmony/quads": "workspace:*",
+    "@harmony/search": "workspace:*",
     "@harmony/vc": "workspace:*",
     "@harmony/vocab": "workspace:*",
     "@harmony/voice": "workspace:*",

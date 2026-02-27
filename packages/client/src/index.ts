@@ -1609,6 +1609,19 @@ export class HarmonyClient {
       if (sub) {
         sub.messages = log.entries().map((e) => e.data)
       }
+      // Auto-index decrypted message for full-text search
+      if (this.searchIndex && decrypted.content?.text && decrypted.content.text !== '[encrypted]') {
+        this.searchIndex.indexMessage({
+          id: decrypted.id,
+          channelId: payload.channelId,
+          communityId: payload.communityId,
+          authorDID: decrypted.authorDID,
+          text: decrypted.content.text,
+          timestamp: decrypted.timestamp,
+          threadId: (payload as any).threadId,
+          hasAttachment: !!(payload as any).attachments?.length
+        })
+      }
       this.emitter.emit('message', decrypted)
     }
 
@@ -1653,6 +1666,8 @@ export class HarmonyClient {
         .entries()
         .map((e) => e.data)
     }
+    // Remove from search index
+    this.searchIndex?.removeMessage(payload.messageId)
     this.emitter.emit('message.deleted', payload)
   }
 

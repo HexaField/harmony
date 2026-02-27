@@ -355,7 +355,6 @@ _Generated 2026-02-27. Based on codebase analysis of ~32,000+ LOC across 36 pack
 | Electron packaging (mac/win/linux) | ✅ | ➖ | ➖ | ➖ | ➖ | ➖ |
 | Docker Compose (server + UI) | ➖ | ✅ | ➖ | ➖ | ➖ | ➖ |
 | Dockerfile (server) | ➖ | ✅ | ➖ | ➖ | ➖ | ➖ |
-| Dockerfile (UI) | ➖ | ➖ | ✅ | ➖ | ➖ | ➖ |
 | Health check endpoint | ➖ | ✅ | ➖ | ➖ | ✅ | ➖ |
 | Config file (harmony.config.yaml) | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 | Config persistence (deep merge) | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
@@ -452,7 +451,8 @@ _Generated 2026-02-27. Based on codebase analysis of ~32,000+ LOC across 36 pack
 | **📋 Stub/interface only**    | **~38**      |
 | **❌ Not implemented**        | **~22**      |
 | **Tests passing**             | **2,336**    |
-| **Tests skipped**             | **62**       |
+| **Tests skipped**             | **37**       |
+| **Tests todo**                | **85**       |
 | **Test files**                | **104**      |
 | **Packages**                  | **36**       |
 | **Total LOC**                 | **~32,000+** |

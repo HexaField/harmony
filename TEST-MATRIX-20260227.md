@@ -426,7 +426,7 @@ _Mostly not implemented._
 
 ## Final Results (2026-02-27)
 
-**126 ✅ / 0 ❌ / 5 ⚠️ / 27 ⊘** — 2336 tests passing, 62 skipped, 60 todo
+**126 ✅ / 0 ❌ / 5 ⚠️ / 27 ⊘** — 2336 tests passing, 37 skipped, 85 todo
 
 ### Remaining ⚠️ — Genuinely Untestable Without Manual Interaction
 

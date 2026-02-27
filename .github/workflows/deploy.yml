@@ -1,0 +1,111 @@
+name: Deploy
+
+on:
+  push:
+    branches: [dev, staging, main]
+
+# Only one deploy per branch at a time
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-cloud-worker:
+    if: false  # DISABLED — re-enable when CF resource IDs are provisioned
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Determine environment
+        id: env
+        run: |
+          case "${{ github.ref_name }}" in
+            dev)      echo "env=dev" >> $GITHUB_OUTPUT ;;
+            staging)  echo "env=staging" >> $GITHUB_OUTPUT ;;
+            main)     echo "env=production" >> $GITHUB_OUTPUT ;;
+          esac
+
+      - name: Dry-run cloud validation
+        run: node scripts/dry-run-cloud.mjs --verbose
+
+      - name: Deploy Cloud Worker
+        working-directory: packages/cloud-worker
+        run: npx wrangler deploy --env ${{ steps.env.outputs.env }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Deploy Portal Worker
+        working-directory: packages/portal-worker
+        run: npx wrangler deploy --env ${{ steps.env.outputs.env }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Post-deploy smoke test
+        run: |
+          case "${{ steps.env.outputs.env }}" in
+            dev)        URL="wss://dev-cloud.harmony.chat" ;;
+            staging)    URL="wss://staging-cloud.harmony.chat" ;;
+            production) URL="wss://cloud.harmony.chat" ;;
+          esac
+          node scripts/smoke-test.mjs --url "$URL" --timeout 15000
+        continue-on-error: true  # Don't fail deploy on smoke test — alert instead
+
+  deploy-docker:
+    if: false  # DISABLED — re-enable when GHCR is configured
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine environment & tags
+        id: meta
+        run: |
+          case "${{ github.ref_name }}" in
+            dev)
+              echo "tag=ghcr.io/${{ github.repository }}/server:dev" >> $GITHUB_OUTPUT
+              ;;
+            staging)
+              echo "tag=ghcr.io/${{ github.repository }}/server:staging" >> $GITHUB_OUTPUT
+              ;;
+            main)
+              SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+              echo "tag=ghcr.io/${{ github.repository }}/server:latest,ghcr.io/${{ github.repository }}/server:$SHA" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/docker/Dockerfile.server
+          push: true
+          tags: ${{ steps.meta.outputs.tag }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

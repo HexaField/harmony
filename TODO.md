@@ -111,7 +111,7 @@ Single-level delegation works (admin → member). Plan specifies deep chains.
 - [ ] E2EE re-keying on member revocation/ban
 - [ ] VC-based admission policies (communities gate on credential requirements)
 - [ ] Cross-community trust networks
-- [ ] Rich VC portfolio UI (user's credential portfolio display)
+- [x] Rich VC portfolio UI (user's credential portfolio display) — tests implemented 2026-02-27
 - [ ] Custom credential types per community
 
 ### Community Export/Import
@@ -168,18 +168,23 @@ Currently `did:key` only. Plan says "support any and all."
 
 ## Polish & Quality
 
-### Skipped Tests (62 remaining)
+### Skipped Tests (51 remaining — was 62)
 
-Mostly infrastructure-dependent. Categorised:
+Reduced by implementing 18 previously skipped/todo tests (2026-02-27):
+
+- cloud-worker DO integration (4), ui-app (2), credentials (3), media (7), voice PiP (2)
+- Federation & bot-api skips now marked "(post-launch)"
+
+Remaining categories:
 
 - **Discord OAuth dependent** (2) — cloud.spec.ts:178, 182
-- **Workers runtime dependent** (4) — cloud-worker.spec.ts:277, 282, 286, 290
+- **Workers runtime dependent** (0) — ~~cloud-worker.spec.ts:277, 282, 286, 290~~ ✅ Implemented with mocked CF primitives
 - **Federation** (1) — integration.spec.ts:363
 - **Discord bot token** (1) — migration-e2e.spec.ts:12
 - **Full OAuth flow** (3) — migration-e2e.spec.ts:108, 208, 243
 - **Bot API advanced** (5) — bot-api.spec.ts:657, 704, 774, 778, 784
 - **ZCAP/governance edge cases** (3) — credentials.spec.ts:132, 137; governance.spec.ts:109, 325
-- **UI feature stubs** (~43) — spread across dm, file-upload, channel-perms, voice, roles, wire-up, voice-activity
+- **UI feature stubs** (~29) — reduced from ~43; implemented CreateChannelModal, reactions, credential portfolio, media integration/gallery, voice PiP
 
 ### Error Handling
 
@@ -222,14 +227,14 @@ Addressed in POLISH.md pass — worth visual re-verification after all recent ch
 | Privacy notice template         | Migration         | Post-launch |
 | Personal data export            | Migration         | Post-launch |
 | `did:web` / `did:plc`           | Identity Layer    | Post-launch |
-| VC portfolio UI                 | Core Architecture | Post-launch |
+| VC portfolio UI                 | Core Architecture | ✅ Tests    |
 | Bot per-channel scoping         | Core Architecture | Post-launch |
 
 ---
 
 ## Stats Snapshot (2026-02-26)
 
-- **Tests:** 2275 passing, 62 skipped, 95 files
+- **Tests:** 2350 passing, 51 skipped, 53 todo, 105 files
 - **Packages:** 36
 - **UI:** 23 views, 16 component directories, ~10,000 LOC
 - **Server:** ~2764 LOC

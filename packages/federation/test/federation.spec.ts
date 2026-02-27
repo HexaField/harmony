@@ -764,9 +764,9 @@ describe('@harmony/federation', () => {
   })
 
   describe('Networking', () => {
-    it.todo('MUST establish WebSocket between two server instances')
-    it.todo('MUST discover peers via DNS or registry')
-    it.todo('MUST relay messages across federated instances in real-time')
-    it.todo('MUST issue and verify instance-level federation ZCAPs')
+    it.todo('MUST establish WebSocket between two server instances (post-launch)')
+    it.todo('MUST discover peers via DNS or registry (post-launch)')
+    it.todo('MUST relay messages across federated instances in real-time (post-launch)')
+    it.todo('MUST issue and verify instance-level federation ZCAPs (post-launch)')
   })
 })

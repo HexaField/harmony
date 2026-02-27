@@ -654,7 +654,7 @@ describe('@harmony/bot-api', () => {
   })
 
   describe('Bot Lifecycle (additional)', () => {
-    it.skip('MUST restart errored bot with backoff', () => {
+    it.skip('MUST restart errored bot with backoff (post-launch)', () => {
       // Source BotHost does not implement automatic restart with backoff.
       // Would need a restartBot() method with exponential backoff logic.
     })
@@ -701,7 +701,7 @@ describe('@harmony/bot-api', () => {
       expect(received.map((e) => e.channelId)).toEqual(['ch1', 'ch3'])
     })
 
-    it.skip('MUST re-verify capabilities on ZCAP epoch change', () => {
+    it.skip('MUST re-verify capabilities on ZCAP epoch change (post-launch)', () => {
       // Source does not implement ZCAP epoch tracking/re-verification.
     })
   })
@@ -771,17 +771,17 @@ describe('@harmony/bot-api', () => {
   })
 
   describe('Webhooks Outbound (additional)', () => {
-    it.skip('MUST retry on transient failure (3 attempts, exponential backoff)', () => {
+    it.skip('MUST retry on transient failure (3 attempts, exponential backoff) (post-launch)', () => {
       // Source WebhookManager does not implement retry logic on individual dispatches.
     })
 
-    it.skip('MUST require ManageWebhooks capability to create', () => {
+    it.skip('MUST require ManageWebhooks capability to create (post-launch)', () => {
       // Source WebhookManager.createOutboundWebhook does not check ZCAP authorization.
     })
   })
 
   describe('Webhooks Inbound (additional)', () => {
-    it.skip('MUST rate limit inbound webhook messages', () => {
+    it.skip('MUST rate limit inbound webhook messages (post-launch)', () => {
       // Source WebhookManager.processInbound does not implement rate limiting.
     })
 
@@ -801,8 +801,8 @@ describe('@harmony/bot-api', () => {
   })
 
   describe('Channel Scoping', () => {
-    it.todo('MUST scope bot to specific channels only')
-    it.todo('MUST NOT deliver events from non-scoped channels')
-    it.todo('MUST reject sendMessage to non-scoped channel')
+    it.todo('MUST scope bot to specific channels only (post-launch)')
+    it.todo('MUST NOT deliver events from non-scoped channels (post-launch)')
+    it.todo('MUST reject sendMessage to non-scoped channel (post-launch)')
   })
 })

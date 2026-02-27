@@ -30,6 +30,9 @@ export interface DiscordAPI {
   getGuildMembers(guildId: string): Promise<DiscordMember[]>
   getChannelMessages(channelId: string, options?: { before?: string; limit?: number }): Promise<DiscordMessage[]>
   getGuild(guildId: string): Promise<DiscordServer>
+  getActiveThreads?(guildId: string): Promise<DiscordChannel[]>
+  getArchivedThreads?(channelId: string): Promise<DiscordChannel[]>
+  downloadAttachment?(url: string): Promise<{ data: Uint8Array; contentType: string }>
 }
 
 export class MigrationBot {
@@ -107,7 +110,32 @@ export class MigrationBot {
     // Fetch channels
     onProgress?.({ phase: 'channels', current: 0, total: 1 })
     const allChannels = await this.api.getGuildChannels(serverId)
-    const channels = options?.channels ? allChannels.filter((c) => options.channels!.includes(c.id)) : allChannels
+
+    // Fetch threads (active + archived)
+    const threads: DiscordChannel[] = []
+    if (this.api.getActiveThreads) {
+      const active = await this.api.getActiveThreads(serverId)
+      threads.push(...active)
+    }
+    if (this.api.getArchivedThreads) {
+      const textChannels = allChannels.filter((c) => c.type === 'text')
+      for (const ch of textChannels) {
+        const archived = await this.api.getArchivedThreads(ch.id)
+        threads.push(...archived)
+      }
+    }
+
+    // Merge channels + threads, deduplicate by ID
+    const seenIds = new Set<string>()
+    const mergedChannels: DiscordChannel[] = []
+    for (const ch of [...allChannels, ...threads]) {
+      if (!seenIds.has(ch.id)) {
+        seenIds.add(ch.id)
+        mergedChannels.push(ch)
+      }
+    }
+
+    const channels = options?.channels ? mergedChannels.filter((c) => options.channels!.includes(c.id)) : mergedChannels
     onProgress?.({ phase: 'channels', current: 1, total: 1 })
 
     // Fetch roles

@@ -1,5 +1,12 @@
 import type { DiscordAPI } from './index.js'
-import type { DiscordChannel, DiscordRole, DiscordMember, DiscordMessage, DiscordServer } from '@harmony/migration'
+import type {
+  DiscordChannel,
+  DiscordRole,
+  DiscordMember,
+  DiscordMessage,
+  DiscordServer,
+  DiscordEmbed
+} from '@harmony/migration'
 
 const BASE_URL = 'https://discord.com/api/v10'
 
@@ -48,6 +55,64 @@ export class DiscordRESTAPI implements DiscordAPI {
       return (await res.json()) as T
     }
     throw new Error(`Rate limited after ${retries} retries: ${path}`)
+  }
+
+  /** Fetch active threads in a guild */
+  async getActiveThreads(guildId: string): Promise<DiscordChannel[]> {
+    const data = await this.request<{
+      threads: Array<{ id: string; name: string; type: number; parent_id?: string | null }>
+    }>(`/guilds/${guildId}/threads/active`)
+
+    return data.threads
+      .filter((t) => t.type in CHANNEL_TYPE_MAP)
+      .map((t) => ({
+        id: t.id,
+        name: t.name,
+        type: CHANNEL_TYPE_MAP[t.type],
+        categoryId: t.parent_id ?? undefined
+      }))
+  }
+
+  /** Fetch archived public threads in a channel */
+  async getArchivedThreads(channelId: string): Promise<DiscordChannel[]> {
+    try {
+      const data = await this.request<{
+        threads: Array<{ id: string; name: string; type: number; parent_id?: string | null }>
+      }>(`/channels/${channelId}/threads/archived/public`)
+
+      return data.threads
+        .filter((t) => t.type in CHANNEL_TYPE_MAP)
+        .map((t) => ({
+          id: t.id,
+          name: t.name,
+          type: CHANNEL_TYPE_MAP[t.type],
+          categoryId: t.parent_id ?? undefined
+        }))
+    } catch {
+      return [] // Channel may not support threads
+    }
+  }
+
+  /** Fetch users who reacted with a specific emoji on a message */
+  async getReactionUsers(channelId: string, messageId: string, emoji: string): Promise<string[]> {
+    try {
+      const encoded = encodeURIComponent(emoji)
+      const data = await this.request<Array<{ id: string }>>(
+        `/channels/${channelId}/messages/${messageId}/reactions/${encoded}?limit=100`
+      )
+      return data.map((u) => u.id)
+    } catch {
+      return [] // Reaction may have been removed
+    }
+  }
+
+  /** Download a Discord CDN attachment, returning the raw bytes */
+  async downloadAttachment(url: string): Promise<{ data: Uint8Array; contentType: string }> {
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`Failed to download attachment: ${res.status} ${url}`)
+    const data = new Uint8Array(await res.arrayBuffer())
+    const contentType = res.headers.get('content-type') ?? 'application/octet-stream'
+    return { data, contentType }
   }
 
   async getGuild(guildId: string): Promise<DiscordServer> {
@@ -129,22 +194,61 @@ export class DiscordRESTAPI implements DiscordAPI {
         content: string
         timestamp: string
         message_reference?: { message_id?: string }
-        reactions?: Array<{ emoji: { name: string }; count: number }>
+        reactions?: Array<{ emoji: { name: string; id: string | null }; count: number }>
         attachments?: Array<{ url: string; filename: string }>
         sticker_items?: Array<{ id: string; name: string; format_type: number }>
+        embeds?: Array<{
+          type?: string
+          url?: string
+          title?: string
+          description?: string
+          thumbnail?: { url: string }
+        }>
       }>
     >(path)
 
-    return data.map((msg) => ({
-      id: msg.id,
-      channelId: msg.channel_id,
-      author: { id: msg.author.id, username: msg.author.username },
-      content: msg.content,
-      timestamp: msg.timestamp,
-      replyTo: msg.message_reference?.message_id,
-      attachments: msg.attachments?.map((a) => ({ url: a.url, filename: a.filename })),
-      stickers: msg.sticker_items?.map((s) => ({ id: s.id, name: s.name, formatType: s.format_type }))
-    }))
+    const messages: DiscordMessage[] = []
+    for (const msg of data) {
+      // Fetch reaction users for each reaction (Discord API only gives count, not users)
+      let reactions: DiscordMessage['reactions'] | undefined
+      if (msg.reactions && msg.reactions.length > 0) {
+        reactions = []
+        for (const r of msg.reactions) {
+          const emojiStr = r.emoji.id ? `${r.emoji.name}:${r.emoji.id}` : r.emoji.name
+          const users = await this.getReactionUsers(channelId, msg.id, emojiStr)
+          if (users.length > 0) {
+            reactions.push({ emoji: r.emoji.name, users })
+          }
+        }
+        if (reactions.length === 0) reactions = undefined
+      }
+
+      const embeds: DiscordEmbed[] | undefined =
+        msg.embeds && msg.embeds.length > 0
+          ? msg.embeds.map((e) => ({
+              type: e.type,
+              url: e.url,
+              title: e.title,
+              description: e.description,
+              thumbnail: e.thumbnail
+            }))
+          : undefined
+
+      messages.push({
+        id: msg.id,
+        channelId: msg.channel_id,
+        author: { id: msg.author.id, username: msg.author.username },
+        content: msg.content,
+        timestamp: msg.timestamp,
+        replyTo: msg.message_reference?.message_id,
+        reactions,
+        attachments: msg.attachments?.map((a) => ({ url: a.url, filename: a.filename })),
+        stickers: msg.sticker_items?.map((s) => ({ id: s.id, name: s.name, formatType: s.format_type })),
+        embeds
+      })
+    }
+
+    return messages
   }
 
   private parsePermissions(bits: bigint): string[] {

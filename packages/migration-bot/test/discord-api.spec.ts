@@ -191,4 +191,120 @@ describe('DiscordRESTAPI', () => {
     expect(guild.id).toBe(guildId)
     expect(guild.name).toBeTruthy()
   })
+
+  it('MUST fetch active threads for a guild', async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'X-RateLimit-Remaining': '10' }),
+      json: async () => ({
+        threads: [
+          { id: 't1', name: 'Thread One', type: 11, parent_id: 'ch1' },
+          { id: 't2', name: 'Thread Two', type: 12, parent_id: 'ch1' }
+        ]
+      })
+    })) as any
+    try {
+      const api = new DiscordRESTAPI('token')
+      const threads = await api.getActiveThreads('guild1')
+      expect(threads).toHaveLength(2)
+      expect(threads[0].type).toBe('thread')
+      expect(threads[0].name).toBe('Thread One')
+      expect(threads[1].categoryId).toBe('ch1')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('MUST fetch archived threads for a channel', async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'X-RateLimit-Remaining': '10' }),
+      json: async () => ({
+        threads: [{ id: 't3', name: 'Old Thread', type: 11, parent_id: 'ch1' }]
+      })
+    })) as any
+    try {
+      const api = new DiscordRESTAPI('token')
+      const threads = await api.getArchivedThreads('ch1')
+      expect(threads).toHaveLength(1)
+      expect(threads[0].name).toBe('Old Thread')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('MUST fetch reaction users for a message', async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'X-RateLimit-Remaining': '10' }),
+      json: async () => [{ id: 'u1' }, { id: 'u2' }]
+    })) as any
+    try {
+      const api = new DiscordRESTAPI('token')
+      const users = await api.getReactionUsers('ch1', 'm1', '👍')
+      expect(users).toEqual(['u1', 'u2'])
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('MUST include embeds in message response', async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'X-RateLimit-Remaining': '10' }),
+      json: async () => [
+        {
+          id: 'm1',
+          channel_id: 'ch1',
+          author: { id: 'u1', username: 'Alice' },
+          content: 'Check this out',
+          timestamp: '2023-01-15T10:00:00Z',
+          embeds: [
+            {
+              type: 'rich',
+              url: 'https://example.com',
+              title: 'Example',
+              description: 'A description',
+              thumbnail: { url: 'https://example.com/thumb.jpg' }
+            }
+          ]
+        }
+      ]
+    })) as any
+    try {
+      const api = new DiscordRESTAPI('token')
+      const msgs = await api.getChannelMessages('ch1')
+      expect(msgs[0].embeds).toHaveLength(1)
+      expect(msgs[0].embeds![0].title).toBe('Example')
+      expect(msgs[0].embeds![0].thumbnail?.url).toBe('https://example.com/thumb.jpg')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('MUST download attachment data', async () => {
+    const originalFetch = globalThis.fetch
+    const testData = new Uint8Array([0x89, 0x50, 0x4e, 0x47]) // PNG header
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ 'content-type': 'image/png' }),
+      arrayBuffer: async () => testData.buffer
+    })) as any
+    try {
+      const api = new DiscordRESTAPI('token')
+      const result = await api.downloadAttachment('https://cdn.discord.com/file.png')
+      expect(result.contentType).toBe('image/png')
+      expect(result.data.length).toBe(4)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
 })

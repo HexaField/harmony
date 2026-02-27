@@ -15,6 +15,14 @@ export interface DiscordAccount {
   email?: string
 }
 
+export interface DiscordEmbed {
+  type?: string
+  url?: string
+  title?: string
+  description?: string
+  thumbnail?: { url: string }
+}
+
 export interface DiscordMessage {
   id: string
   channelId: string
@@ -23,8 +31,9 @@ export interface DiscordMessage {
   timestamp: string
   replyTo?: string
   reactions?: Array<{ emoji: string; users: string[] }>
-  attachments?: Array<{ url: string; filename: string }>
+  attachments?: Array<{ url: string; filename: string; localPath?: string }>
   stickers?: Array<{ id: string; name: string; formatType: number }>
+  embeds?: DiscordEmbed[]
 }
 
 export interface DiscordChannel {
@@ -335,6 +344,57 @@ export class MigrationService {
               object: { value: String(sticker.formatType) },
               graph: channelGraph
             })
+          }
+        }
+
+        if (msg.embeds) {
+          for (let ei = 0; ei < msg.embeds.length; ei++) {
+            const embed = msg.embeds[ei]
+            const embedURI = `${msgURI}:embed:${ei}`
+            quads.push({
+              subject: msgURI,
+              predicate: `${HARMONY}embed`,
+              object: embedURI,
+              graph: channelGraph
+            })
+            quads.push({
+              subject: embedURI,
+              predicate: RDFPredicate.type,
+              object: `${HARMONY}Embed`,
+              graph: channelGraph
+            })
+            if (embed.url) {
+              quads.push({
+                subject: embedURI,
+                predicate: `${HARMONY}embedUrl`,
+                object: { value: embed.url },
+                graph: channelGraph
+              })
+            }
+            if (embed.title) {
+              quads.push({
+                subject: embedURI,
+                predicate: `${HARMONY}embedTitle`,
+                object: { value: embed.title },
+                graph: channelGraph
+              })
+            }
+            if (embed.description) {
+              quads.push({
+                subject: embedURI,
+                predicate: `${HARMONY}embedDescription`,
+                object: { value: embed.description },
+                graph: channelGraph
+              })
+            }
+            if (embed.thumbnail?.url) {
+              quads.push({
+                subject: embedURI,
+                predicate: `${HARMONY}embedThumbnail`,
+                object: { value: embed.thumbnail.url },
+                graph: channelGraph
+              })
+            }
           }
         }
 

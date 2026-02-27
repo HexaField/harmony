@@ -45,7 +45,17 @@ function createTestServerExport(): DiscordServerExport {
             timestamp: '2023-01-15T10:01:00Z',
             replyTo: 'msg1',
             reactions: [{ emoji: '👍', users: ['user1'] }],
-            stickers: [{ id: 'sticker1', name: 'pepe_happy', formatType: 1 }]
+            stickers: [{ id: 'sticker1', name: 'pepe_happy', formatType: 1 }],
+            attachments: [{ url: 'https://cdn.discord.com/attachments/ch1/img.png', filename: 'img.png' }],
+            embeds: [
+              {
+                type: 'rich',
+                url: 'https://example.com/article',
+                title: 'Example Article',
+                description: 'An article about something',
+                thumbnail: { url: 'https://example.com/thumb.jpg' }
+              }
+            ]
           }
         ]
       ]
@@ -158,6 +168,35 @@ describe('@harmony/migration', () => {
       const { quads } = migration.transformServerExport(createTestServerExport(), doc.id)
       const reactions = quads.filter((q) => q.object === HarmonyType.Reaction)
       expect(reactions.length).toBeGreaterThan(0)
+    })
+
+    it('MUST preserve attachment data in migration', async () => {
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const { quads } = migration.transformServerExport(createTestServerExport(), doc.id)
+      const attachmentQuads = quads.filter((q) => typeof q.predicate === 'string' && q.predicate.includes('attachment'))
+      expect(attachmentQuads.length).toBeGreaterThanOrEqual(1)
+      const urlQuad = attachmentQuads.find((q) => q.predicate.includes('attachment') && !q.predicate.includes('Name'))
+      expect(urlQuad).toBeDefined()
+      expect((urlQuad!.object as { value: string }).value).toBe('https://cdn.discord.com/attachments/ch1/img.png')
+    })
+
+    it('MUST preserve embed data in migration', async () => {
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      const { quads } = migration.transformServerExport(createTestServerExport(), doc.id)
+      const embedQuads = quads.filter((q) => typeof q.predicate === 'string' && q.predicate.includes('embed'))
+      // Should have: embed link, type, embedUrl, embedTitle, embedDescription, embedThumbnail
+      expect(embedQuads.length).toBeGreaterThanOrEqual(5)
+      const titleQuad = embedQuads.find((q) => q.predicate.includes('embedTitle'))
+      expect(titleQuad).toBeDefined()
+      expect((titleQuad!.object as { value: string }).value).toBe('Example Article')
+      const descQuad = embedQuads.find((q) => q.predicate.includes('embedDescription'))
+      expect(descQuad).toBeDefined()
+      expect((descQuad!.object as { value: string }).value).toBe('An article about something')
+      const thumbQuad = embedQuads.find((q) => q.predicate.includes('embedThumbnail'))
+      expect(thumbQuad).toBeDefined()
+      expect((thumbQuad!.object as { value: string }).value).toBe('https://example.com/thumb.jpg')
     })
   })
 

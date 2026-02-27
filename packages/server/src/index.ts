@@ -1177,18 +1177,39 @@ export class HarmonyServer {
   }
 
   private async handleChannelSend(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as Record<string, unknown>
-    if (!this.validateRequiredStrings(conn, payload, ['communityId', 'channelId'])) return
-    if (!this.validateMembership(conn, payload.communityId as string)) return
+    const _raw = msg.payload as Record<string, unknown>
+    if (!this.validateRequiredStrings(conn, _raw, ['communityId', 'channelId'])) return
 
     // Content length check (content may be encrypted object, check if string)
     if (
-      typeof payload.content === 'string' &&
-      !this.validateStringLength(conn, payload.content, 'content', HarmonyServer.MAX_CONTENT_LENGTH)
+      typeof _raw.content === 'string' &&
+      !this.validateStringLength(conn, _raw.content, 'content', HarmonyServer.MAX_CONTENT_LENGTH)
     )
       return
 
-    // Verify ZCAP if proof is present
+    // After validation, use typed payload
+    const payload = _raw as unknown as {
+      communityId: string
+      channelId: string
+      content: unknown
+      nonce: string
+      clock: LamportClock
+    }
+
+    // Check ban list first
+    if (this.isUserBanned(payload.communityId, conn.did)) {
+      this.sendToConnection(conn, {
+        id: `ban-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'BANNED', message: 'You are banned from this community' }
+      })
+      conn.ws.close(4003, 'Banned')
+      return
+    }
+
+    // Verify ZCAP if proof is present (primary authorization mechanism)
     if (msg.proof) {
       const valid = await this.verifyZCAPProof(msg)
       if (!valid) {
@@ -1203,18 +1224,8 @@ export class HarmonyServer {
       }
     }
 
-    // Check ban list on send
-    if (this.isUserBanned(payload.communityId, conn.did)) {
-      this.sendToConnection(conn, {
-        id: `ban-${Date.now()}`,
-        type: 'error',
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: { code: 'BANNED', message: 'You are banned from this community' }
-      })
-      conn.ws.close(4003, 'Banned')
-      return
-    }
+    // Verify membership (after ZCAP — ZCAP is the primary auth check)
+    if (!this.validateMembership(conn, payload.communityId as string)) return
 
     // Store message
     await this.messageStore.storeMessage(payload.communityId, payload.channelId, msg)
@@ -1242,11 +1253,12 @@ export class HarmonyServer {
   }
 
   private async handleChannelEdit(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as Record<string, unknown>
-    if (!this.validateRequiredStrings(conn, payload, ['communityId', 'channelId', 'messageId'])) return
-    if (!this.validateMembership(conn, payload.communityId as string)) return
+    const _raw = msg.payload as Record<string, unknown>
+    if (!this.validateRequiredStrings(conn, _raw, ['communityId', 'channelId', 'messageId'])) return
+    if (!this.validateMembership(conn, _raw.communityId as string)) return
+    const payload = _raw as unknown as { communityId: string; channelId: string; messageId: string }
 
-    this.broadcastToCommunity(payload.communityId as string, {
+    this.broadcastToCommunity(payload.communityId, {
       ...msg,
       type: 'channel.message.updated',
       sender: conn.did
@@ -1254,12 +1266,13 @@ export class HarmonyServer {
   }
 
   private async handleChannelDelete(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as Record<string, unknown>
-    if (!this.validateRequiredStrings(conn, payload, ['communityId', 'channelId', 'messageId'])) return
-    if (!this.validateMembership(conn, payload.communityId as string)) return
+    const _raw = msg.payload as Record<string, unknown>
+    if (!this.validateRequiredStrings(conn, _raw, ['communityId', 'channelId', 'messageId'])) return
+    if (!this.validateMembership(conn, _raw.communityId as string)) return
+    const payload = _raw as unknown as { communityId: string; channelId: string; messageId: string }
 
-    await this.messageStore.deleteMessage(payload.messageId as string)
-    this.broadcastToCommunity(payload.communityId as string, {
+    await this.messageStore.deleteMessage(payload.messageId)
+    this.broadcastToCommunity(payload.communityId, {
       ...msg,
       type: 'channel.message.deleted',
       sender: conn.did
@@ -3107,7 +3120,7 @@ export class HarmonyServer {
     }
 
     // Validate MIME type
-    if (!HarmonyServer.ALLOWED_MIME_TYPES.has(payload.mimeType)) {
+    if (!HarmonyServer.ALLOWED_MIME_TYPES.has(payload.mimeType as string)) {
       this.sendToConnection(conn, {
         id: `err-${Date.now()}`,
         type: 'error',
@@ -3119,7 +3132,7 @@ export class HarmonyServer {
     }
 
     // Validate size
-    if (payload.size > HarmonyServer.MAX_MEDIA_SIZE) {
+    if ((payload.size as number) > HarmonyServer.MAX_MEDIA_SIZE) {
       this.sendToConnection(conn, {
         id: `err-${Date.now()}`,
         type: 'error',

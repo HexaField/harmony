@@ -2,15 +2,19 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash } from 'node:crypto'
 import { mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { createCryptoProvider, type KeyPair } from '@harmony/crypto'
+import { createCryptoProvider, type CryptoProvider, type KeyPair } from '@harmony/crypto'
 import { MigrationBot, DiscordRESTAPI } from '@harmony/migration-bot'
 import { MigrationService, type EncryptedExportBundle } from '@harmony/migration'
 import type { ExportProgress } from '@harmony/migration-bot'
 import { HarmonyType, HarmonyPredicate, RDFPredicate, HARMONY } from '@harmony/vocab'
+import { decodeMultibase, ED25519_MULTICODEC } from '@harmony/did'
 import type { Quad } from '@harmony/quads'
 import type { HarmonyServer } from '@harmony/server'
 import type { SQLiteQuadStore } from './sqlite-quad-store.js'
 import type { Logger } from './logger.js'
+
+/** Max clock skew for auth signature timestamps (5 minutes) */
+const AUTH_TIMESTAMP_WINDOW_MS = 5 * 60 * 1000
 
 interface ExportJob {
   id: string
@@ -53,16 +57,105 @@ export class MigrationEndpoint {
   private store: SQLiteQuadStore | null
   private harmonyServer: HarmonyServer | null = null
   private mediaPath: string
+  private crypto: CryptoProvider
 
   constructor(logger: Logger, store: SQLiteQuadStore | null, mediaPath?: string) {
     this.logger = logger
     this.store = store
     this.mediaPath = mediaPath ?? './media'
+    this.crypto = createCryptoProvider()
   }
 
   /** Wire up the live HarmonyServer so imported communities can be registered */
   setHarmonyServer(server: HarmonyServer): void {
     this.harmonyServer = server
+  }
+
+  /**
+   * Verify Ed25519 signed authorization header.
+   *
+   * Header format: `Authorization: Harmony-Ed25519 <did> <timestamp> <base64-signature>`
+   * Signature is over: `${timestamp}:${method}:${path}`
+   * Timestamp must be within AUTH_TIMESTAMP_WINDOW_MS of server time.
+   *
+   * Returns the authenticated DID, or null if auth fails.
+   */
+  private async authenticateRequest(req: IncomingMessage, res: ServerResponse): Promise<string | null> {
+    const authHeader = req.headers.authorization
+    if (!authHeader || !authHeader.startsWith('Harmony-Ed25519 ')) {
+      this.json(res, 401, {
+        error: 'Missing or invalid Authorization header. Expected: Harmony-Ed25519 <did> <timestamp> <base64-signature>'
+      })
+      return null
+    }
+
+    const parts = authHeader.slice('Harmony-Ed25519 '.length).split(' ')
+    if (parts.length !== 3) {
+      this.json(res, 401, { error: 'Malformed Authorization header' })
+      return null
+    }
+
+    const [did, timestampStr, signatureB64] = parts
+
+    // Validate DID format
+    if (!did.startsWith('did:key:z6Mk')) {
+      this.json(res, 401, { error: 'Only did:key (Ed25519) DIDs are supported' })
+      return null
+    }
+
+    // Validate timestamp
+    const timestamp = parseInt(timestampStr, 10)
+    if (Number.isNaN(timestamp)) {
+      this.json(res, 401, { error: 'Invalid timestamp' })
+      return null
+    }
+    const now = Date.now()
+    if (Math.abs(now - timestamp) > AUTH_TIMESTAMP_WINDOW_MS) {
+      this.json(res, 401, { error: 'Timestamp outside acceptable window (±5 minutes)' })
+      return null
+    }
+
+    // Extract public key from DID
+    let publicKey: Uint8Array
+    try {
+      const multibase = did.slice('did:key:'.length)
+      const decoded = decodeMultibase(multibase)
+      if (decoded.prefix !== ED25519_MULTICODEC) {
+        this.json(res, 401, { error: 'DID does not use Ed25519 key' })
+        return null
+      }
+      publicKey = decoded.key
+    } catch {
+      this.json(res, 401, { error: 'Failed to decode DID public key' })
+      return null
+    }
+
+    // Verify signature over `timestamp:method:path`
+    const method = req.method ?? 'GET'
+    const path = req.url ?? '/'
+    const message = `${timestampStr}:${method}:${path}`
+    const messageBytes = new TextEncoder().encode(message)
+
+    let signature: Uint8Array
+    try {
+      signature = Uint8Array.from(Buffer.from(signatureB64, 'base64'))
+    } catch {
+      this.json(res, 401, { error: 'Invalid signature encoding' })
+      return null
+    }
+
+    try {
+      const valid = await this.crypto.verify(messageBytes, signature, publicKey)
+      if (!valid) {
+        this.json(res, 401, { error: 'Signature verification failed' })
+        return null
+      }
+    } catch {
+      this.json(res, 401, { error: 'Signature verification error' })
+      return null
+    }
+
+    return did
   }
 
   /**
@@ -129,6 +222,8 @@ export class MigrationEndpoint {
     const url = req.url ?? ''
 
     if (req.method === 'POST' && url === '/api/migration/export') {
+      const authedDID = await this.authenticateRequest(req, res)
+      if (!authedDID) return true // 401 already sent
       await this.handleExport(req, res)
       return true
     }
@@ -140,13 +235,17 @@ export class MigrationEndpoint {
     }
 
     if (req.method === 'POST' && url === '/api/migration/import') {
+      const authedDID = await this.authenticateRequest(req, res)
+      if (!authedDID) return true
       await this.handleImport(req, res)
       return true
     }
 
-    // User data claim endpoints
+    // User data claim endpoints — require DID ownership proof
     if (req.method === 'POST' && url === '/api/user-data/upload') {
-      await this.handleUserDataUpload(req, res)
+      const authedDID = await this.authenticateRequest(req, res)
+      if (!authedDID) return true
+      await this.handleUserDataUpload(req, res, authedDID)
       return true
     }
 
@@ -154,10 +253,22 @@ export class MigrationEndpoint {
     if (userDataMatch) {
       const did = decodeURIComponent(userDataMatch[1])
       if (req.method === 'GET') {
+        const authedDID = await this.authenticateRequest(req, res)
+        if (!authedDID) return true
+        if (authedDID !== did) {
+          this.json(res, 403, { error: 'DID mismatch: you can only access your own data' })
+          return true
+        }
         await this.handleUserDataGet(did, req, res)
         return true
       }
       if (req.method === 'DELETE') {
+        const authedDID = await this.authenticateRequest(req, res)
+        if (!authedDID) return true
+        if (authedDID !== did) {
+          this.json(res, 403, { error: 'DID mismatch: you can only delete your own data' })
+          return true
+        }
         await this.handleUserDataDelete(did, req, res)
         return true
       }
@@ -206,14 +317,7 @@ export class MigrationEndpoint {
     return join(dir, `${hash}.meta.json`)
   }
 
-  private extractDIDFromAuth(req: IncomingMessage): string | null {
-    // Simple auth: DID passed in X-Harmony-DID header
-    // In production this would be verified via VP/signature
-    const did = req.headers['x-harmony-did']
-    return typeof did === 'string' ? did : null
-  }
-
-  private async handleUserDataUpload(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  private async handleUserDataUpload(req: IncomingMessage, res: ServerResponse, authedDID: string): Promise<void> {
     let body: {
       did: string
       ciphertext: string // base64
@@ -236,6 +340,12 @@ export class MigrationEndpoint {
 
     if (!body.did || !body.ciphertext || !body.nonce) {
       this.json(res, 400, { error: 'Missing required fields: did, ciphertext, nonce' })
+      return
+    }
+
+    // Enforce DID ownership: body.did must match authenticated DID
+    if (body.did !== authedDID) {
+      this.json(res, 403, { error: 'DID mismatch: you can only upload data for your own DID' })
       return
     }
 
@@ -305,13 +415,8 @@ export class MigrationEndpoint {
     }
   }
 
-  private async handleUserDataDelete(did: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
-    // Verify the requester is the DID owner
-    const authDid = this.extractDIDFromAuth(req)
-    if (!authDid || authDid !== did) {
-      this.json(res, 403, { error: 'Not authorized to delete this data' })
-      return
-    }
+  private async handleUserDataDelete(did: string, _req: IncomingMessage, res: ServerResponse): Promise<void> {
+    // Auth already verified in handleRequest — authedDID === did enforced there
 
     const filePath = this.didToFilePath(did)
     const metaPath = this.didToMetaPath(did)

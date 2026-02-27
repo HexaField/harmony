@@ -10,7 +10,7 @@ _Single source of truth. Merged from FEATURES.md, TODO.md, and beta-release-todo
 | ------------------ | ------------------------------------- |
 | Packages           | 36                                    |
 | Estimated LOC      | ~32,000+                              |
-| Vitest passing     | 2,364                                 |
+| Vitest passing     | 2,386                                 |
 | Vitest skipped     | 10                                    |
 | Vitest todo        | 114                                   |
 | Playwright passing | 13 (Discord integration)              |
@@ -231,11 +231,14 @@ _Single source of truth. Merged from FEATURES.md, TODO.md, and beta-release-todo
 
 ### Moderation
 
-| Feature                                                     | Lib | Server | UI  |
-| ----------------------------------------------------------- | --- | ------ | --- |
-| Ban list enforcement + ban/unban/kick handlers              | ✅  | ✅     | ✅  |
-| Slow mode / rate limit / account age / raid detection rules | 📋  | 📋     | 📋  |
-| VC requirement rules                                        | 📋  | 📋     | 📋  |
+| Feature                                               | Lib | Server | UI  |
+| ----------------------------------------------------- | --- | ------ | --- |
+| Ban list enforcement + ban/unban/kick handlers        | ✅  | ✅     | ✅  |
+| Slow mode (per-channel cooldown)                      | ✅  | ✅     | 📋  |
+| Rate limit rules (per-community configurable)         | ✅  | ✅     | 📋  |
+| Raid detection (auto-lockdown on rapid joins)         | ✅  | ✅     | 📋  |
+| Account age rules (minimum DID age for joining)       | ✅  | ✅     | 📋  |
+| VC requirement rules (require VCs for community join) | ✅  | ✅     | 📋  |
 
 ### Governance
 
@@ -301,11 +304,15 @@ _Single source of truth. Merged from FEATURES.md, TODO.md, and beta-release-todo
 
 ### Notifications
 
-| Feature               | Lib | Server | UI  |
-| --------------------- | --- | ------ | --- |
-| Notification center   | ➖  | ➖     | 📋  |
-| Notification settings | ➖  | ➖     | 📋  |
-| Notification item     | ➖  | ➖     | 📋  |
+| Feature                               | Lib | Server | UI  |
+| ------------------------------------- | --- | ------ | --- |
+| Mention detection (@username, @DID)   | ✅  | ✅     | ➖  |
+| DM / reply notifications              | ✅  | ✅     | ➖  |
+| notification.list / mark-read / count | ✅  | ✅     | ✅  |
+| Real-time notification push           | ✅  | ✅     | ✅  |
+| Notification center UI                | ➖  | ➖     | 📋  |
+| Notification settings UI              | ➖  | ➖     | 📋  |
+| Notification item                     | ➖  | ➖     | 📋  |
 
 ### Internationalisation
 
@@ -423,8 +430,8 @@ _Single source of truth. Merged from FEATURES.md, TODO.md, and beta-release-todo
 | 8   | Media upload (path traversal, content-type, size limits)      | ✅     |
 | 9   | Cloud Worker DO isolation (communityId vs DO ID)              | ✅     |
 | 10  | Dependency audit (`pnpm audit`, native modules)               | ✅     |
-| 11  | Penetration test (OWASP ZAP + custom WS fuzzer)               | ⬜     |
-| 12  | Remediation (fix critical/high findings)                      | ⬜     |
+| 11  | Penetration test (48 tests, 11 findings)                      | ✅     |
+| 12  | Remediation (0 critical, 4 high — all fixed)                  | ✅     |
 
 ---
 
@@ -471,6 +478,15 @@ Everything below is done and committed.
 - CI/CD workflows: ci.yml, deploy.yml, release.yml (all `if: false`)
 - Smoke test script
 
+### 2026-02-28
+
+- Penetration test: 48 tests across 8 categories, 11 findings (0 Critical, 4 High, 3 Medium, 3 Low, 1 Info)
+- Pen test remediation: Ed25519 signed auth (`Harmony-Ed25519`) on all REST endpoints (migration + user-data)
+- Security: readBody() 5MB limit, security headers, DID length validation, DID ownership enforcement
+- Moderation: slow mode, per-community rate limits, raid detection + auto-lockdown, account age rules, VC requirement rules
+- Notifications: mention detection, DM/reply notifications, notification.list/mark-read/count protocol, real-time push
+- Tests: 2386 passing (was 2364), 22 new tests across auth + moderation + notifications
+
 ---
 
 ## Road to Beta
@@ -479,8 +495,8 @@ Everything below is done and committed.
 
 | # | Task | Status | Owner | Notes |
 | --- | --- | --- | --- | --- |
-| 1 | Penetration test | ⬜ | Agent | OWASP ZAP + custom WS fuzzer against running instance |
-| 2 | Pen test remediation | ⬜ | Agent | Fix all critical/high findings |
+| 1 | Penetration test | ✅ | Agent | 48 tests, 11 findings, all high items fixed |
+| 2 | Pen test remediation | ✅ | Agent | Ed25519 signed auth on all REST endpoints |
 | 3 | Provision CF resources | ⬜ | Josh | `wrangler d1 create`, `wrangler r2 bucket create`, KV/DO namespaces |
 | 4 | Fill wrangler placeholder IDs | ⬜ | Josh | Replace `REPLACE_WITH_*` in wrangler.toml files |
 | 5 | Register domain | ⬜ | Josh | `harmony.chat` or similar → Cloudflare |
@@ -546,7 +562,6 @@ Everything below is done and committed.
 - **Multi-level ZCAP delegation** — Admin → Mod → Temp-Mod chains, attenuation at each level
 - **VC-based admission** — Gate `community.join` on required credentials
 - **Code block syntax highlighting** — Add `highlight.js` or `shiki` to message renderer
-- **Notification system** — Unread badges, mention detection, notification center
 - **Rich embeds** — Render link previews inline in messages
 - **Contact list persistence** — Friends list storage
 

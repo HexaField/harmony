@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createCryptoProvider, type KeyPair } from '@harmony/crypto'
 import { IdentityManager } from '@harmony/identity'
+import { DIDKeyProvider } from '@harmony/did'
 import {
   MigrationService,
   type DiscordChannel,
@@ -22,6 +23,14 @@ import { MigrationEndpoint } from '@harmony/server-runtime'
 
 const crypto = createCryptoProvider()
 const identityMgr = new IdentityManager(crypto)
+const didProvider = new DIDKeyProvider(crypto)
+
+async function signAuthMig(did: string, secretKey: Uint8Array, method: string, path: string): Promise<string> {
+  const timestamp = Date.now().toString()
+  const message = `${timestamp}:${method}:${path}`
+  const sig = await crypto.sign(new TextEncoder().encode(message), secretKey)
+  return `Harmony-Ed25519 ${did} ${timestamp} ${Buffer.from(sig).toString('base64')}`
+}
 
 // ── Mock Discord API ──
 
@@ -345,11 +354,19 @@ describe('Migration Integration Tests', () => {
     let server: Server
     let baseUrl: string
     let tempDir: string
+    let authDID: string
+    let authSecretKey: Uint8Array
 
     beforeAll(async () => {
       tempDir = mkdtempSync(join(tmpdir(), 'harmony-migration-test-'))
       const endpoint = new MigrationEndpoint(noopLogger as any, null, tempDir)
       const port = await getRandomPort()
+
+      // Create real auth identity
+      const kp = await crypto.generateSigningKeyPair()
+      const doc = await didProvider.create(kp)
+      authDID = doc.id
+      authSecretKey = kp.secretKey
 
       server = createServer(async (req, res) => {
         // Handle CORS preflight
@@ -378,14 +395,13 @@ describe('Migration Integration Tests', () => {
       rmSync(tempDir, { recursive: true, force: true })
     })
 
-    const testDID = 'did:key:z6MkTestUser12345'
-
     it('uploads user data (POST /api/user-data/upload)', async () => {
+      const auth = await signAuthMig(authDID, authSecretKey, 'POST', '/api/user-data/upload')
       const res = await fetch(`${baseUrl}/api/user-data/upload`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: auth },
         body: JSON.stringify({
-          did: testDID,
+          did: authDID,
           ciphertext: Buffer.from('encrypted-content').toString('base64'),
           nonce: Buffer.from('test-nonce-16bytes').toString('base64'),
           metadata: {
@@ -404,7 +420,9 @@ describe('Migration Integration Tests', () => {
     })
 
     it('retrieves user data (GET /api/user-data/:did)', async () => {
-      const res = await fetch(`${baseUrl}/api/user-data/${encodeURIComponent(testDID)}`)
+      const path = `/api/user-data/${encodeURIComponent(authDID)}`
+      const auth = await signAuthMig(authDID, authSecretKey, 'GET', path)
+      const res = await fetch(`${baseUrl}${path}`, { headers: { Authorization: auth } })
       expect(res.status).toBe(200)
       const body = await res.json()
       expect(body.ciphertext).toBeTruthy()
@@ -414,31 +432,38 @@ describe('Migration Integration Tests', () => {
     })
 
     it('returns 404 for unknown DID', async () => {
-      const res = await fetch(`${baseUrl}/api/user-data/${encodeURIComponent('did:key:zNonExistent')}`)
-      expect(res.status).toBe(404)
+      const unknownDID = 'did:key:zNonExistent'
+      const path = `/api/user-data/${encodeURIComponent(unknownDID)}`
+      // Can't auth as unknownDID (don't have its key), so this should return 401
+      const res = await fetch(`${baseUrl}${path}`)
+      expect(res.status).toBe(401)
     })
 
     it('deletes user data with auth (DELETE /api/user-data/:did)', async () => {
-      const res = await fetch(`${baseUrl}/api/user-data/${encodeURIComponent(testDID)}`, {
+      const path = `/api/user-data/${encodeURIComponent(authDID)}`
+      const auth = await signAuthMig(authDID, authSecretKey, 'DELETE', path)
+      const res = await fetch(`${baseUrl}${path}`, {
         method: 'DELETE',
-        headers: { 'X-Harmony-DID': testDID }
+        headers: { Authorization: auth }
       })
       expect(res.status).toBe(200)
       const body = await res.json()
       expect(body.ok).toBe(true)
 
       // Verify it's gone
-      const getRes = await fetch(`${baseUrl}/api/user-data/${encodeURIComponent(testDID)}`)
+      const getAuth = await signAuthMig(authDID, authSecretKey, 'GET', path)
+      const getRes = await fetch(`${baseUrl}${path}`, { headers: { Authorization: getAuth } })
       expect(getRes.status).toBe(404)
     })
 
     it('rejects delete without matching auth', async () => {
       // Upload again first
+      const uploadAuth = await signAuthMig(authDID, authSecretKey, 'POST', '/api/user-data/upload')
       await fetch(`${baseUrl}/api/user-data/upload`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: uploadAuth },
         body: JSON.stringify({
-          did: testDID,
+          did: authDID,
           ciphertext: Buffer.from('data').toString('base64'),
           nonce: Buffer.from('nonce-16bytesxxx').toString('base64'),
           metadata: {
@@ -451,19 +476,24 @@ describe('Migration Integration Tests', () => {
         })
       })
 
-      // Try deleting with wrong DID
-      const res = await fetch(`${baseUrl}/api/user-data/${encodeURIComponent(testDID)}`, {
+      // Try deleting with a different identity
+      const otherKP = await crypto.generateSigningKeyPair()
+      const otherDoc = await didProvider.create(otherKP)
+      const path = `/api/user-data/${encodeURIComponent(authDID)}`
+      const otherAuth = await signAuthMig(otherDoc.id, otherKP.secretKey, 'DELETE', path)
+      const res = await fetch(`${baseUrl}${path}`, {
         method: 'DELETE',
-        headers: { 'X-Harmony-DID': 'did:key:zSomeoneElse' }
+        headers: { Authorization: otherAuth }
       })
       expect(res.status).toBe(403)
     })
 
     it('rejects upload with missing fields', async () => {
+      const auth = await signAuthMig(authDID, authSecretKey, 'POST', '/api/user-data/upload')
       const res = await fetch(`${baseUrl}/api/user-data/upload`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ did: testDID })
+        headers: { 'Content-Type': 'application/json', Authorization: auth },
+        body: JSON.stringify({ did: authDID })
       })
       expect(res.status).toBe(400)
     })

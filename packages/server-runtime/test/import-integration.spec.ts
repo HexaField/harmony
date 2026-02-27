@@ -15,12 +15,21 @@ import type { Quad } from '@harmony/quads'
 
 const logger = createLogger({ level: 'error', format: 'json', silent: true })
 const crypto = createCryptoProvider()
+const didProvider = new DIDKeyProvider(crypto)
+
+async function signAuth(did: string, secretKey: Uint8Array, method: string, path: string): Promise<string> {
+  const timestamp = Date.now().toString()
+  const message = `${timestamp}:${method}:${path}`
+  const sig = await crypto.sign(new TextEncoder().encode(message), secretKey)
+  return `Harmony-Ed25519 ${did} ${timestamp} ${Buffer.from(sig).toString('base64')}`
+}
 
 function makeRequest(
   server: Server,
   method: string,
   path: string,
-  body?: unknown
+  body?: unknown,
+  headers?: Record<string, string>
 ): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
     const port = (server.address() as any).port
@@ -29,7 +38,7 @@ function makeRequest(
       port,
       path,
       method,
-      headers: body ? { 'Content-Type': 'application/json' } : {}
+      headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers }
     }
     const req = require('node:http').request(opts, (res: any) => {
       const chunks: Buffer[] = []
@@ -56,10 +65,18 @@ describe('Import integration: export → import → community accessible', () =>
   let harmonyServer: HarmonyServer
   let adminKeyPair: KeyPair
   let bundle: EncryptedExportBundle
+  let authDID: string
+  let authSecretKey: Uint8Array
 
   const communityId = 'harmony:community:discord123'
 
   beforeAll(async () => {
+    // Create auth identity for endpoint requests
+    const authKP = await crypto.generateSigningKeyPair()
+    const authDoc = await didProvider.create(authKP)
+    authDID = authDoc.id
+    authSecretKey = authKP.secretKey
+
     // Build quads simulating a Discord export
     const quads: Quad[] = [
       { subject: communityId, predicate: RDFPredicate.type, object: HarmonyType.Community, graph: communityId },
@@ -90,7 +107,6 @@ describe('Import integration: export → import → community accessible', () =>
 
     // Create store and HarmonyServer
     store = new MemoryQuadStore()
-    const didProvider = new DIDKeyProvider(crypto)
     harmonyServer = new HarmonyServer({
       port: 0, // won't actually start WS for this test
       store,
@@ -120,19 +136,26 @@ describe('Import integration: export → import → community accessible', () =>
   })
 
   it('import returns ImportResult with communityId, channels, members', async () => {
-    const result = await makeRequest(httpServer, 'POST', '/api/migration/import', {
-      bundle: {
-        ciphertext: Buffer.from(bundle.ciphertext).toString('base64'),
-        nonce: Buffer.from(bundle.nonce).toString('base64'),
-        metadata: bundle.metadata
+    const auth = await signAuth(authDID, authSecretKey, 'POST', '/api/migration/import')
+    const result = await makeRequest(
+      httpServer,
+      'POST',
+      '/api/migration/import',
+      {
+        bundle: {
+          ciphertext: Buffer.from(bundle.ciphertext).toString('base64'),
+          nonce: Buffer.from(bundle.nonce).toString('base64'),
+          metadata: bundle.metadata
+        },
+        adminDID: 'did:key:test',
+        communityName: 'Test Discord',
+        adminKeyPair: {
+          publicKey: Buffer.from(adminKeyPair.publicKey).toString('base64'),
+          secretKey: Buffer.from(adminKeyPair.secretKey).toString('base64')
+        }
       },
-      adminDID: 'did:key:test',
-      communityName: 'Test Discord',
-      adminKeyPair: {
-        publicKey: Buffer.from(adminKeyPair.publicKey).toString('base64'),
-        secretKey: Buffer.from(adminKeyPair.secretKey).toString('base64')
-      }
-    })
+      { Authorization: auth }
+    )
 
     expect(result.status).toBe(200)
     expect(result.body.communityId).toBe(communityId)

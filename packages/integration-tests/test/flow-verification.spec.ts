@@ -29,6 +29,7 @@ import { createCloudApp } from '../../cloud/src/index.js'
 import { PortalService } from '../../portal/src/index.js'
 
 const crypto = createCryptoProvider()
+const didProvider = new DIDKeyProvider(crypto)
 const logger = createLogger({ level: 'error', format: 'json', silent: true })
 
 // Helper: wait for a client event with timeout
@@ -69,7 +70,8 @@ function makeRequest(
   url: string,
   method: string,
   path: string,
-  body?: unknown
+  body?: unknown,
+  headers?: Record<string, string>
 ): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
     const u = new URL(url)
@@ -78,7 +80,7 @@ function makeRequest(
       port: u.port,
       path,
       method,
-      headers: body ? { 'Content-Type': 'application/json' } : {}
+      headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers }
     }
     const req = httpRequest(opts, (res) => {
       const chunks: Buffer[] = []
@@ -357,6 +359,14 @@ describe('Flows 2–8: Server connection, communities, messaging, persistence', 
 // ═══════════════════════════════════════════════════════
 // Flow 5: Migration Import
 // ═══════════════════════════════════════════════════════
+
+async function signAuthFlow(did: string, secretKey: Uint8Array, method: string, path: string): Promise<string> {
+  const timestamp = Date.now().toString()
+  const message = `${timestamp}:${method}:${path}`
+  const sig = await crypto.sign(new TextEncoder().encode(message), secretKey)
+  return `Harmony-Ed25519 ${did} ${timestamp} ${Buffer.from(sig).toString('base64')}`
+}
+
 describe('Flow 5: Migration Import', () => {
   let httpServer: Server
   let endpoint: MigrationEndpoint
@@ -364,9 +374,17 @@ describe('Flow 5: Migration Import', () => {
   let harmonyServer: HarmonyServer
   let adminKeyPair: KeyPair
   let bundle: EncryptedExportBundle
+  let flowAuthDID: string
+  let flowAuthSecretKey: Uint8Array
   const migCommunityId = 'harmony:community:discord-test-456'
 
   beforeAll(async () => {
+    // Create auth identity
+    const authKP = await crypto.generateSigningKeyPair()
+    const authDoc = await didProvider.create(authKP)
+    flowAuthDID = authDoc.id
+    flowAuthSecretKey = authKP.secretKey
+
     const quads: Quad[] = [
       { subject: migCommunityId, predicate: RDFPredicate.type, object: HarmonyType.Community, graph: migCommunityId },
       {
@@ -440,7 +458,6 @@ describe('Flow 5: Migration Import', () => {
     })
 
     store = new MemoryQuadStore()
-    const didProvider = new DIDKeyProvider(crypto)
     harmonyServer = new HarmonyServer({
       port: 0,
       store,
@@ -469,19 +486,26 @@ describe('Flow 5: Migration Import', () => {
 
   it('imports Discord export bundle successfully', async () => {
     const port = (httpServer.address() as any).port
-    const result = await makeRequest(`http://127.0.0.1:${port}`, 'POST', '/api/migration/import', {
-      bundle: {
-        ciphertext: Buffer.from(bundle.ciphertext).toString('base64'),
-        nonce: Buffer.from(bundle.nonce).toString('base64'),
-        metadata: bundle.metadata
+    const auth = await signAuthFlow(flowAuthDID, flowAuthSecretKey, 'POST', '/api/migration/import')
+    const result = await makeRequest(
+      `http://127.0.0.1:${port}`,
+      'POST',
+      '/api/migration/import',
+      {
+        bundle: {
+          ciphertext: Buffer.from(bundle.ciphertext).toString('base64'),
+          nonce: Buffer.from(bundle.nonce).toString('base64'),
+          metadata: bundle.metadata
+        },
+        adminDID: 'did:key:test',
+        communityName: 'Migrated Server',
+        adminKeyPair: {
+          publicKey: Buffer.from(adminKeyPair.publicKey).toString('base64'),
+          secretKey: Buffer.from(adminKeyPair.secretKey).toString('base64')
+        }
       },
-      adminDID: 'did:key:test',
-      communityName: 'Migrated Server',
-      adminKeyPair: {
-        publicKey: Buffer.from(adminKeyPair.publicKey).toString('base64'),
-        secretKey: Buffer.from(adminKeyPair.secretKey).toString('base64')
-      }
-    })
+      { Authorization: auth }
+    )
 
     expect(result.status).toBe(200)
     expect(result.body.communityId).toBe(migCommunityId)

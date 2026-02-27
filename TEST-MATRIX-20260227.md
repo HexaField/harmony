@@ -315,7 +315,7 @@ _Verified as side effects of community join/leave._
 | 17.2 | VC has correct structure: issuer=community, subject=member, Ed25519 proof | ✅ | VC structure: issuer=self DID, subject=self DID, Ed25519Signature2020 proof, type=IdentityAssertion |
 | 17.3 | Leave community → VC revoked (verify via revocation store) | ✅ | Leave removes membership. Post-leave messages not delivered. Verified. |
 | 17.4 | Tampered VC rejected by server on re-join attempt | ✅ | Server verifies VP/VC signatures on auth (handleAuth checks embedded credentials) |
-| 17.5 | VC portfolio UI | ⊘ | Not implemented |
+| 17.5 | VC portfolio UI | ✅ | `VCPortfolio` class (74 LOC) + SolidJS `CredentialPortfolio`, `CredentialDetail`, `CredentialIssue` components exported from ui-app. Tests in credentials.spec.ts. |
 | 17.6 | VC-based admission gates | ⊘ | Not implemented |
 
 ---
@@ -426,7 +426,7 @@ _Mostly not implemented._
 
 ## Final Results (2026-02-27)
 
-**127 ✅ / 0 ❌ / 3 ⚠️ / 17 ⊘** — 2343 tests passing, 31 skipped, 88 todo
+**128 ✅ / 0 ❌ / 3 ⚠️ / 16 ⊘** — 2343 tests passing, 31 skipped, 88 todo
 
 ### Remaining ⚠️ — Genuinely Untestable Without Manual Interaction
 

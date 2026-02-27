@@ -1201,16 +1201,7 @@ export class HarmonyServer {
       }
     }
 
-    if (!this.validateMembership(conn, payload.communityId)) return
-
-    // Content length check (content may be encrypted object, check if string)
-    if (
-      typeof payload.content === 'string' &&
-      !this.validateStringLength(conn, payload.content, 'content', HarmonyServer.MAX_CONTENT_LENGTH)
-    )
-      return
-
-    // Check ban list
+    // Check ban list before membership (banned users may have been disconnected)
     if (this.isUserBanned(payload.communityId, conn.did)) {
       this.sendToConnection(conn, {
         id: `ban-${Date.now()}`,
@@ -1222,6 +1213,15 @@ export class HarmonyServer {
       conn.ws.close(4003, 'Banned')
       return
     }
+
+    if (!this.validateMembership(conn, payload.communityId)) return
+
+    // Content length check (content may be encrypted object, check if string)
+    if (
+      typeof payload.content === 'string' &&
+      !this.validateStringLength(conn, payload.content, 'content', HarmonyServer.MAX_CONTENT_LENGTH)
+    )
+      return
 
     // Verify membership (after ZCAP — ZCAP is the primary auth check)
     if (!this.validateMembership(conn, payload.communityId as string)) return

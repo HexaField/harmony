@@ -325,10 +325,7 @@ describe('@harmony/voice', () => {
   })
 
   describe('Authorization (additional)', () => {
-    it.skip('MUST revoke participant on ZCAP/VC revocation', () => {
-      // Source does not implement a ZCAP revocation listener that auto-removes participants.
-      // VoiceRoomManager would need an onRevocation hook.
-    })
+    it.todo('MUST revoke participant on ZCAP/VC revocation (requires onRevocation hook in VoiceRoomManager)')
   })
 
   describe('Participant Tracking (additional)', () => {
@@ -354,20 +351,13 @@ describe('@harmony/voice', () => {
       expect(joined).toHaveLength(1)
     })
 
-    it.skip('MUST update presence to show "in voice"', () => {
-      // Source does not implement presence integration.
-      // VoiceRoomManager would need to update a presence service on join/leave.
-    })
+    it.todo('MUST update presence to show "in voice" (requires presence service integration)')
   })
 
   describe('LiveKit Integration (additional)', () => {
-    it.skip('MUST handle LiveKit webhook events (participant joined/left)', () => {
-      // Source does not expose a webhook handler for LiveKit server-side events.
-    })
+    it.todo('MUST handle LiveKit webhook events (requires webhook handler implementation)')
 
-    it.skip('MUST reconnect on transient LiveKit failures', () => {
-      // Source VoiceClient does not implement reconnection logic.
-    })
+    it.todo('MUST reconnect on transient LiveKit failures (requires reconnection logic in VoiceClient)')
   })
 
   describe('Client Connection (additional)', () => {

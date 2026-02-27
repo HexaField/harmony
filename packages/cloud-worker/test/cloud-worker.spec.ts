@@ -274,20 +274,11 @@ describe('Provisioning', () => {
 // ── Integration Tests (require Workers runtime) ──
 
 describe('CommunityDurableObject', () => {
-  it.skip('should accept WebSocket upgrade (requires Workers runtime)', () => {
-    // This test needs miniflare or wrangler dev to run
-    // The DO creates a WebSocketPair and accepts the connection
-  })
+  it.todo('should accept WebSocket upgrade (requires miniflare with hibernatable WebSockets + DO SQLite)')
 
-  it.skip('should authenticate via VP on first message (requires Workers runtime)', () => {
-    // Needs actual DO instantiation with ctx.acceptWebSocket
-  })
+  it.todo('should authenticate via VP on first message (requires miniflare with ctx.acceptWebSocket)')
 
-  it.skip('should broadcast messages to all connected clients (requires Workers runtime)', () => {
-    // Needs multiple WebSocket connections to a DO
-  })
+  it.todo('should broadcast messages to all connected clients (requires miniflare with multiple WebSocket connections)')
 
-  it.skip('should timeout unauthenticated connections after 30s (requires Workers runtime)', () => {
-    // Needs alarm support
-  })
+  it.todo('should timeout unauthenticated connections after 30s (requires miniflare with alarm support)')
 })

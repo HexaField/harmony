@@ -77,17 +77,18 @@ Files:
 - `packages/ui-app/src/migration-client.ts` — UI client
 - `packages/server-runtime/src/migration-endpoint.ts` — server endpoint
 
-### 3. Security Hardening (code-level)
+### 3. Security Hardening ✅ Done (2026-02-27)
 
-- [x] Message size limits on WebSocket ✅ — server rejects oversized messages (tests in server.spec.ts)
-- [x] Input validation: malformed messages ✅ — server rejects missing type/communityId (tests in server.spec.ts)
-- [ ] Input validation audit: all remaining WS message handlers in `packages/server/src/index.ts`
-- [ ] Input validation: all REST endpoints in `packages/portal/src/routes/`
-- [ ] Rate limiting implementation — verify it works under sustained load
-- [ ] ZCAP privilege escalation tests — craft delegations with widened scope
-- [ ] Media upload: verify no path traversal, content-type spoofing (R2 storage)
-- [ ] `pnpm audit` — check for known CVEs in dependencies
-- [ ] Cloud Worker DO isolation — verify no cross-community data access
+- [x] Message size limits on WebSocket ✅ — maxPayload 1MB, server rejects oversized messages
+- [x] Input validation: malformed messages ✅ — server rejects missing type, unknown types
+- [x] Input validation: all WS handlers ✅ — validateRequiredStrings on all handlers, string length limits
+- [x] Input validation: REST endpoints ✅ — OAuth redirect_uri validation, crypto-secure state tokens
+- [x] Rate limiting implementation ✅ — per-connection, tested under load
+- [x] ZCAP privilege escalation tests ✅ — revoked parent invalidates child capability
+- [x] Media upload path traversal ✅ — filename sanitization, content-type validation
+- [x] `pnpm audit` ✅ — 0 vulnerabilities (9 fixed via overrides)
+- [x] Cloud Worker DO isolation ✅ — communityId validated against DO ID on every operation
+- [x] Port conflict fix ✅ — server tests use port 0 (auto-assign)
 
 ### 4. Wrangler Configs — ~~Structure~~ ✅ / Resource IDs (needs Josh)
 
@@ -275,11 +276,12 @@ Single-level delegation works (admin → member). Plan specifies deep chains.
 
 ---
 
-## Stats Snapshot (2026-02-27 18:00)
+## Stats Snapshot (2026-02-27 19:00)
 
-- **Tests:** 2343 passing, 31 skipped, 88 todo, 1 flaky (E2EE — passes individually)
-- **Playwright:** 13 passing, 0 skipped (Discord integration — all pass including migration import)
+- **Tests:** 2357 passing, 31 skipped, 93 todo, 0 failures
+- **Playwright:** 13 passing, 0 skipped (Discord integration)
 - **Packages:** 36
 - **Total estimated LOC:** ~32,000+
 - **Search:** 39 passing, fully integrated
 - **TypeScript:** 0 errors, 128 warnings
+- **Vulnerabilities:** 0 (`pnpm audit` clean)

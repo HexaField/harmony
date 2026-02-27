@@ -17,6 +17,7 @@
     "@harmony/did": "workspace:*",
     "@harmony/e2ee": "workspace:*",
     "@harmony/identity": "workspace:*",
+    "@harmony/moderation": "workspace:*",
     "@harmony/protocol": "workspace:*",
     "@harmony/quads": "workspace:*",
     "@harmony/search": "workspace:*",

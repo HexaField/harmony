@@ -1036,6 +1036,9 @@ importers:
       '@harmony/identity':
         specifier: workspace:*
         version: link:../identity
+      '@harmony/moderation':
+        specifier: workspace:*
+        version: link:../moderation
       '@harmony/protocol':
         specifier: workspace:*
         version: link:../protocol

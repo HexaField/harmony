@@ -1880,6 +1880,39 @@ export class HarmonyClient {
     })
   }
 
+  // ── Notifications ──
+
+  async getNotifications(opts?: { limit?: number; offset?: number; unreadOnly?: boolean }): Promise<Notification[]> {
+    return new Promise((resolve) => {
+      const unsub = this.on('notification.list.response' as any, (...args: unknown[]) => {
+        unsub()
+        const payload = args[0] as { notifications: Notification[]; total: number }
+        resolve(payload.notifications)
+      })
+      this.send(this.createMessage('notification.list' as any, opts ?? {}))
+    })
+  }
+
+  async getUnreadCount(): Promise<{ unread: number; byChannel: Record<string, number> }> {
+    return new Promise((resolve) => {
+      const unsub = this.on('notification.count.response' as any, (...args: unknown[]) => {
+        unsub()
+        resolve(args[0] as { unread: number; byChannel: Record<string, number> })
+      })
+      this.send(this.createMessage('notification.count' as any, {}))
+    })
+  }
+
+  async markNotificationsRead(ids?: string[]): Promise<void> {
+    this.send(this.createMessage('notification.mark-read' as any, { notificationIds: ids ?? [] }))
+  }
+
+  onNotification(callback: (n: Notification) => void): () => void {
+    return this.on('notification.new' as any, (...args: unknown[]) => {
+      callback(args[0] as Notification)
+    })
+  }
+
   requestCommunityInfo(communityId: string): void {
     this.send({
       id: `info-req-${Date.now()}`,

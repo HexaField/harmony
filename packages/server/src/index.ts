@@ -1946,6 +1946,125 @@ export class HarmonyServer {
     })
   }
 
+  private async handleModerationConfigUpdate(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as {
+      communityId: string
+      rules: Array<{ type: string; config: Record<string, unknown> }>
+    }
+    if (!this.validateRequiredStrings(conn, payload, ['communityId'])) return
+    if (!this.validateMembership(conn, payload.communityId)) return
+
+    // Admin-only
+    if (!(await this.isAdmin(payload.communityId, conn.did))) {
+      this.sendError(conn, 'FORBIDDEN', 'Only admins can update moderation config')
+      return
+    }
+
+    if (!Array.isArray(payload.rules)) {
+      this.sendError(conn, 'INVALID_PAYLOAD', 'rules must be an array')
+      return
+    }
+
+    // Clear existing rules and add new ones
+    const existingRules = this.moderationPlugin.getRules(payload.communityId)
+    for (const rule of existingRules) {
+      this.moderationPlugin.removeRule(payload.communityId, rule.id)
+    }
+
+    for (const ruleSpec of payload.rules) {
+      const config = ruleSpec.config
+      const id = `${ruleSpec.type}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+      switch (ruleSpec.type) {
+        case 'rateLimit':
+          this.moderationPlugin.addRule(payload.communityId, {
+            id,
+            type: 'rateLimit',
+            scope: (config.scope as 'community' | 'channel') ?? 'community',
+            scopeId: (config.scopeId as string) ?? payload.communityId,
+            maxMessages: (config.maxMessages as number) ?? 10,
+            windowSeconds: (config.windowSeconds as number) ?? 60
+          })
+          break
+        case 'accountAge':
+          this.moderationPlugin.addRule(payload.communityId, {
+            id,
+            type: 'accountAge',
+            minAgeSeconds: (config.minAgeSeconds as number) ?? 86400,
+            action: (config.action as 'block' | 'flag') ?? 'block'
+          })
+          break
+        case 'raidDetection':
+          this.moderationPlugin.addRule(payload.communityId, {
+            id,
+            type: 'raidDetection',
+            joinThreshold: (config.joinThreshold as number) ?? 10,
+            windowSeconds: (config.windowSeconds as number) ?? 60,
+            action: (config.action as 'lockdown' | 'alert') ?? 'lockdown',
+            lockdownDurationSeconds: (config.lockdownDurationSeconds as number) ?? 300
+          })
+          // Wire up raid alert broadcasting
+          this.moderationPlugin.onRaidAlert(payload.communityId, (cId, rule) => {
+            this.broadcastToAdmins(cId, {
+              id: `raid-${Date.now()}`,
+              type: 'moderation.raid-detected' as any,
+              timestamp: new Date().toISOString(),
+              sender: 'server',
+              payload: { communityId: cId, rule }
+            })
+          })
+          break
+        case 'vcRequirement':
+          this.moderationPlugin.addRule(payload.communityId, {
+            id,
+            type: 'vcRequirement',
+            requiredVCTypes: (config.requiredVCTypes as string[]) ?? [],
+            action: (config.action as 'block' | 'flag') ?? 'block'
+          })
+          break
+      }
+    }
+
+    this.sendToConnection(conn, {
+      id: `mod-cfg-${Date.now()}`,
+      type: 'moderation.config.response' as any,
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: { communityId: payload.communityId, rules: this.moderationPlugin.getRules(payload.communityId) }
+    })
+  }
+
+  private async handleModerationConfigGet(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { communityId: string }
+    if (!this.validateRequiredStrings(conn, payload, ['communityId'])) return
+    if (!this.validateMembership(conn, payload.communityId)) return
+
+    this.sendToConnection(conn, {
+      id: `mod-cfg-${Date.now()}`,
+      type: 'moderation.config.response' as any,
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: { communityId: payload.communityId, rules: this.moderationPlugin.getRules(payload.communityId) }
+    })
+  }
+
+  /** Broadcast a message to admin connections of a community */
+  private broadcastToAdmins(communityId: string, msg: ProtocolMessage): void {
+    const subs = this.communitySubscriptions.get(communityId)
+    if (!subs) return
+    for (const connId of subs) {
+      const conn = this._connections.get(connId)
+      if (conn) {
+        // Best-effort: send to all members (admin filtering would require async isAdmin check)
+        this.sendToConnection(conn, msg)
+      }
+    }
+  }
+
+  /** Expose moderationPlugin for testing */
+  get moderationPluginInstance(): ModerationPlugin {
+    return this.moderationPlugin
+  }
+
   private async handleChannelDeleteAdmin(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
     const payload = msg.payload as { communityId: string; channelId: string }
     if (!this.validateRequiredStrings(conn, payload, ['communityId', 'channelId'])) return

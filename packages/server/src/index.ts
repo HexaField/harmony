@@ -1185,27 +1185,6 @@ export class HarmonyServer {
       clock: LamportClock
     }
     if (!this.validateRequiredStrings(conn, payload, ['communityId', 'channelId'])) return
-    if (!this.validateMembership(conn, payload.communityId)) return
-
-    // Content length check (content may be encrypted object, check if string)
-    if (
-      typeof payload.content === 'string' &&
-      !this.validateStringLength(conn, payload.content, 'content', HarmonyServer.MAX_CONTENT_LENGTH)
-    )
-      return
-
-    // Check ban list first
-    if (this.isUserBanned(payload.communityId, conn.did)) {
-      this.sendToConnection(conn, {
-        id: `ban-${Date.now()}`,
-        type: 'error',
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: { code: 'BANNED', message: 'You are banned from this community' }
-      })
-      conn.ws.close(4003, 'Banned')
-      return
-    }
 
     // Verify ZCAP if proof is present (primary authorization mechanism)
     if (msg.proof) {
@@ -1220,6 +1199,28 @@ export class HarmonyServer {
         })
         return
       }
+    }
+
+    if (!this.validateMembership(conn, payload.communityId)) return
+
+    // Content length check (content may be encrypted object, check if string)
+    if (
+      typeof payload.content === 'string' &&
+      !this.validateStringLength(conn, payload.content, 'content', HarmonyServer.MAX_CONTENT_LENGTH)
+    )
+      return
+
+    // Check ban list
+    if (this.isUserBanned(payload.communityId, conn.did)) {
+      this.sendToConnection(conn, {
+        id: `ban-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'BANNED', message: 'You are banned from this community' }
+      })
+      conn.ws.close(4003, 'Banned')
+      return
     }
 
     // Verify membership (after ZCAP — ZCAP is the primary auth check)

@@ -4,35 +4,27 @@ _Integrating prior research from `cloud-encrypted-sfus.md` and Phase 3 plan_
 
 ---
 
-## Design Principles (from research)
+## Design Principles
 
-1. **E2EE is mandatory** — Cloudflare (or any SFU) is a "Blind Courier." Frame-level encryption via `RTCRtpScriptTransform` (Insertable Streams), AES-GCM payloads, RTP headers intact for routing.
+1. **E2EE is mandatory** — SFU is a "Blind Courier." Frame-level encryption via `RTCRtpScriptTransform` (Insertable Streams), AES-GCM payloads, RTP headers intact for routing.
 2. **MLS for group key agreement** — scales O(log N), already implemented in Harmony's `@harmony/e2ee` package. Bridge MLS group key → voice encryption key.
-3. **Hybrid mesh** — P2P for 1–6 participants ($0 cost), Cloudflare Realtime SFU for 7+ (anycast, global PoPs).
-4. **Self-hosted embeds the SFU** — no external dependency. Cloud delegates to CF Realtime.
+3. **SFU from participant 1** — no P2P mesh tier for MVP. All voice goes through the SFU.
+4. **Self-hosted embeds the SFU** — mediasoup in-process. Cloud delegates to CF Realtime.
 
 ---
 
-## Architecture: Three Tiers
+## Architecture: Two Tiers
 
-### Tier 1: P2P Mesh (1–6 participants)
-
-- Direct WebRTC connections between peers
-- Each peer uploads once per other peer (full mesh)
-- MLS E2EE via Insertable Streams — same as cloud, just no SFU
-- **Cost: $0**
-- Self-hosted server acts as signaling-only (ICE candidates, SDP exchange)
-- mDNS discovery for LAN-local participants
-
-### Tier 2: Self-Hosted SFU (7+ participants, self-hosted)
+### Tier 1: Self-Hosted SFU
 
 - **mediasoup** embedded in the Harmony server process (Node.js native module)
+- All voice/video goes through the SFU from participant 1 (no P2P mesh)
 - Each peer uploads once → mediasoup fans out to all subscribers
 - MLS E2EE maintained — mediasoup forwards encrypted RTP, never decrypts
 - Server handles: room lifecycle, ZCAP authorization, participant tracking
 - **Why mediasoup:** Node.js native, embeds in-process, MIT licensed, battle-tested (Jitsi, Edumeet), prebuilt binaries for arm64/x64
 
-### Tier 3: Cloud SFU (cloud-hosted communities)
+### Tier 2: Cloud SFU
 
 - **Cloudflare Realtime SFU** for cloud-hosted communities
 - Durable Object acts as "Room Coordinator" — tracks participants, issues CF session tokens
@@ -40,23 +32,8 @@ _Integrating prior research from `cloud-encrypted-sfus.md` and Phase 3 plan_
 - MLS E2EE — same Insertable Streams pipeline, CF never sees plaintext
 - **Cost: $0.05/GB egress, 1TB free/month**
 - Anycast routing — users hit closest CF PoP automatically
-- Backbone cascading — CF private fiber for inter-PoP transit
 
-### The Seamless Handover (from research)
-
-Self-hosted servers handle the P2P → SFU transition:
-
-1. **At 5 participants:** pre-provision mediasoup Router (warm-up)
-2. **At 7 participants:** signal `upgrade-to-sfu` to all clients
-3. Clients switch `RemoteDescription` from mesh peers to SFU transport
-4. Keep P2P connections alive for 2s during switch (no audio gaps)
-5. mediasoup takes over fan-out
-
-Cloud communities follow the same pattern but transition to CF Realtime:
-
-1. **At 5 participants:** DO pre-provisions CF Realtime session
-2. **At 7 participants:** DO broadcasts `upgrade-to-sfu` with WHEP endpoints
-3. Clients switch to CF SFU via WHIP (push) / WHEP (pull)
+> **Future:** P2P mesh for 1–6 participants and seamless mesh→SFU handover. Deferred post-launch.
 
 ---
 
@@ -96,12 +73,11 @@ packages/voice/src/
 ├── adapters/
 │   ├── in-memory.ts        (existing, move here)
 │   ├── mediasoup.ts         ← NEW: mediasoup SFU adapter
-│   ├── peer-mesh.ts         ← NEW: P2P signaling-only adapter
 │   └── types.ts             ← SFUAdapter interface (renamed from LiveKitAdapter)
 ├── e2ee-bridge.ts           ← NEW: MLS group key → AES-GCM frame encryption
 ├── insertable-streams.ts    ← NEW: RTCRtpScriptTransform encryption/decryption
-├── room-manager.ts          (existing, update to use hybrid logic)
-├── voice-client.ts          (existing, update for mesh↔SFU transitions)
+├── room-manager.ts          (existing, update for SFU-always)
+├── voice-client.ts          (existing, update for SFU connection)
 └── index.ts
 
 packages/cloud-worker/src/
@@ -192,23 +168,19 @@ class VoiceE2EEBridge {
 ```typescript
 export class VoiceRoomDO {
   // Manages voice room state in a Durable Object
-  // Coordinates the P2P → CF SFU transition
 
   participants: Map<string, ParticipantState>
   cfSession?: string // Cloudflare Realtime session ID
-  mode: 'mesh' | 'sfu'
 
   async handleJoin(participantDID: string, ws: WebSocket): Promise<void>
   // 1. Verify ZCAP authorization
   // 2. Add participant
-  // 3. If count ≤ 6: relay ICE/SDP for P2P mesh
-  // 4. If count = 5: pre-provision CF session (warm-up)
-  // 5. If count = 7: trigger upgrade-to-sfu, send WHEP endpoints
+  // 3. Create/join CF Realtime session
+  // 4. Return WHIP/WHEP endpoints to client
 
   async handleLeave(participantDID: string): Promise<void>
   // 1. Remove participant
-  // 2. If count drops to ≤ 6 and in SFU mode: could downgrade (optional)
-  // 3. If count = 0: destroy room + CF session
+  // 2. If count = 0: destroy room + CF session
 }
 ```
 
@@ -222,13 +194,11 @@ export class VoiceRoomDO {
 | ---------------------------------- | -------------------------- | ------------------------------------------- |
 | mediasoup room lifecycle           | vitest + mediasoup         | Create/destroy workers, routers, transports |
 | mediasoup WebRTC negotiation       | vitest + `wrtc` npm        | Full ICE/DTLS handshake, produce/consume    |
-| P2P mesh signaling                 | vitest + mock WebSocket    | ICE candidate relay, SDP exchange           |
-| Mesh → SFU transition logic        | vitest                     | Participant count threshold, state machine  |
 | E2EE bridge key derivation         | vitest                     | MLS epoch → AES-GCM key, HKDF               |
 | Insertable Streams encrypt/decrypt | vitest + mock frames       | Frame encryption roundtrip                  |
 | CF Calls adapter (mocked)          | vitest                     | HTTP request/response mapping               |
 | Cloud Worker voice handlers        | miniflare (`wrangler dev`) | DO voice.join/leave, state broadcast        |
-| RoomManager integration            | vitest + InMemoryAdapter   | Already exists, extend for hybrid           |
+| RoomManager integration            | vitest + InMemoryAdapter   | Already exists, extend for SFU              |
 
 ### What we CANNOT test locally
 
@@ -265,13 +235,11 @@ CF Realtime: **$0.05/GB egress**, 1TB free
 1. **SFUAdapter interface + InMemoryAdapter rename** — clean foundation
 2. **E2EE bridge** — MLS key derivation + frame encryption (testable without SFU)
 3. **MediasoupAdapter** — self-hosted SFU, room lifecycle
-4. **PeerMeshAdapter** — P2P signaling relay
-5. **RoomManager hybrid logic** — mesh ↔ SFU transition state machine
-6. **VoiceClient update** — handle mesh/SFU transitions, Insertable Streams
-7. **Voice handlers in CommunityDO** — voice.join/leave/mute in cloud worker
-8. **VoiceRoomDO** — dedicated DO for voice room coordination
-9. **CloudflareCallsAdapter** — CF Realtime integration
-10. **Integration tests** — mediasoup + wrtc, miniflare, E2EE roundtrip
+4. **VoiceClient update** — WebRTC connection to SFU, Insertable Streams E2EE
+5. **Voice handlers in CommunityDO** — voice.join/leave/mute in cloud worker
+6. **VoiceRoomDO** — dedicated DO for voice room coordination
+7. **CloudflareCallsAdapter** — CF Realtime integration
+8. **Integration tests** — mediasoup + wrtc, miniflare, E2EE roundtrip
 
 ---
 

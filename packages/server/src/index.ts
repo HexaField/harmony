@@ -11,6 +11,7 @@ import type { ProtocolMessage, PresenceUpdatePayload, LamportClock, MessageType 
 import { serialise, deserialise } from '@harmony/protocol'
 import { HarmonyPredicate, HarmonyType, HarmonyAction, HARMONY, RDFPredicate, XSDDatatype } from '@harmony/vocab'
 import type { DIDDocument } from '@harmony/did'
+import type { SFUAdapter } from '@harmony/voice'
 
 // ── Server Config ──
 
@@ -23,6 +24,7 @@ export interface ServerConfig {
   cryptoProvider?: CryptoProvider
   maxConnections?: number
   rateLimit?: RateLimitConfig
+  sfuAdapter?: SFUAdapter
 }
 
 export interface RateLimitConfig {
@@ -699,6 +701,8 @@ export class HarmonyServer {
   private roles: Map<string, Map<string, Role>> = new Map() // communityId → roleId → Role
   private memberRoles: Map<string, Map<string, Set<string>>> = new Map() // communityId → DID → Set<roleId>
   private pins: Map<string, Set<string>> = new Map() // channelKey → Set<messageId>
+  private sfuAdapter: SFUAdapter | null = null
+  private sfuRooms: Set<string> = new Set() // channelIds with SFU rooms created
 
   constructor(config: ServerConfig) {
     this.config = config
@@ -707,6 +711,7 @@ export class HarmonyServer {
     this.communityManager = new CommunityManager(config.store, this.crypto)
     this.vcService = new VCService(this.crypto)
     this.zcapService = new ZCAPService(this.crypto)
+    this.sfuAdapter = config.sfuAdapter ?? null
   }
 
   get messageStoreInstance(): MessageStore {
@@ -714,6 +719,10 @@ export class HarmonyServer {
   }
   get communityManagerInstance(): CommunityManager {
     return this.communityManager
+  }
+
+  setSFUAdapter(adapter: SFUAdapter): void {
+    this.sfuAdapter = adapter
   }
 
   async start(): Promise<void> {
@@ -1047,6 +1056,18 @@ export class HarmonyServer {
         break
       case 'voice.token':
         await this.handleVoiceToken(conn, msg)
+        break
+      case 'voice.transport.connect':
+        await this.handleVoiceTransportConnect(conn, msg)
+        break
+      case 'voice.produce':
+        await this.handleVoiceProduce(conn, msg)
+        break
+      case 'voice.consume':
+        await this.handleVoiceConsume(conn, msg)
+        break
+      case 'voice.consumer.resume':
+        await this.handleVoiceConsumerResume(conn, msg)
         break
       case 'thread.create':
         await this.handleThreadCreate(conn, msg)
@@ -2212,21 +2233,173 @@ export class HarmonyServer {
 
   private async handleVoiceToken(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
     const payload = msg.payload as { channelId: string }
-    // Generate a token for the client (in production, this would be a LiveKit JWT)
-    const token = Buffer.from(
-      JSON.stringify({
-        room: payload.channelId,
-        participant: conn.did,
-        iat: Date.now()
+
+    if (this.sfuAdapter) {
+      // Real SFU mode — create room if needed, generate real token
+      if (!this.sfuRooms.has(payload.channelId)) {
+        await this.sfuAdapter.createRoom(payload.channelId, {})
+        this.sfuRooms.add(payload.channelId)
+      }
+      const token = await this.sfuAdapter.generateToken(payload.channelId, conn.did, { did: conn.did })
+      this.sendToConnection(conn, {
+        id: `vt-${Date.now()}`,
+        type: 'voice.token.response' as ProtocolMessage['type'],
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { channelId: payload.channelId, token, mode: 'sfu' }
       })
-    ).toString('base64')
-    this.sendToConnection(conn, {
-      id: `vt-${Date.now()}`,
-      type: 'voice.token.response' as ProtocolMessage['type'],
-      timestamp: new Date().toISOString(),
-      sender: 'server',
-      payload: { channelId: payload.channelId, token }
-    })
+    } else {
+      // No SFU — generate a basic signaling-only token
+      const token = Buffer.from(
+        JSON.stringify({
+          room: payload.channelId,
+          participant: conn.did,
+          iat: Date.now()
+        })
+      ).toString('base64')
+      this.sendToConnection(conn, {
+        id: `vt-${Date.now()}`,
+        type: 'voice.token.response' as ProtocolMessage['type'],
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { channelId: payload.channelId, token, mode: 'signaling' }
+      })
+    }
+  }
+
+  private async handleVoiceTransportConnect(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { channelId: string; dtlsParameters: unknown }
+    if (!this.sfuAdapter || !('connectTransport' in this.sfuAdapter)) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'NO_SFU', message: 'SFU adapter does not support transport connect' }
+      })
+      return
+    }
+    try {
+      await (this.sfuAdapter as any).connectTransport(payload.channelId, conn.did, payload.dtlsParameters)
+      this.sendToConnection(conn, {
+        id: `vtc-${Date.now()}`,
+        type: 'voice.transport.connected' as ProtocolMessage['type'],
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { channelId: payload.channelId }
+      })
+    } catch (err) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'TRANSPORT_CONNECT_FAILED', message: String(err) }
+      })
+    }
+  }
+
+  private async handleVoiceProduce(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { channelId: string; kind: 'audio' | 'video'; rtpParameters: unknown }
+    if (!this.sfuAdapter || !('produce' in this.sfuAdapter)) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'NO_SFU', message: 'SFU adapter does not support produce' }
+      })
+      return
+    }
+    try {
+      const producerId = await (this.sfuAdapter as any).produce(
+        payload.channelId,
+        conn.did,
+        payload.rtpParameters,
+        payload.kind
+      )
+      this.sendToConnection(conn, {
+        id: `vp-${Date.now()}`,
+        type: 'voice.produced' as ProtocolMessage['type'],
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { channelId: payload.channelId, producerId, kind: payload.kind }
+      })
+
+      // Notify other participants about the new producer so they can consume
+      const participants = this.voiceChannelParticipants.get(payload.channelId)
+      if (participants) {
+        for (const connId of participants) {
+          if (connId === conn.id) continue
+          const otherConn = this._connections.get(connId)
+          if (otherConn) {
+            this.sendToConnection(otherConn, {
+              id: `vnp-${Date.now()}`,
+              type: 'voice.new-producer' as ProtocolMessage['type'],
+              timestamp: new Date().toISOString(),
+              sender: conn.did,
+              payload: { channelId: payload.channelId, producerId, kind: payload.kind, producerDid: conn.did }
+            })
+          }
+        }
+      }
+    } catch (err) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'PRODUCE_FAILED', message: String(err) }
+      })
+    }
+  }
+
+  private async handleVoiceConsume(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { channelId: string; producerId: string; rtpCapabilities: unknown }
+    if (!this.sfuAdapter || !('consume' in this.sfuAdapter)) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'NO_SFU', message: 'SFU adapter does not support consume' }
+      })
+      return
+    }
+    try {
+      const result = await (this.sfuAdapter as any).consume(
+        payload.channelId,
+        conn.did,
+        payload.producerId,
+        payload.rtpCapabilities
+      )
+      this.sendToConnection(conn, {
+        id: `vc-${Date.now()}`,
+        type: 'voice.consumed' as ProtocolMessage['type'],
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: {
+          channelId: payload.channelId,
+          consumerId: result.consumerId,
+          producerId: result.producerId,
+          kind: result.kind,
+          rtpParameters: result.rtpParameters
+        }
+      })
+    } catch (err) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'CONSUME_FAILED', message: String(err) }
+      })
+    }
+  }
+
+  private async handleVoiceConsumerResume(_conn: ServerConnection, _msg: ProtocolMessage): Promise<void> {
+    // Consumer resume is a client-side operation; server acknowledges
+    // In a full implementation, this would resume the server-side consumer
   }
 
   private async handleReconciliation(_conn: ServerConnection, msg: ProtocolMessage): Promise<void> {

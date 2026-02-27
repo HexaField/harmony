@@ -16,7 +16,34 @@ import type { FileInput } from '@harmony/media'
 function createMockWsFactory() {
   return (_url: string) => {
     const wsLike = {
-      send: (_data: string) => {},
+      send: (data: string) => {
+        // Auto-respond to voice.token requests
+        try {
+          const msg = JSON.parse(data)
+          if (msg.type === 'voice.token') {
+            const channelId = msg.payload?.channelId ?? 'unknown'
+            setTimeout(() => {
+              wsLike.onmessage?.({
+                data: JSON.stringify({
+                  id: `vt-${Date.now()}`,
+                  type: 'voice.token.response',
+                  timestamp: new Date().toISOString(),
+                  sender: 'server',
+                  payload: {
+                    channelId,
+                    token: Buffer.from(
+                      JSON.stringify({ room: channelId, participant: 'did:key:z6MkTestUser123', iat: Date.now() })
+                    ).toString('base64'),
+                    mode: 'signaling'
+                  }
+                })
+              })
+            }, 1)
+          }
+        } catch {
+          /* ignore */
+        }
+      },
       close: () => {
         wsLike.onclose?.()
       },

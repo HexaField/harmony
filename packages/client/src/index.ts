@@ -1167,16 +1167,37 @@ export class HarmonyClient {
   async joinVoice(channelId: string): Promise<VoiceConnection> {
     if (!this.voiceClient) throw new Error('Voice client not configured')
     if (!this.isConnected()) throw new Error('Not connected')
-    // Request join token from server
+
+    // Request token from server
+    this.send(this.createMessage('voice.token', { channelId }))
+
+    // Wait for voice.token.response
+    const tokenResponse = await new Promise<{ token: string; mode: string }>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        cleanup()
+        reject(new Error('Voice token request timed out'))
+      }, 10000)
+
+      const handler = (payload: any) => {
+        if (payload.channelId === channelId && payload.token) {
+          cleanup()
+          resolve({ token: payload.token, mode: payload.mode ?? 'signaling' })
+        }
+      }
+
+      const cleanup = () => {
+        clearTimeout(timeout)
+        this.emitter.off('voice.token.response', handler)
+      }
+
+      this.emitter.on('voice.token.response', handler)
+    })
+
+    // Send voice.join for participant tracking
     this.send(this.createMessage('voice.join', { channelId }))
-    // Generate a client-side token with room info
-    const tokenData = { room: channelId, participant: this._did }
-    const token =
-      typeof btoa === 'function'
-        ? btoa(JSON.stringify(tokenData))
-        : Buffer.from(JSON.stringify(tokenData)).toString('base64')
-    const connection = await this.voiceClient.joinRoom(token)
-    this.emitter.emit('voice.joined', { channelId })
+
+    const connection = await this.voiceClient.joinRoom(tokenResponse.token)
+    this.emitter.emit('voice.joined', { channelId, mode: tokenResponse.mode })
     return connection
   }
 
@@ -1504,6 +1525,15 @@ export class HarmonyClient {
       case 'voice.participant.left':
       case 'voice.state':
         this.emitter.emit('voice.state', msg.payload)
+        break
+      case 'voice.token.response':
+        this.emitter.emit('voice.token.response', msg.payload)
+        break
+      case 'voice.transport.connected':
+      case 'voice.produced':
+      case 'voice.consumed':
+      case 'voice.new-producer':
+        this.emitter.emit(msg.type as string, msg.payload)
         break
       case 'voice.offer':
       case 'voice.answer':

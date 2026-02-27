@@ -49,10 +49,18 @@ export interface ModerationSection {
 
 export interface VoiceSection {
   enabled: boolean
+  /** @deprecated Use mediasoup instead */
   livekit?: {
     host: string
     apiKey: string
     apiSecret: string
+  }
+  mediasoup?: {
+    listenIp?: string
+    announcedIp?: string
+    numWorkers?: number
+    rtcMinPort?: number
+    rtcMaxPort?: number
   }
 }
 
@@ -189,6 +197,16 @@ function mergeWithDefaults(raw: Record<string, unknown>): RuntimeConfig {
         host: String(lk.host ?? ''),
         apiKey: String(lk.apiKey ?? ''),
         apiSecret: String(lk.apiSecret ?? '')
+      }
+    }
+    if (s.mediasoup && typeof s.mediasoup === 'object') {
+      const ms = s.mediasoup as Record<string, unknown>
+      config.voice.mediasoup = {
+        listenIp: typeof ms.listenIp === 'string' ? ms.listenIp : undefined,
+        announcedIp: typeof ms.announcedIp === 'string' ? ms.announcedIp : undefined,
+        numWorkers: typeof ms.numWorkers === 'number' ? ms.numWorkers : undefined,
+        rtcMinPort: typeof ms.rtcMinPort === 'number' ? ms.rtcMinPort : undefined,
+        rtcMaxPort: typeof ms.rtcMaxPort === 'number' ? ms.rtcMaxPort : undefined
       }
     }
   }

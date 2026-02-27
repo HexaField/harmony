@@ -22,6 +22,7 @@
     "@harmony/quads": "workspace:*",
     "@harmony/vc": "workspace:*",
     "@harmony/vocab": "workspace:*",
+    "@harmony/voice": "workspace:*",
     "@harmony/zcap": "workspace:*",
     "ws": "^8.18.0"
   },

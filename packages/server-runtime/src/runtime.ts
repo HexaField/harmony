@@ -13,6 +13,8 @@ import { IdentityManager } from '@harmony/identity'
 import type { DIDDocument } from '@harmony/did'
 import type { RevocationStore, RevocationEntry } from '@harmony/vc'
 
+import { MediasoupAdapter } from '@harmony/voice/adapters/mediasoup'
+
 import { SQLiteQuadStore } from './sqlite-quad-store.js'
 import { loadConfig, type RuntimeConfig } from './config.js'
 import { createLogger, type Logger } from './logger.js'
@@ -68,6 +70,7 @@ export class ServerRuntime {
   private relayWs: WebSocket | null = null
   private identityDID: string | undefined
   private signalHandlers: Array<{ signal: string; handler: () => void }> = []
+  private mediasoupAdapter: MediasoupAdapter | null = null
 
   constructor(config?: RuntimeConfig, configPath?: string) {
     this.config = config ?? {
@@ -154,6 +157,19 @@ export class ServerRuntime {
     }
 
     this.server = new HarmonyServer(serverConfig)
+
+    // Init mediasoup SFU if voice is enabled
+    if (this.config.voice.enabled) {
+      const msOpts = this.config.voice.mediasoup
+      this.mediasoupAdapter = new MediasoupAdapter({
+        jwtSecret: 'harmony-' + (this.identityDID ?? 'default'),
+        listenIp: msOpts?.listenIp ?? '0.0.0.0',
+        announcedIp: msOpts?.announcedIp ?? '127.0.0.1'
+      })
+      await this.mediasoupAdapter.init(msOpts?.numWorkers)
+      this.server.setSFUAdapter(this.mediasoupAdapter)
+      this.logger.info('Voice SFU initialized (mediasoup)')
+    }
 
     // Init migration endpoint
     this.migrationEndpoint = new MigrationEndpoint(this.logger, this.store, this.config.storage.media)
@@ -262,6 +278,12 @@ export class ServerRuntime {
     if (this.store) {
       this.store.close()
       this.store = null
+    }
+
+    // Close mediasoup workers
+    if (this.mediasoupAdapter) {
+      await this.mediasoupAdapter.close()
+      this.mediasoupAdapter = null
     }
 
     // Remove signal handlers

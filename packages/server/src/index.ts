@@ -854,7 +854,7 @@ export class HarmonyServer {
           }
 
           await this.handleMessage(conn, msg)
-        } catch (_err) {
+        } catch {
           // Silently ignore parse errors
         }
       })

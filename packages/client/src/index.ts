@@ -1468,6 +1468,15 @@ export class HarmonyClient {
       case 'community.list.response':
         this.emitter.emit('community.list', msg.payload)
         break
+      case 'notification.new':
+        this.emitter.emit('notification.new', msg.payload)
+        break
+      case 'notification.list.response':
+        this.emitter.emit('notification.list.response', msg.payload)
+        break
+      case 'notification.count.response':
+        this.emitter.emit('notification.count.response', msg.payload)
+        break
       case 'thread.created': {
         const p = msg.payload as any
         if (!this._threadMessages.has(p.threadId)) {

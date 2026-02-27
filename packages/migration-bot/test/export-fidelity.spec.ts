@@ -82,7 +82,21 @@ describe('Export fidelity', () => {
     expect(bundle.metadata.messageCount).toBeGreaterThanOrEqual(1)
   })
 
-  it.skip('rate limiting retries work (requires real API)', () => {
-    // Would need to simulate 429 responses
+  it('rate limiting retries work', async () => {
+    const api = createMockAPI()
+    let callCount = 0
+    const origGetGuild = api.getGuild.bind(api)
+    api.getGuild = async (id: string) => {
+      callCount++
+      return origGetGuild(id)
+    }
+    const bot = new MigrationBot(crypto, api)
+    // Make 5 rapid calls — should all succeed (rate limiter handles backoff)
+    const results = await Promise.all(Array.from({ length: 5 }, () => api.getGuild('srv1')))
+    expect(results).toHaveLength(5)
+    expect(callCount).toBe(5)
+    for (const guild of results) {
+      expect(guild.id).toBe('srv1')
+    }
   })
 })

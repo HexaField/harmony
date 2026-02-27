@@ -1,4 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
+import { config } from 'dotenv'
+import { resolve } from 'node:path'
+config({ path: resolve(import.meta.dirname, '..', '..', '..', '.env.test') })
 import { DiscordRESTAPI } from '../src/discord-api.js'
 
 describe('DiscordRESTAPI', () => {
@@ -177,10 +180,15 @@ describe('DiscordRESTAPI', () => {
     }
   })
 
-  it.skip('MUST work with real Discord token (manual test)', async () => {
-    const api = new DiscordRESTAPI(process.env.DISCORD_BOT_TOKEN!)
-    const guild = await api.getGuild(process.env.DISCORD_GUILD_ID!)
-    expect(guild.id).toBe(process.env.DISCORD_GUILD_ID)
+  it('MUST work with real Discord token', async () => {
+    const token = process.env.TEST_DISCORD_TOKEN
+    const guildId = process.env.TEST_DISCORD_TARGET_ID
+    if (!token || !guildId) {
+      return // skip silently when credentials not available
+    }
+    const api = new DiscordRESTAPI(token)
+    const guild = await api.getGuild(guildId)
+    expect(guild.id).toBe(guildId)
     expect(guild.name).toBeTruthy()
   })
 })

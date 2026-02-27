@@ -210,7 +210,7 @@ export const MessageArea: Component = () => {
           authorName: store.displayName() || pseudonymFromDid(store.did()),
           timestamp: new Date().toISOString(),
           reactions: [],
-          replyTo: reply ? { id: reply.id, content: reply.content, authorName: reply.authorName } : undefined,
+          replyTo: reply ? reply.id : undefined,
           attachments: attachments.length > 0 ? attachments : undefined
         }
         store.addMessage(msg)
@@ -788,7 +788,7 @@ export const MessageArea: Component = () => {
         {/* Context menu overlay */}
         <Show when={contextMenu()}>
           {(menu) => {
-            const msg = allMessages().find((m) => m.id === menu().msgId)
+            const msg = store.messages().find((m: any) => m.id === menu().msgId)
             return (
               <div class="fixed inset-0 z-50" onClick={() => setContextMenu(null)}>
                 <div

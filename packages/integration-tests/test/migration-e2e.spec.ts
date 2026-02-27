@@ -62,7 +62,15 @@ describe('Migration E2E Flows', () => {
       expect(pendingMemberMap.size).toBe(3)
 
       // Encrypt
-      const bundle = await migrationService.encryptExport(quads, adminKP)
+      const bundle = await migrationService.encryptExport(quads, adminKP, {
+        exportDate: new Date().toISOString(),
+        sourceServerId: 'test',
+        sourceServerName: 'test',
+        adminDID: 'did:test:1',
+        channelCount: 0,
+        messageCount: 0,
+        memberCount: 0
+      })
       expect(bundle.ciphertext.length).toBeGreaterThan(0)
       expect(bundle.nonce.length).toBeGreaterThan(0)
 
@@ -174,7 +182,15 @@ describe('Migration E2E Flows', () => {
         }
       ]
 
-      const bundle = await migrationService.encryptExport(quads, keyPair)
+      const bundle = await migrationService.encryptExport(quads, keyPair, {
+        exportDate: new Date().toISOString(),
+        sourceServerId: 'test',
+        sourceServerName: 'test',
+        adminDID: 'did:test:1',
+        channelCount: 0,
+        messageCount: 0,
+        memberCount: 0
+      })
       expect(bundle.ciphertext.length).toBeGreaterThan(0)
 
       const decrypted = await migrationService.decryptExport(bundle, keyPair)
@@ -199,7 +215,15 @@ describe('Migration E2E Flows', () => {
         }
       ]
 
-      const bundle = await migrationService.encryptExport(quads, kp1)
+      const bundle = await migrationService.encryptExport(quads, kp1, {
+        exportDate: new Date().toISOString(),
+        sourceServerId: 'test',
+        sourceServerName: 'test',
+        adminDID: 'did:test:1',
+        channelCount: 0,
+        messageCount: 0,
+        memberCount: 0
+      })
       await expect(migrationService.decryptExport(bundle, kp2)).rejects.toThrow()
     })
   })

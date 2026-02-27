@@ -22,6 +22,7 @@ async function detectPlatform(): Promise<'ios' | 'android' | 'web' | 'desktop'> 
 }
 
 export class CapacitorMobileApp extends MobileApp {
+  // @ts-ignore nativeChecked is set but read only by native bridge
   private nativeChecked = false
   private isNativePlatform = false
 

@@ -24,6 +24,7 @@
     "@harmony/identity": "workspace:*",
     "@harmony/media": "workspace:*",
     "@harmony/migration": "workspace:*",
+    "@harmony/mobile": "workspace:*",
     "@harmony/protocol": "workspace:*",
     "@harmony/quads": "workspace:*",
     "@harmony/search": "workspace:*",

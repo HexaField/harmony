@@ -1,4 +1,4 @@
-import { For, Show, type Component, type Setter } from 'solid-js'
+import { For, Show, type Component } from 'solid-js'
 import { formatFileSize, isImageMimeType } from '../../views/MessageArea.js'
 import type { AttachmentData } from '../../types.js'
 

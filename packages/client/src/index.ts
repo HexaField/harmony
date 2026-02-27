@@ -1254,7 +1254,7 @@ export class HarmonyClient {
         if (msg.type === 'media.upload.complete') {
           const p = msg.payload as any
           clearTimeout(timeout)
-          this.off('message', handler)
+          this.off('message', handler as (...args: unknown[]) => void)
           this.off('error', errorHandler)
           resolve({ mediaId: p.mediaId, url: p.url, filename: p.filename, mimeType: p.mimeType, size: p.size })
         }
@@ -1267,12 +1267,12 @@ export class HarmonyClient {
           payload.code === 'NOT_MEMBER'
         ) {
           clearTimeout(timeout)
-          this.off('message', handler)
+          this.off('message', handler as (...args: unknown[]) => void)
           this.off('error', errorHandler)
           reject(new Error(payload.message))
         }
       }
-      this.on('message', handler)
+      this.on('message', handler as (...args: unknown[]) => void)
       this.on('error', errorHandler)
 
       this.send(
@@ -1408,10 +1408,10 @@ export class HarmonyClient {
         this.emitter.emit('typing', msg.payload)
         break
       case 'channel.reaction.added':
-        this.emitter.emit('reaction.added', { ...msg.payload, memberDID: msg.sender })
+        this.emitter.emit('reaction.added', { ...(msg.payload as Record<string, unknown>), memberDID: msg.sender })
         break
       case 'channel.reaction.removed':
-        this.emitter.emit('reaction.removed', { ...msg.payload, memberDID: msg.sender })
+        this.emitter.emit('reaction.removed', { ...(msg.payload as Record<string, unknown>), memberDID: msg.sender })
         break
       case 'dm.message':
         this.handleDMMessage(msg)

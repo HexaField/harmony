@@ -1,4 +1,4 @@
-import { createSignal, Show, Switch, Match, onCleanup, useContext, type Component } from 'solid-js'
+import { createSignal, Show, Switch, Match, onCleanup, type Component } from 'solid-js'
 import { useAppStore } from '../../store.tsx'
 import {
   startExport,
@@ -128,13 +128,13 @@ export const MigrationWizard: Component<MigrationWizardProps> = (props) => {
   const [error, setError] = createSignal('')
 
   // Export state
-  const [exportId, setExportId] = createSignal('')
+  const [, setExportId] = createSignal('')
   const [progress, setProgress] = createSignal<ExportProgress | null>(null)
   const [exportResult, setExportResult] = createSignal<ExportStatus | null>(null)
   const [exporting, setExporting] = createSignal(false)
 
   // Import state
-  const [importing, setImporting] = createSignal(false)
+  const [, setImporting] = createSignal(false)
   const [summary, setSummary] = createSignal<MigrationSummary | null>(null)
 
   let pollTimer: ReturnType<typeof setInterval> | undefined

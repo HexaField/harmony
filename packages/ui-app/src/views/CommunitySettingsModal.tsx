@@ -1,4 +1,4 @@
-import { createSignal, Show, type Component } from 'solid-js'
+import { createSignal, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 
 export const CommunitySettingsModal: Component = () => {

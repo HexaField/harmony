@@ -72,6 +72,7 @@ describe('Full E2E: Fresh Start → Community → Messages → Restart', () => {
     client = await HarmonyClient.create({
       identity: result.identity,
       keyPair: result.keyPair,
+      // @ts-expect-error crypto may not be in type but is used at runtime
       crypto
     })
 

@@ -4,8 +4,6 @@ import { t } from '../i18n/strings.js'
 import { createCryptoProvider } from '@harmony/crypto'
 import { IdentityManager } from '@harmony/identity'
 import { openExternal } from '../utils/open-external.js'
-import { MigrationWizard } from './MigrationWizard.tsx'
-import { FriendFinderView } from './FriendFinderView.tsx'
 // HarmonyClient is now managed by the store
 
 type OnboardingStep = 'welcome' | 'mnemonic-display' | 'mnemonic-confirm' | 'recover' | 'setup'
@@ -60,9 +58,6 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
   const [setupName, setSetupName] = createSignal('')
   const [discordLinked, setDiscordLinked] = createSignal(false)
   const [discordUsername, setDiscordUsername] = createSignal('')
-  const [showJoinInput, setShowJoinInput] = createSignal(false)
-  const [inviteLink, setInviteLink] = createSignal('')
-  const [showMigration, setShowMigration] = createSignal(false)
 
   // Confirmation quiz state
   const [quizIndices, setQuizIndices] = createSignal<number[]>([])

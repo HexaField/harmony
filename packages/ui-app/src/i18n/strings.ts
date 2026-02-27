@@ -519,7 +519,8 @@ export const en = {
   RECOVERY_THRESHOLD_MET: 'Threshold met! Complete recovery.',
   RECOVERY_COMPLETE: 'Complete Recovery',
   RECOVERY_SUCCESS: 'Identity recovered successfully!',
-  RECOVERY_SETUP_SUCCESS: 'Social recovery configured successfully.'
+  RECOVERY_SETUP_SUCCESS: 'Social recovery configured successfully.',
+  LOADING_COMMUNITIES: 'Loading communities…'
 } as const
 
 export type StringKey = keyof typeof en

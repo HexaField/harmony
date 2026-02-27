@@ -1230,6 +1230,9 @@ importers:
       '@harmony/migration':
         specifier: workspace:*
         version: link:../migration
+      '@harmony/mobile':
+        specifier: workspace:*
+        version: link:../mobile
       '@harmony/protocol':
         specifier: workspace:*
         version: link:../protocol

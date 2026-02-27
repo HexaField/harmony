@@ -57,6 +57,7 @@ export const HarmonyPredicate = {
   joinedAt: `${HARMONY}joinedAt`,
   permission: `${HARMONY}permission`,
   name: `${HARMONY}name`,
+  description: `${HARMONY}description`,
   emoji: `${HARMONY}emoji`,
   reactor: `${HARMONY}reactor`,
   onMessage: `${HARMONY}onMessage`,

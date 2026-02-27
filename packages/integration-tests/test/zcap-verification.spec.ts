@@ -175,11 +175,15 @@ describe('ZCAP Verification', () => {
       capabilityId: 'urn:uuid:fake',
       capabilityChain: ['urn:uuid:fake'],
       invocation: {
-        capability: 'urn:uuid:fake',
-        invoker: admin.identity.did,
         action: HarmonyAction.SendMessage,
         target: channelId,
-        proof: { type: 'Ed25519Signature2020', verificationMethod: '', created: '', proofValue: '' }
+        proof: {
+          type: 'Ed25519Signature2020',
+          verificationMethod: '',
+          created: '',
+          proofValue: '',
+          proofPurpose: 'capabilityInvocation'
+        }
       }
     }
     rawSend(client1, msg)

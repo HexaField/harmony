@@ -142,6 +142,22 @@ export type MessageType =
   | 'federation.relay'
   | 'federation.sync'
   | 'federation.presence'
+  // DM key exchange
+  | 'dm.keyexchange'
+  // MLS membership
+  | 'mls.member.joined'
+  // Voice transport
+  | 'voice.transport.connected'
+  | 'voice.produced'
+  | 'voice.consumed'
+  | 'voice.new-producer'
+  // Voice client→server
+  | 'voice.transport.connect'
+  | 'voice.produce'
+  | 'voice.consume'
+  | 'voice.consumer.resume'
+  // Server→client membership
+  | 'member.kicked'
 
 export const CLIENT_TO_SERVER_TYPES: MessageType[] = [
   'channel.send',

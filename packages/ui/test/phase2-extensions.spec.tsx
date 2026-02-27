@@ -22,7 +22,7 @@ import { AppSettings } from '../src/components/Settings/AppSettings.js'
 import { KeyManagement } from '../src/components/Settings/KeyManagement.js'
 import { Modal } from '../src/components/Shared/Modal.js'
 import { ContextMenu } from '../src/components/Shared/ContextMenu.js'
-import { Toast, addToast, removeToast } from '../src/components/Shared/Toast.js'
+import { Toast, addToast } from '../src/components/Shared/Toast.js'
 import { Tooltip } from '../src/components/Shared/Tooltip.js'
 import { VirtualScroller } from '../src/components/Shared/VirtualScroller.js'
 

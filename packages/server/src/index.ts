@@ -78,7 +78,7 @@ export interface MemberInfo {
 // ── Message Store ──
 
 export class MessageStore {
-  private store: QuadStore
+  readonly store: QuadStore
 
   constructor(store: QuadStore) {
     this.store = store
@@ -716,6 +716,9 @@ export class HarmonyServer {
 
   get messageStoreInstance(): MessageStore {
     return this.messageStore
+  }
+  private get store(): QuadStore {
+    return this.messageStore.store
   }
   get communityManagerInstance(): CommunityManager {
     return this.communityManager
@@ -1663,7 +1666,7 @@ export class HarmonyServer {
           graph: communityId
         })
         if (existingNames.length) {
-          await this.config.store.removeAll(existingNames)
+          for (const q of existingNames) await this.config.store.remove(q)
         }
         // Add new name quad
         await this.config.store.addAll([
@@ -1705,7 +1708,7 @@ export class HarmonyServer {
     }
   }
 
-  private async handleCommunityList(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+  private async handleCommunityList(conn: ServerConnection, _msg: ProtocolMessage): Promise<void> {
     const infos = await this.communityManager.listAll()
     const communities = await Promise.all(
       infos.map(async (info) => {
@@ -1900,7 +1903,8 @@ export class HarmonyServer {
         authentication: [`${did}#${multibaseKey}`],
         assertionMethod: [`${did}#${multibaseKey}`],
         capabilityDelegation: [`${did}#${multibaseKey}`],
-        capabilityInvocation: [`${did}#${multibaseKey}`]
+        capabilityInvocation: [`${did}#${multibaseKey}`],
+        keyAgreement: []
       } as DIDDocument
     }
 
@@ -3181,7 +3185,7 @@ export class HarmonyServer {
     const messages = await this.messageStore.getHistory({
       communityId: payload.communityId,
       channelId: payload.channelId,
-      before: payload.before,
+      before: payload.before as LamportClock | undefined,
       limit: payload.limit ?? 50
     })
 

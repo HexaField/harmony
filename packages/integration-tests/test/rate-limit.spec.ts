@@ -95,7 +95,7 @@ describe('Rate Limiting (10.6)', () => {
 
     const alice = await createClient()
     const community = await alice.createCommunity({ name: 'Rate Limit Test' })
-    const channelId = community.defaultChannelId || community.channels?.[0]?.id
+    const channelId = (community as any).defaultChannelId || community.channels?.[0]?.id
 
     // Collect error events
     const errors: any[] = []
@@ -149,7 +149,7 @@ describe('Rate Limiting (10.6)', () => {
 
     const alice = await createClient()
     const community = await alice.createCommunity({ name: 'Rate Reset Test' })
-    const channelId = community.defaultChannelId || community.channels?.[0]?.id
+    const channelId = (community as any).defaultChannelId || community.channels?.[0]?.id
     if (!channelId) return
 
     // Send 3 messages (at limit)

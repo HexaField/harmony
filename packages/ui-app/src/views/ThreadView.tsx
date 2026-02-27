@@ -29,12 +29,12 @@ export const ThreadView: Component = () => {
 
   async function sendMessage() {
     const text = newMessage().trim()
-    const t = thread()
+    const th = thread()
     const client = store.client()
-    if (!text || !t || !client) return
+    if (!text || !th || !client) return
 
     try {
-      await client.sendThreadMessage(t.threadId, text)
+      await client.sendThreadMessage(th.threadId, text)
       setNewMessage('')
       setTimeout(scrollToBottom, 100)
     } catch (err) {

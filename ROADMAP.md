@@ -79,7 +79,6 @@ _Single source of truth. Merged from FEATURES.md, TODO.md, and beta-release-todo
 | VC portfolio UI | ➖ | ➖ | 📋 | `CredentialPortfolio.tsx`, `CredentialDetail.tsx` exist — not wired |
 | Issue credential UI | ➖ | ➖ | 📋 | `IssueCredential.tsx` exists — not wired |
 | Credential type editor UI | ➖ | ➖ | 📋 | `CredentialTypeEditor.tsx` exists — not wired |
-| Reputation engine | 📋 | ➖ | 📋 | `ReputationEngine` class (178 LOC), `ReputationCard.tsx` — not wired |
 | Cross-community trust | 📋 | ➖ | ➖ | `CrossCommunityService` class (32 LOC) — stub |
 | VC-based admission policies | ❌ | ❌ | ❌ | Gate `community.join` on required VCs |
 | E2EE key binding in VCs | ❌ | ❌ | ❌ | Embed X25519 public key in membership VC |
@@ -566,7 +565,7 @@ Everything below is done and committed.
 - **E2EE re-keying on member revocation** — MLS epoch rotation when member leaves/banned
 - **E2EE key binding in VCs** — Embed X25519 public key in membership VC
 - **User-to-user delegation** — Members delegate capabilities without admin
-- **Credential UI wiring** — Wire portfolio/detail/issue/editor/reputation components to live data
+- **Credential UI wiring** — Wire portfolio/detail/issue/editor components to live data
 - **Custom credential types** — Admin-defined VC types per community
 
 ### Priority 3 — Post-stabilization
@@ -579,7 +578,6 @@ Everything below is done and committed.
 - **DID method expansion** — `did:web`, `did:plc`, plugin architecture
 - **Community export/import** — `.hbundle` format, CLI commands, desktop UI
 - **Revenue** — Custom domains, SSO, enterprise features, admin dashboard
-- **Reputation engine** — Cross-community trust networks, aggregated scores
 
 ---
 

@@ -551,6 +551,15 @@ Everything below is done and committed.
 - **Rich embeds** — Render link previews inline in messages
 - **Contact list persistence** — Friends list storage
 
+### Voice Production Hardening
+
+- **WASM encryption** — Rust-WASM for AES-GCM frame encryption (performance over JS)
+- **TURN/STUN** — CF global TURN for restrictive NATs
+- **DO location hints** — `locationHint` set to majority-participant region
+- **Voice analytics** — Workers Analytics Engine for "Time to First Frame"
+- **Simulcast** — VP8 simulcast layers (high/medium/low), SFU selects per subscriber
+- **Mesh fallback** — If CF SFU unavailable, degrade to P2P mesh (post-launch)
+
 ### Priority 2 — Important but not urgent
 
 - **Time/rate-limited capabilities** — Enforce expiry and rate caveats on ZCAPs

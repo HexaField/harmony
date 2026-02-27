@@ -4,10 +4,17 @@ export type {
   RoomOptions,
   JoinOptions,
   VoiceConnection,
-  LiveKitAdapter
+  LiveKitAdapter,
+  SFUAdapter
 } from './room-manager.js'
 export { VoiceRoomManager } from './room-manager.js'
 export { VoiceClient, BrowserMediaProvider } from './voice-client.js'
 export type { MediaDeviceProvider } from './voice-client.js'
-export { InMemoryLiveKitAdapter } from './livekit-adapter.js'
+export { InMemoryAdapter } from './adapters/in-memory.js'
 export { E2EEBridge } from './e2ee-bridge.js'
+
+// Backward compat alias
+export { InMemoryAdapter as InMemoryLiveKitAdapter } from './adapters/in-memory.js'
+
+// Re-export adapter types
+export type { SFUAdapter as SFUAdapterInterface } from './adapters/types.js'

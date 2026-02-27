@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { VoiceRoomManager } from '../src/room-manager.js'
 import { VoiceClient } from '../src/voice-client.js'
-import { InMemoryLiveKitAdapter } from '../src/livekit-adapter.js'
+import { InMemoryAdapter } from '../src/adapters/in-memory.js'
 import { E2EEBridge } from '../src/e2ee-bridge.js'
 import { MemoryQuadStore } from '@harmony/quads'
 import { createCryptoProvider, randomBytes } from '@harmony/crypto'
@@ -33,12 +33,12 @@ function makeZCAPProof(action = 'JoinVoice'): ZCAPInvocationProof {
 
 describe('@harmony/voice', () => {
   let store: MemoryQuadStore
-  let adapter: InMemoryLiveKitAdapter
+  let adapter: InMemoryAdapter
   let manager: VoiceRoomManager
 
   beforeEach(() => {
     store = new MemoryQuadStore()
-    adapter = new InMemoryLiveKitAdapter()
+    adapter = new InMemoryAdapter()
     manager = new VoiceRoomManager(adapter, store, zcap, { autoDestroyTimeout: 100 })
   })
 

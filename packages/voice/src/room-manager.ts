@@ -3,6 +3,12 @@ import type { QuadStore, Quad } from '@harmony/quads'
 import { HarmonyType, HarmonyPredicate, RDFPredicate, XSDDatatype } from '@harmony/vocab'
 import type { ZCAPInvocationProof } from '@harmony/protocol'
 import type { ZCAPService } from '@harmony/zcap'
+import type { SFUAdapter } from './adapters/types.js'
+
+export type { SFUAdapter }
+
+/** @deprecated Use SFUAdapter instead */
+export type LiveKitAdapter = SFUAdapter
 
 export interface VoiceRoom {
   id: string
@@ -51,15 +57,6 @@ export interface VoiceConnection {
   disconnect(): Promise<void>
 }
 
-export interface LiveKitAdapter {
-  createRoom(roomId: string, opts: RoomOptions): Promise<void>
-  deleteRoom(roomId: string): Promise<void>
-  generateToken(roomId: string, participantId: string, metadata: Record<string, string>): Promise<string>
-  listParticipants(roomId: string): Promise<string[]>
-  removeParticipant(roomId: string, participantId: string): Promise<void>
-  muteParticipant(roomId: string, participantId: string, trackKind: 'audio' | 'video'): Promise<void>
-}
-
 function generateId(): string {
   const bytes = randomBytes(16)
   return 'room-' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
@@ -67,12 +64,12 @@ function generateId(): string {
 
 export class VoiceRoomManager {
   private rooms = new Map<string, VoiceRoom>()
-  private adapter: LiveKitAdapter
+  private adapter: SFUAdapter
   private store: QuadStore
   private emptyRoomTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private autoDestroyTimeout: number
 
-  constructor(adapter: LiveKitAdapter, store: QuadStore, _zcap: ZCAPService, opts?: { autoDestroyTimeout?: number }) {
+  constructor(adapter: SFUAdapter, store: QuadStore, _zcap: ZCAPService, opts?: { autoDestroyTimeout?: number }) {
     this.adapter = adapter
     this.store = store
     this.autoDestroyTimeout = opts?.autoDestroyTimeout ?? 30000

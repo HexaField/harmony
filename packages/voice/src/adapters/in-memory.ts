@@ -1,11 +1,11 @@
-import type { LiveKitAdapter, RoomOptions } from './room-manager.js'
+import type { SFUAdapter, RoomOptions } from './types.js'
 import { randomBytes } from '@harmony/crypto'
 
 /**
- * In-memory test implementation of LiveKitAdapter.
- * Used for testing without a real LiveKit server.
+ * In-memory test implementation of SFUAdapter.
+ * Used for testing without a real SFU server.
  */
-export class InMemoryLiveKitAdapter implements LiveKitAdapter {
+export class InMemoryAdapter implements SFUAdapter {
   private rooms = new Map<string, { opts: RoomOptions; participants: Set<string>; muted: Map<string, Set<string>> }>()
 
   async createRoom(roomId: string, opts: RoomOptions): Promise<void> {
@@ -18,7 +18,6 @@ export class InMemoryLiveKitAdapter implements LiveKitAdapter {
 
   async generateToken(roomId: string, participantId: string, metadata: Record<string, string>): Promise<string> {
     if (!this.rooms.has(roomId)) throw new Error('Room not found')
-    // Generate a fake JWT-like token
     const token = Buffer.from(
       JSON.stringify({
         room: roomId,

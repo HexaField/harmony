@@ -1,26 +1,27 @@
 # Harmony — Roadmap & Feature Status
 
-_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-02-28 17:50 AEDT._
+_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-01 10:30 AEDT._
 
 ---
 
 ## Codebase Snapshot
 
-| Metric             | Value                                 |
-| ------------------ | ------------------------------------- |
-| Packages           | 36                                    |
-| Estimated LOC      | ~32,000+                              |
-| Vitest passing     | 2,433                                 |
-| Vitest skipped     | 10                                    |
-| Vitest todo        | 114                                   |
-| Playwright passing | 13 (Discord integration)              |
-| Test matrix        | 128 ✅ / 0 ❌ / 3 ⚠️ / 16 ⊘           |
-| TypeScript errors  | 0                                     |
-| Oxlint warnings    | 7 (SolidJS `let ref` false positives) |
-| Vulnerabilities    | 0                                     |
-| UI bundle size     | 349 KB                                |
-| Docker image       | 739 MB                                |
-| Android APK        | 3.7 MB (unsigned)                     |
+| Metric             | Value                                    |
+| ------------------ | ---------------------------------------- |
+| Packages           | 36                                       |
+| Estimated LOC      | ~32,000+                                 |
+| Vitest passing     | 2,534                                    |
+| Vitest skipped     | 10                                       |
+| Vitest todo        | 114                                      |
+| Playwright passing | 79 (31 cross-topology + 48 discord-mock) |
+| Playwright skipped | 7 (voice — needs test voice server)      |
+| Test matrix        | 128 ✅ / 0 ❌ / 3 ⚠️ / 16 ⊘              |
+| TypeScript errors  | 0                                        |
+| Oxlint warnings    | 7 (SolidJS `let ref` false positives)    |
+| Vulnerabilities    | 0                                        |
+| UI bundle size     | 349 KB                                   |
+| Docker image       | 739 MB                                   |
+| Android APK        | 3.7 MB (unsigned)                        |
 
 ---
 
@@ -298,9 +299,12 @@ _Single source of truth for all features, voice/video detail, and release planni
 | MLS group creation + key package exchange   | ✅  | ✅     | ✅  |
 | MLS welcome/commit messages                 | ✅  | ✅     | ✅  |
 | MLS auto member addition                    | ✅  | ✅     | ✅  |
-| Always-on MLS (no toggle)                   | ✅  | ✅     | ✅  |
+| MLS key exchange between members            | ❌  | ❌     | ❌  |
+| Always-on MLS (no toggle)                   | 🔧  | 🔧     | 🔧  |
 | DM encryption (XChaCha20-Poly1305 + X25519) | ✅  | ✅     | ✅  |
 | E2EE re-keying on member revocation         | ❌  | ❌     | ❌  |
+
+> **Note:** MLS group encryption is currently **disabled** for channel messages. Each client creates an independent MLS group, but key exchange between members is not yet implemented — meaning MLS decrypt always fails for remote clients. Channel messages use plaintext passthrough (epoch 0) until proper MLS key synchronisation is built. DM encryption (X25519 + XChaCha20-Poly1305) works correctly.
 
 ### Media & Files
 
@@ -613,6 +617,24 @@ Everything below is done and committed.
 - Channel lifecycle events in store: `channel.created`, `channel.updated`, `channel.deleted` listeners added
 - **51-test cross-device E2E suite** (`harmony-flows.cjs`): messaging, edit/delete, reactions, channel CRUD, voice, DMs, typing, threads, pins, roles, presence — all green on Mac+Linux
 
+### 2026-02-28 → 2026-03-01
+
+- 101 new unit tests: DM routing, message edits, voice lifecycle, channel events, adapter contracts
+- Message edit/delete self-echo prevention: server-side `conn.id` exclude + client-side sender guard
+- DM architecture documented: `docs/dm-architecture.md` (relay-based E2EE, 4-phase sovereignty roadmap)
+- Cross-topology Playwright E2E suite: 31 passing across 4 topologies (single client, two clients, self-hosted, mixed)
+- MLS encryption diagnosed and disabled: independent MLS groups per client can't decrypt each other — plaintext passthrough until key exchange implemented
+- Store `community.updated` listener: picks up new communities from `createCommunity`
+- Local `message` emit in `sendMessage`: server excludes sender from broadcast, local emit needed for optimistic updates
+- `HarmonyClient.toBytes()` static helper: handles `Uint8Array`, `Array`, and `Record<string, number>` ciphertext forms
+- `handleSyncResponse` updated to use `toBytes()` for consistent array-format ciphertext handling
+- Fixed `encryptForChannel` serialisation: `Array.from(plaintext)` instead of raw `Uint8Array` (JSON round-trip produces object, not array)
+- Edit/delete events now include `channelId` (headless Playwright has no `activeChannelId()`)
+- Port conflict fix: test servers use even base ports with +10 spacing (health endpoint uses port+1)
+- Discord mock E2E suite: 48 Playwright tests covering Bot REST API, OAuth flow, DiscordLinkService, MigrationBot export, Portal identity & friends — all with mock HTTP server using real Discord API v10 data shapes
+- Vitest count: 2,534 passing (was 2,433). Playwright count: 79 passing + 7 skipped (was 13)
+- All commits pushed to origin/main
+
 ---
 
 ## Road to Beta
@@ -627,11 +649,13 @@ Everything below is done and committed.
 | 4 | Fill wrangler placeholder IDs | ⬜ | Josh | Replace `REPLACE_WITH_*` in wrangler.toml files |
 | 5 | Register domain | ⬜ | Josh | `harmony.chat` or similar → Cloudflare |
 | 6 | Stripe API keys | ⬜ | Josh | Test + live keys |
-| 7 | Billing integration | ⬜ | Agent | Wire Stripe into cloud worker per billing plan |
+| 7 | Billing integration | ⬜ | Agent | Wire Stripe into cloud worker per billing plan — needs Stripe keys first |
 | 8 | Voice E2E test | ✅ | Agent | Mac ↔ Linux, 22/23 E2E tests passing (mediasoup SFU) |
-| 9 | Electron build pipeline | ⬜ | Josh + Agent | macOS notarization, Windows signing, auto-update |
-| 10 | Capacitor build pipeline | ⬜ | Josh + Agent | APK signing, iOS provisioning |
-| 11 | Secrets management | ⬜ | Josh | `wrangler secret put` for OAuth, Stripe, etc. |
+| 9 | Cross-topology E2E | ✅ | Agent | 31 Playwright tests across 4 topologies (single, two-client, self-hosted, mixed) |
+| 10 | Discord mock E2E | ✅ | Agent | 48 Playwright tests: Bot API, OAuth, migration export, identity linking |
+| 11 | Electron build pipeline | ⬜ | Josh + Agent | macOS notarization, Windows signing, auto-update |
+| 12 | Capacitor build pipeline | ⬜ | Josh + Agent | APK signing, iOS provisioning |
+| 13 | Secrets management | ⬜ | Josh | `wrangler secret put` for OAuth, Stripe, etc. |
 
 ### Phase 1: Dev Environment
 
@@ -650,7 +674,7 @@ Everything below is done and committed.
 | --- | --- | --- | --- |
 | 1 | Full onboarding flow | ⬜ | Real browser |
 | 2 | Voice with real media | ✅ | Two Electron clients (Mac+Linux), mute/unmute/leave verified |
-| 3 | Multi-user real-time | ✅ | 51 E2E tests: messages, edit/delete, reactions, channels, DMs, voice, threads, pins, roles, presence |
+| 3 | Multi-user real-time | ✅ | 51 CDP E2E tests + 31 Playwright cross-topology tests |
 | 4 | Mobile | ⬜ | Capacitor APK on real Android device |
 | 5 | Self-hosted Docker | ⬜ | `docker compose up` → Electron → create community → restart → verify persistence |
 | 6 | Migration flow | ⬜ | Real Discord server → import → verify |
@@ -809,3 +833,7 @@ Cloud: Portal Worker + Cloud Worker on Cloudflare. Clients connect via WSS. Self
 | Deploy workflow       | `~/Desktop/harmony/.github/workflows/deploy.yml`                            |
 | Release workflow      | `~/Desktop/harmony/.github/workflows/release.yml`                           |
 | Voice E2E tests       | `~/Desktop/harmony/harmony-e2e-voice.cjs`                                   |
+| Cross-device E2E      | `~/Desktop/harmony/harmony-flows.cjs`                                       |
+| Cross-topology tests  | `~/Desktop/harmony/tests/cross-topology.spec.ts`                            |
+| Discord mock tests    | `~/Desktop/harmony/tests/discord-mock-e2e.spec.ts`                          |
+| DM architecture       | `~/Desktop/harmony/docs/dm-architecture.md`                                 |

@@ -1184,6 +1184,9 @@ export class HarmonyServer {
       case 'voice.get-producers':
         await this.handleVoiceGetProducers(conn, msg)
         break
+      case 'voice.producer-closed':
+        await this.handleVoiceProducerClosed(conn, msg)
+        break
       case 'thread.create':
         await this.handleThreadCreate(conn, msg)
         break
@@ -2797,8 +2800,10 @@ export class HarmonyServer {
       roomId?: string
       kind: 'audio' | 'video'
       rtpParameters: unknown
+      mediaType?: string
     }
     const roomId = payload.roomId ?? payload.channelId
+    const mediaType = payload.mediaType ?? payload.kind
     if (!this.sfuAdapter || !('produce' in this.sfuAdapter)) {
       this.sendToConnection(conn, {
         id: `err-${Date.now()}`,
@@ -2832,7 +2837,7 @@ export class HarmonyServer {
               type: 'voice.new-producer' as ProtocolMessage['type'],
               timestamp: new Date().toISOString(),
               sender: conn.did,
-              payload: { roomId, producerId, kind: payload.kind, participantId: conn.did }
+              payload: { roomId, producerId, kind: payload.kind, mediaType, participantId: conn.did }
             })
           }
         }
@@ -2993,6 +2998,39 @@ export class HarmonyServer {
         sender: 'server',
         payload: { producers: [] }
       })
+    }
+  }
+
+  private async handleVoiceProducerClosed(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { producerId: string; roomId?: string; mediaType?: string }
+    const channelId = this.findVoiceChannelForConn(conn.id)
+    if (!channelId) return
+
+    // Remove from SFU adapter's producer list if it tracks them
+    if (this.sfuAdapter && typeof (this.sfuAdapter as any).removeProducer === 'function') {
+      ;(this.sfuAdapter as any).removeProducer(payload.roomId ?? channelId, payload.producerId)
+    }
+
+    // Broadcast to all other participants so they close their consumers
+    const participants = this.voiceChannelParticipants.get(channelId)
+    if (participants) {
+      for (const connId of participants) {
+        if (connId === conn.id) continue
+        const otherConn = this._connections.get(connId)
+        if (otherConn) {
+          this.sendToConnection(otherConn, {
+            id: `vpc-${Date.now()}`,
+            type: 'voice.producer-closed' as ProtocolMessage['type'],
+            timestamp: new Date().toISOString(),
+            sender: conn.did,
+            payload: {
+              producerId: payload.producerId,
+              participantId: conn.did,
+              mediaType: payload.mediaType
+            }
+          })
+        }
+      }
     }
   }
 

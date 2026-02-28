@@ -1283,19 +1283,70 @@ export function createAppStore(): AppStore {
     })
 
     client.on('voice.state', (...args: unknown[]) => {
-      const event = args[0] as { channelId?: string; participants?: string[] }
+      const event = args[0] as {
+        channelId?: string
+        participants?:
+          | string[]
+          | Array<{ did: string; muted: boolean; deafened: boolean; videoEnabled: boolean; screenSharing: boolean }>
+      }
       if (event?.channelId) {
-        // Always update per-channel map for sidebar display
-        const participants = event.participants ?? []
-        if (participants.length > 0) {
-          voiceParticipantsMap.set(event.channelId, participants)
+        // participantDetails is the full array, participants may be string[] or detail[]
+        const rawParticipants = event.participants ?? []
+        const dids: string[] = rawParticipants.map((p: any) => (typeof p === 'string' ? p : p.did))
+        if (dids.length > 0) {
+          voiceParticipantsMap.set(event.channelId, dids)
         } else {
           voiceParticipantsMap.delete(event.channelId)
         }
         setVoiceParticipantsVersion((v) => v + 1)
         // Update current voice users if this is our active voice channel
         if (event.channelId === voiceChannelId()) {
-          setVoiceUsers(participants)
+          setVoiceUsers(dids)
+        }
+      }
+    })
+
+    client.on('voice.speaking', (...args: unknown[]) => {
+      const event = args[0] as { did?: string; speaking?: boolean }
+      if (event?.did != null && event?.speaking != null) {
+        _setSpeakingUsers((prev) => {
+          const next = new Set(prev)
+          if (event.speaking) {
+            next.add(event.did!)
+          } else {
+            next.delete(event.did!)
+          }
+          return next
+        })
+      }
+    })
+
+    client.on('voice.participant.joined', (...args: unknown[]) => {
+      const event = args[0] as { channelId?: string; did?: string; participants?: string[] }
+      if (event?.channelId) {
+        const dids = event.participants ?? []
+        if (dids.length > 0) {
+          voiceParticipantsMap.set(event.channelId, dids)
+        }
+        setVoiceParticipantsVersion((v) => v + 1)
+        if (event.channelId === voiceChannelId()) {
+          setVoiceUsers(dids)
+        }
+      }
+    })
+
+    client.on('voice.participant.left', (...args: unknown[]) => {
+      const event = args[0] as { channelId?: string; did?: string; participants?: string[] }
+      if (event?.channelId) {
+        const dids = event.participants ?? []
+        if (dids.length > 0) {
+          voiceParticipantsMap.set(event.channelId, dids)
+        } else {
+          voiceParticipantsMap.delete(event.channelId)
+        }
+        setVoiceParticipantsVersion((v) => v + 1)
+        if (event.channelId === voiceChannelId()) {
+          setVoiceUsers(dids)
         }
       }
     })

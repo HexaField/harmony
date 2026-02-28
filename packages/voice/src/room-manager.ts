@@ -62,6 +62,7 @@ export interface VoiceConnection {
   onParticipantLeft(cb: (did: string) => void): void
   onSpeakingChanged(cb: (did: string, speaking: boolean) => void): void
   onTrack(cb: (did: string, track: MediaStreamTrack, kind: 'audio' | 'video' | 'screen') => void): void
+  onTrackRemoved(cb: (did: string, kind: 'audio' | 'video' | 'screen') => void): void
   debugState(): Record<string, unknown>
   disconnect(): Promise<void>
 }

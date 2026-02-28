@@ -392,10 +392,10 @@ describe('@harmony/voice', () => {
       ;(conn as any).simulateParticipantJoined(self)
 
       await conn.startScreenShare()
-      expect(conn.participants.find((p) => p.did === 'did:key:alice')!.screenSharing).toBe(true)
+      expect(conn.localScreenSharing).toBe(true)
 
       await conn.stopScreenShare()
-      expect(conn.participants.find((p) => p.did === 'did:key:alice')!.screenSharing).toBe(false)
+      expect(conn.localScreenSharing).toBe(false)
     })
 
     it('MUST enable/disable video via injectable media provider', async () => {

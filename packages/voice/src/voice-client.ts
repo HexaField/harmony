@@ -5,6 +5,7 @@ type ParticipantJoinedCb = (p: VoiceParticipant) => void
 type ParticipantLeftCb = (did: string) => void
 type SpeakingChangedCb = (did: string, speaking: boolean) => void
 type MediaStreamTrackCb = (did: string, track: MediaStreamTrack, kind: 'audio' | 'video' | 'screen') => void
+type TrackRemovedCb = (did: string, kind: 'audio' | 'video' | 'screen') => void
 
 /** Injectable media device provider for testability */
 export interface MediaDeviceProvider {
@@ -174,6 +175,7 @@ class VoiceConnectionImpl implements VoiceConnection {
   private leftCbs: ParticipantLeftCb[] = []
   private speakingCbs: SpeakingChangedCb[] = []
   private trackCbs: MediaStreamTrackCb[] = []
+  private trackRemovedCbs: TrackRemovedCb[] = []
   private disconnected = false
   private mediaProvider: MediaDeviceProvider
   private e2eeBridge?: E2EEBridge
@@ -189,6 +191,8 @@ class VoiceConnectionImpl implements VoiceConnection {
   private videoProducer: any | null = null
   private screenProducer: any | null = null
   private consumers = new Map<string, any>()
+  /** Map producerId → { participantId, kind } for cleanup on producer-closed */
+  private producerOwners = new Map<string, { participantId: string; kind: 'audio' | 'video' | 'screen' }>()
 
   // Local media streams
   private audioStream: MediaStream | null = null
@@ -199,6 +203,7 @@ class VoiceConnectionImpl implements VoiceConnection {
   private audioContext: AudioContext | null = null
   private analyser: AnalyserNode | null = null
   private speakingInterval: ReturnType<typeof setInterval> | null = null
+  private lastSpeakingState = false
 
   constructor(
     roomId: string,
@@ -271,12 +276,17 @@ class VoiceConnectionImpl implements VoiceConnection {
 
       this.sendTransport.on(
         'produce',
-        async ({ kind, rtpParameters }: any, callback: (r: { id: string }) => void, errback: (e: Error) => void) => {
+        async (
+          { kind, rtpParameters, appData }: any,
+          callback: (r: { id: string }) => void,
+          errback: (e: Error) => void
+        ) => {
           try {
             const response = await this.signaling!.sendVoiceSignal('voice.produce', {
               roomId: this.roomId,
               kind,
-              rtpParameters
+              rtpParameters,
+              mediaType: appData?.type ?? kind // 'audio' | 'video' | 'screen'
             })
             callback({ id: response.producerId as string })
           } catch (err) {
@@ -322,11 +332,34 @@ class VoiceConnectionImpl implements VoiceConnection {
 
       // Listen for new producers from other participants
       this.signaling.onVoiceSignal('voice.new-producer', async (payload) => {
-        await this.consumeProducer(
-          payload.producerId as string,
-          payload.participantId as string,
-          payload.kind as 'audio' | 'video'
-        )
+        const kind = payload.kind as string
+        const mediaKind: 'audio' | 'video' | 'screen' =
+          (payload.mediaType as string) === 'screen' ? 'screen' : (kind as 'audio' | 'video')
+        // Track producer ownership for cleanup
+        this.producerOwners.set(payload.producerId as string, {
+          participantId: payload.participantId as string,
+          kind: mediaKind
+        })
+        await this.consumeProducer(payload.producerId as string, payload.participantId as string, mediaKind)
+      })
+
+      // Listen for producer-closed from server (remote stopped their media)
+      this.signaling.onVoiceSignal('voice.producer-closed', (payload) => {
+        const producerId = payload.producerId as string
+        const owner = this.producerOwners.get(producerId)
+        if (owner) {
+          // Close the matching consumer
+          for (const [consumerId, consumer] of this.consumers) {
+            if (consumer.producerId === producerId) {
+              consumer.close()
+              this.consumers.delete(consumerId)
+              break
+            }
+          }
+          // Notify UI that this track is gone
+          for (const cb of this.trackRemovedCbs) cb(owner.participantId, owner.kind)
+          this.producerOwners.delete(producerId)
+        }
       })
 
       // Request existing producers
@@ -335,7 +368,9 @@ class VoiceConnectionImpl implements VoiceConnection {
       })
       if (Array.isArray(existing.producers)) {
         for (const p of existing.producers) {
-          await this.consumeProducer(p.producerId, p.participantId, p.kind)
+          const mediaKind: 'audio' | 'video' | 'screen' = p.mediaType === 'screen' ? 'screen' : p.kind
+          this.producerOwners.set(p.producerId, { participantId: p.participantId, kind: mediaKind })
+          await this.consumeProducer(p.producerId, p.participantId, mediaKind)
         }
       }
 
@@ -371,6 +406,7 @@ class VoiceConnectionImpl implements VoiceConnection {
   }
 
   private setupSpeakingDetection(stream: MediaStream): void {
+    this.cleanupSpeakingDetection()
     try {
       this.audioContext = new AudioContext()
       const source = this.audioContext.createMediaStreamSource(stream)
@@ -380,16 +416,18 @@ class VoiceConnectionImpl implements VoiceConnection {
       source.connect(this.analyser)
 
       const dataArray = new Uint8Array(this.analyser.frequencyBinCount)
-      let wasSpeaking = false
 
       this.speakingInterval = setInterval(() => {
         if (!this.analyser) return
         this.analyser.getByteFrequencyData(dataArray)
         const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length
         const isSpeaking = average > 15 // threshold
-        if (isSpeaking !== wasSpeaking) {
-          wasSpeaking = isSpeaking
+        if (isSpeaking !== this.lastSpeakingState) {
+          this.lastSpeakingState = isSpeaking
+          // Notify local callbacks
           for (const cb of this.speakingCbs) cb(this.localDID, isSpeaking)
+          // Notify server so other clients see it
+          this.signaling?.fireVoiceSignal?.('voice.speaking', { speaking: isSpeaking })
         }
       }, 100)
     } catch {
@@ -397,10 +435,33 @@ class VoiceConnectionImpl implements VoiceConnection {
     }
   }
 
-  private async consumeProducer(producerId: string, participantId: string, kind: 'audio' | 'video'): Promise<void> {
+  private cleanupSpeakingDetection(): void {
+    if (this.speakingInterval) {
+      clearInterval(this.speakingInterval)
+      this.speakingInterval = null
+    }
+    if (this.audioContext) {
+      this.audioContext.close().catch(() => {})
+      this.audioContext = null
+    }
+    this.analyser = null
+    // If we were speaking, send not-speaking
+    if (this.lastSpeakingState) {
+      this.lastSpeakingState = false
+      for (const cb of this.speakingCbs) cb(this.localDID, false)
+      this.signaling?.fireVoiceSignal?.('voice.speaking', { speaking: false })
+    }
+  }
+
+  private async consumeProducer(
+    producerId: string,
+    participantId: string,
+    kind: 'audio' | 'video' | 'screen'
+  ): Promise<void> {
     if (!this.recvTransport || !this.msDevice) return
 
     try {
+      const consumeKind = kind === 'screen' ? 'video' : kind
       const response = await this.signaling!.sendVoiceSignal('voice.consume', {
         roomId: this.roomId,
         producerId,
@@ -410,7 +471,7 @@ class VoiceConnectionImpl implements VoiceConnection {
       const consumer = await this.recvTransport.consume({
         id: response.consumerId as string,
         producerId: response.producerId as string,
-        kind: response.kind as string,
+        kind: consumeKind,
         rtpParameters: response.rtpParameters as any
       })
 
@@ -423,10 +484,35 @@ class VoiceConnectionImpl implements VoiceConnection {
 
       // Notify UI about the new track
       const track = consumer.track as MediaStreamTrack
-      const mediaKind = kind === 'video' ? 'video' : 'audio'
-      for (const cb of this.trackCbs) cb(participantId, track, mediaKind)
+      for (const cb of this.trackCbs) cb(participantId, track, kind)
     } catch (err) {
       console.error('[Voice] Failed to consume producer:', err)
+    }
+  }
+
+  /**
+   * Close a local producer, stop its tracks, and notify the server.
+   * Server will broadcast `voice.producer-closed` to other clients.
+   */
+  private async closeProducer(
+    producer: any,
+    stream: MediaStream | null,
+    mediaType: 'audio' | 'video' | 'screen'
+  ): Promise<void> {
+    const producerId = producer?.id
+    if (producer && !producer.closed) {
+      producer.close()
+    }
+    if (stream) {
+      for (const track of stream.getTracks()) track.stop()
+    }
+    // Tell the server this producer is gone so it can notify other clients
+    if (producerId && this.signaling) {
+      this.signaling.fireVoiceSignal?.('voice.producer-closed', {
+        producerId,
+        roomId: this.roomId,
+        mediaType
+      })
     }
   }
 
@@ -434,26 +520,17 @@ class VoiceConnectionImpl implements VoiceConnection {
 
   async toggleAudio(): Promise<void> {
     if (this.localAudioEnabled) {
-      // Fully stop audio — close producer and stop tracks
-      if (this.audioProducer) {
-        this.audioProducer.close()
-        this.audioProducer = null
-      }
-      if (this.audioStream) {
-        for (const track of this.audioStream.getTracks()) track.stop()
-        this.audioStream = null
-      }
+      // Fully stop audio — close producer, stop tracks, stop speaking detection
+      this.cleanupSpeakingDetection()
+      await this.closeProducer(this.audioProducer, this.audioStream, 'audio')
+      this.audioProducer = null
+      this.audioStream = null
       this.localAudioEnabled = false
       this.signaling?.fireVoiceSignal?.('voice.mute', {})
     } else {
       // Re-acquire audio and produce
       try {
-        this.audioStream = await this.mediaProvider.getUserMedia({ audio: true })
-        const audioTrack = this.audioStream.getAudioTracks()[0]
-        if (audioTrack && this.sendTransport) {
-          this.audioProducer = await this.sendTransport.produce({ track: audioTrack })
-        }
-        this.localAudioEnabled = true
+        await this.startAudioProducer()
         this.signaling?.fireVoiceSignal?.('voice.unmute', {})
       } catch (err) {
         console.error('[Voice] Failed to re-enable audio:', err)
@@ -498,16 +575,13 @@ class VoiceConnectionImpl implements VoiceConnection {
   }
 
   async disableVideo(): Promise<void> {
-    if (this.videoProducer) {
-      this.videoProducer.close()
-      this.videoProducer = null
-    }
-    if (this.videoStream) {
-      for (const track of this.videoStream.getTracks()) track.stop()
-      this.videoStream = null
-    }
+    await this.closeProducer(this.videoProducer, this.videoStream, 'video')
+    this.videoProducer = null
+    this.videoStream = null
     this.localVideoEnabled = false
     this.signaling?.fireVoiceSignal?.('voice.video', { enabled: false })
+    // Notify local UI the video track is gone
+    for (const cb of this.trackRemovedCbs) cb(this.localDID, 'video')
   }
 
   async startScreenShare(sourceId?: string): Promise<void> {
@@ -549,8 +623,7 @@ class VoiceConnectionImpl implements VoiceConnection {
       }
 
       this.localScreenSharing = true
-      const participant = this.participants.find((p) => p.did === this.localDID)
-      if (participant) participant.screenSharing = true
+      this.signaling?.fireVoiceSignal?.('voice.screen', { sharing: true })
 
       // Notify UI
       if (videoTrack) {
@@ -563,17 +636,13 @@ class VoiceConnectionImpl implements VoiceConnection {
   }
 
   async stopScreenShare(): Promise<void> {
-    if (this.screenProducer) {
-      this.screenProducer.close()
-      this.screenProducer = null
-    }
-    if (this.screenStream) {
-      for (const track of this.screenStream.getTracks()) track.stop()
-      this.screenStream = null
-    }
+    await this.closeProducer(this.screenProducer, this.screenStream, 'screen')
+    this.screenProducer = null
+    this.screenStream = null
     this.localScreenSharing = false
-    const participant = this.participants.find((p) => p.did === this.localDID)
-    if (participant) participant.screenSharing = false
+    this.signaling?.fireVoiceSignal?.('voice.screen', { sharing: false })
+    // Notify local UI the screen track is gone
+    for (const cb of this.trackRemovedCbs) cb(this.localDID, 'screen')
   }
 
   setDeafened(deafened: boolean): void {
@@ -639,6 +708,7 @@ class VoiceConnectionImpl implements VoiceConnection {
         : null,
       deviceLoaded: this.msDevice?.loaded,
       consumers,
+      producerOwners: Array.from(this.producerOwners.entries()),
       participantCount: this.participants.length
     }
   }
@@ -646,6 +716,11 @@ class VoiceConnectionImpl implements VoiceConnection {
   /** Register callback for remote media tracks */
   onTrack(cb: MediaStreamTrackCb): void {
     this.trackCbs.push(cb)
+  }
+
+  /** Register callback for when a remote track is removed (producer closed) */
+  onTrackRemoved(cb: TrackRemovedCb): void {
+    this.trackRemovedCbs.push(cb)
   }
 
   onParticipantJoined(cb: ParticipantJoinedCb): void {
@@ -662,26 +737,30 @@ class VoiceConnectionImpl implements VoiceConnection {
     this.disconnected = true
 
     // Stop speaking detection
-    if (this.speakingInterval) clearInterval(this.speakingInterval)
-    if (this.audioContext) this.audioContext.close().catch(() => {})
+    this.cleanupSpeakingDetection()
 
-    // Close producers
-    this.audioProducer?.close()
-    this.videoProducer?.close()
-    this.screenProducer?.close()
+    // Close producers (notify server each is gone)
+    if (this.audioProducer) await this.closeProducer(this.audioProducer, this.audioStream, 'audio')
+    else if (this.audioStream) {
+      for (const t of this.audioStream.getTracks()) t.stop()
+    }
+    if (this.videoProducer) await this.closeProducer(this.videoProducer, this.videoStream, 'video')
+    else if (this.videoStream) {
+      for (const t of this.videoStream.getTracks()) t.stop()
+    }
+    if (this.screenProducer) await this.closeProducer(this.screenProducer, this.screenStream, 'screen')
+    else if (this.screenStream) {
+      for (const t of this.screenStream.getTracks()) t.stop()
+    }
 
     // Close consumers
     for (const consumer of this.consumers.values()) consumer.close()
     this.consumers.clear()
+    this.producerOwners.clear()
 
     // Close transports
     this.sendTransport?.close()
     this.recvTransport?.close()
-
-    // Stop all local streams
-    if (this.audioStream) for (const t of this.audioStream.getTracks()) t.stop()
-    if (this.videoStream) for (const t of this.videoStream.getTracks()) t.stop()
-    if (this.screenStream) for (const t of this.screenStream.getTracks()) t.stop()
 
     this.audioStream = null
     this.videoStream = null
@@ -701,6 +780,7 @@ class VoiceConnectionImpl implements VoiceConnection {
     this.leftCbs = []
     this.speakingCbs = []
     this.trackCbs = []
+    this.trackRemovedCbs = []
     this.disconnectCb()
   }
 

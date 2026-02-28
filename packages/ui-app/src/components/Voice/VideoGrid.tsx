@@ -23,13 +23,11 @@ function VideoTile(props: { participant: VideoParticipant; isLocal?: boolean; is
     const track = props.isScreen ? props.participant.screenTrack : props.participant.videoTrack
     const stream = props.isScreen ? props.participant.screenStream : props.participant.videoStream
     if (videoRef && track && track.readyState === 'live') {
-      // Use original stream if available (avoids clone issues), otherwise wrap track
       videoRef.srcObject = stream && stream.active ? stream : new MediaStream([track])
       const attemptPlay = () => {
         videoRef?.play().catch(() => {})
       }
       attemptPlay()
-      // If track is muted (TCC delay), retry on unmute
       if (track.muted) {
         const onUnmute = () => {
           attemptPlay()
@@ -37,7 +35,6 @@ function VideoTile(props: { participant: VideoParticipant; isLocal?: boolean; is
         }
         track.addEventListener('unmute', onUnmute)
       }
-      // Also retry after a short delay (some browsers need time)
       setTimeout(attemptPlay, 500)
     } else if (videoRef) {
       videoRef.srcObject = null
@@ -118,24 +115,106 @@ export function VideoGrid(): JSX.Element {
   const store = useAppStore()
   const [participants, setParticipants] = createSignal<VideoParticipant[]>([])
   const [screenSharer, setScreenSharer] = createSignal<VideoParticipant | null>(null)
+  let callbacksRegistered = false
 
-  // Re-run when voice channel, video, or mute state changes
+  const resolveDisplayName = (did: string) => {
+    const member = store.members().find((m) => m.did === did)
+    return member?.displayName || pseudonymFromDid(did)
+  }
+
+  // Setup: register callbacks once when we enter a voice channel
   createEffect(() => {
     const voiceChannelId = store.voiceChannelId()
-    const isVideoEnabled = store.isVideoEnabled()
-    const isMuted = store.isMuted()
     const connection = store.client()?.getVoiceConnection()
 
     if (!connection || !voiceChannelId) {
       setParticipants([])
       setScreenSharer(null)
+      callbacksRegistered = false
       return
     }
+
+    if (!callbacksRegistered) {
+      callbacksRegistered = true
+
+      // New remote track arrived
+      connection.onTrack((did: string, track: MediaStreamTrack, kind: 'audio' | 'video' | 'screen') => {
+        const localDID = store.did?.() ?? 'local'
+        if (did === localDID) return // local handled separately
+
+        setParticipants((prev) => {
+          const existing = prev.find((p) => p.did === did)
+          const name = resolveDisplayName(did)
+          if (existing) {
+            return prev.map((p) => {
+              if (p.did !== did) return p
+              if (kind === 'audio') return { ...p, audioTrack: track, displayName: name }
+              if (kind === 'video') return { ...p, videoTrack: track, displayName: name }
+              if (kind === 'screen') return { ...p, screenTrack: track, displayName: name }
+              return p
+            })
+          }
+          const newP: VideoParticipant = { did, displayName: name, speaking: false, muted: false }
+          if (kind === 'audio') newP.audioTrack = track
+          if (kind === 'video') newP.videoTrack = track
+          if (kind === 'screen') newP.screenTrack = track
+          return [...prev, newP]
+        })
+
+        if (kind === 'screen') {
+          setScreenSharer({
+            did,
+            displayName: resolveDisplayName(did),
+            screenTrack: track,
+            speaking: false,
+            muted: false
+          })
+        }
+      })
+
+      // Remote track removed (producer closed on other side)
+      connection.onTrackRemoved((did: string, kind: 'audio' | 'video' | 'screen') => {
+        setParticipants((prev) =>
+          prev
+            .map((p) => {
+              if (p.did !== did) return p
+              if (kind === 'audio') return { ...p, audioTrack: undefined }
+              if (kind === 'video') return { ...p, videoTrack: undefined, videoStream: undefined }
+              if (kind === 'screen') return { ...p, screenTrack: undefined, screenStream: undefined }
+              return p
+            })
+            .filter((p) => {
+              // Remove participant entirely if they have no tracks left
+              const localDID = store.did?.() ?? 'local'
+              if (p.did === localDID) return true
+              return p.audioTrack || p.videoTrack || p.screenTrack
+            })
+        )
+        if (kind === 'screen') {
+          setScreenSharer((prev) => (prev?.did === did ? null : prev))
+        }
+      })
+
+      // Speaking state from voice client (local)
+      connection.onSpeakingChanged((did: string, speaking: boolean) => {
+        setParticipants((prev) => prev.map((p) => (p.did === did ? { ...p, speaking } : p)))
+      })
+    }
+  })
+
+  // Reactive: update local participant and sync speaking from store
+  createEffect(() => {
+    const voiceChannelId = store.voiceChannelId()
+    const isVideoEnabled = store.isVideoEnabled()
+    const isMuted = store.isMuted()
+    const speakingSet = store.speakingUsers()
+    const connection = store.client()?.getVoiceConnection()
+
+    if (!connection || !voiceChannelId) return
 
     const localDID = store.did?.() ?? 'local'
     const localName = store.displayName?.() ?? 'You'
 
-    // Build local participant from current stream state
     const videoStream = connection.getLocalVideoStream()
     const audioStream = connection.getLocalAudioStream()
     const screenStream = connection.getLocalScreenStream()
@@ -148,71 +227,26 @@ export function VideoGrid(): JSX.Element {
       audioTrack: audioStream?.getAudioTracks()[0],
       screenTrack: connection.localScreenSharing ? screenStream?.getVideoTracks()[0] : undefined,
       screenStream: connection.localScreenSharing ? (screenStream ?? undefined) : undefined,
-      speaking: false,
+      speaking: speakingSet.has(localDID),
       muted: isMuted
     }
 
-    // Preserve existing remote participants, update local
     setParticipants((prev) => {
-      const remotes = prev.filter((p) => p.did !== localDID)
+      const remotes = prev
+        .filter((p) => p.did !== localDID)
+        .map((p) => ({
+          ...p,
+          speaking: speakingSet.has(p.did), // sync remote speaking from store signal
+          displayName: resolveDisplayName(p.did) // keep names fresh
+        }))
       return [localParticipant, ...remotes]
     })
 
     if (localParticipant.screenTrack) {
       setScreenSharer(localParticipant)
+    } else {
+      setScreenSharer((prev) => (prev?.did === localDID ? null : prev))
     }
-
-    // Helper to resolve display name from members list
-    const resolveDisplayName = (did: string) => {
-      const member = store.members().find((m) => m.did === did)
-      return member?.displayName || pseudonymFromDid(did)
-    }
-
-    // Register track callback for remote participants
-    connection.onTrack((did: string, track: MediaStreamTrack, kind: 'audio' | 'video' | 'screen') => {
-      if (did === localDID) return // Local tracks are handled above
-
-      setParticipants((prev) => {
-        const existing = prev.find((p) => p.did === did)
-        if (existing) {
-          return prev.map((p) => {
-            if (p.did !== did) return p
-            // Also update displayName in case members list loaded after initial add
-            const name = resolveDisplayName(did)
-            if (kind === 'audio') return { ...p, audioTrack: track, displayName: name }
-            if (kind === 'video') return { ...p, videoTrack: track, displayName: name }
-            if (kind === 'screen') return { ...p, screenTrack: track, displayName: name }
-            return p
-          })
-        }
-        const name = resolveDisplayName(did)
-        const newP: VideoParticipant = {
-          did,
-          displayName: name,
-          speaking: false,
-          muted: false
-        }
-        if (kind === 'audio') newP.audioTrack = track
-        if (kind === 'video') newP.videoTrack = track
-        if (kind === 'screen') newP.screenTrack = track
-        return [...prev, newP]
-      })
-
-      if (kind === 'screen') {
-        setScreenSharer({
-          did,
-          displayName: resolveDisplayName(did),
-          screenTrack: track,
-          speaking: false,
-          muted: false
-        })
-      }
-    })
-
-    // Speaking detection
-    connection.onSpeakingChanged((did: string, speaking: boolean) => {
-      setParticipants((prev) => prev.map((p) => (p.did === did ? { ...p, speaking } : p)))
-    })
   })
 
   const gridCols = () => {

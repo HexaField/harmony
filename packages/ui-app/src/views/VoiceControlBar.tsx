@@ -1,12 +1,112 @@
-import { Show, For, type Component } from 'solid-js'
+import { Show, For, type Component, createMemo, createEffect, onCleanup } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 import { pseudonymFromDid, initialsFromName } from '../utils/pseudonym.js'
+import {
+  MicIcon,
+  MicOffIcon,
+  HeadphonesIcon,
+  HeadphonesOffIcon,
+  VideoIcon,
+  VideoOffIcon,
+  ScreenShareIcon,
+  ScreenShareOffIcon,
+  PhoneOffIcon,
+  SignalIcon,
+  LoaderIcon,
+  SpeakerIcon
+} from '../components/Voice/VoiceIcons.tsx'
+
+const ConnectionStateBadge: Component = () => {
+  const store = useAppStore()
+  const state = () => store.voiceConnectionState()
+
+  const label = createMemo(() => {
+    switch (state()) {
+      case 'connecting':
+        return 'Connecting…'
+      case 'connected':
+        return t('VOICE_CONNECTED')
+      case 'reconnecting':
+        return 'Reconnecting…'
+      case 'disconnected':
+        return 'Disconnected'
+      default:
+        return ''
+    }
+  })
+
+  const colorClass = createMemo(() => {
+    switch (state()) {
+      case 'connecting':
+        return 'text-yellow-400'
+      case 'connected':
+        return 'text-green-400'
+      case 'reconnecting':
+        return 'text-orange-400'
+      case 'disconnected':
+        return 'text-red-400'
+      default:
+        return 'text-[var(--text-muted)]'
+    }
+  })
+
+  return (
+    <div class="flex items-center gap-1.5">
+      <Show when={state() === 'connecting' || state() === 'reconnecting'}>
+        <LoaderIcon size={12} class={colorClass()} />
+      </Show>
+      <Show when={state() === 'connected'}>
+        <SignalIcon size={12} class={colorClass()} />
+      </Show>
+      <span class={`text-xs font-semibold ${colorClass()}`}>{label()}</span>
+    </div>
+  )
+}
 
 export const VoiceControlBar: Component = () => {
   const store = useAppStore()
 
   const voiceChannel = () => store.channels().find((c) => c.id === store.voiceChannelId())
+
+  // Poll transport connection state to update store
+  let stateInterval: ReturnType<typeof setInterval> | undefined
+  createEffect(() => {
+    if (store.voiceChannelId()) {
+      const poll = () => {
+        const conn = store.client()?.getVoiceConnection()
+        if (!conn) {
+          store.setVoiceConnectionState('disconnected')
+          return
+        }
+        const debug = conn.debugState() as any
+        const sendState = debug?.sendTransport?.connectionState
+        const recvState = debug?.recvTransport?.connectionState
+        if (sendState === 'connected' && recvState === 'connected') {
+          store.setVoiceConnectionState('connected')
+        } else if (
+          sendState === 'connecting' ||
+          recvState === 'connecting' ||
+          sendState === 'new' ||
+          recvState === 'new'
+        ) {
+          store.setVoiceConnectionState('connecting')
+        } else if (sendState === 'failed' || recvState === 'failed') {
+          store.setVoiceConnectionState('disconnected')
+        } else {
+          store.setVoiceConnectionState('reconnecting')
+        }
+      }
+      poll()
+      stateInterval = setInterval(poll, 2000)
+    } else {
+      store.setVoiceConnectionState('idle')
+      if (stateInterval) clearInterval(stateInterval)
+    }
+  })
+  onCleanup(() => {
+    if (stateInterval) clearInterval(stateInterval)
+  })
 
   const handleDisconnect = async () => {
     const client = store.client()
@@ -23,11 +123,11 @@ export const VoiceControlBar: Component = () => {
     store.setDeafened(false)
     store.setVideoEnabled(false)
     store.setScreenSharing(false)
+    store.setVoiceConnectionState('idle')
   }
 
   const handleToggleMute = () => {
     store.setMuted(!store.isMuted())
-    // TODO: wire to voice connection toggleAudio when ready
   }
 
   const handleToggleDeafen = () => {
@@ -60,13 +160,11 @@ export const VoiceControlBar: Component = () => {
         await conn.stopScreenShare()
         store.setScreenSharing(false)
       } else {
-        // In Electron, use desktopCapturer to pick a source
         const desktop = (window as any).__HARMONY_DESKTOP__
         let sourceId: string | undefined
         if (desktop?.getScreenSources) {
           const sources = await desktop.getScreenSources()
           if (sources.length > 0) {
-            // Use first screen source (TODO: show picker UI)
             const screen = sources.find((s: any) => s.id.startsWith('screen:')) || sources[0]
             sourceId = screen.id
           }
@@ -79,14 +177,22 @@ export const VoiceControlBar: Component = () => {
     }
   }
 
+  const resolveName = (did: string) => {
+    const member = store.members().find((m) => m.did === did)
+    return member?.displayName || pseudonymFromDid(did)
+  }
+
   return (
     <Show when={store.voiceChannelId()}>
       <div class="bg-[var(--bg-primary)] border-t border-[var(--border)] px-3 py-2" data-testid="voice-control-bar">
-        {/* Channel info */}
+        {/* Channel info + connection state */}
         <div class="flex items-center justify-between mb-1">
           <div class="flex items-center gap-2 min-w-0">
-            <span class="text-green-400 text-xs font-semibold">{t('VOICE_CONNECTED')}</span>
-            <span class="text-[var(--text-muted)] text-xs truncate">🔊 {voiceChannel()?.name ?? ''}</span>
+            <ConnectionStateBadge />
+            <div class="flex items-center gap-1 text-[var(--text-muted)]">
+              <SpeakerIcon size={12} />
+              <span class="text-xs truncate">{voiceChannel()?.name ?? ''}</span>
+            </div>
           </div>
         </div>
 
@@ -95,8 +201,7 @@ export const VoiceControlBar: Component = () => {
           <div class="flex items-center gap-1 mb-2">
             <For each={store.voiceUsers()}>
               {(did) => {
-                const member = store.members().find((m) => m.did === did)
-                const name = member?.displayName || pseudonymFromDid(did)
+                const name = resolveName(did)
                 const initials = initialsFromName(name)
                 return (
                   <div
@@ -115,63 +220,76 @@ export const VoiceControlBar: Component = () => {
         </Show>
 
         {/* Controls */}
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1">
           <button
             onClick={handleToggleMute}
-            class="p-1.5 rounded hover:bg-[var(--bg-input)] transition-colors text-sm"
+            class="p-1.5 rounded-md hover:bg-[var(--bg-input)] transition-colors"
             classList={{
               'text-[var(--error)]': store.isMuted(),
-              'text-[var(--text-muted)]': !store.isMuted()
+              'text-[var(--text-secondary)]': !store.isMuted()
             }}
             title={store.isMuted() ? t('VOICE_UNMUTE') : t('VOICE_MUTE')}
             data-testid="voice-mute-btn"
           >
-            {store.isMuted() ? '🔇' : '🎤'}
+            <Show when={store.isMuted()} fallback={<MicIcon size={18} />}>
+              <MicOffIcon size={18} />
+            </Show>
           </button>
+
           <button
             onClick={handleToggleDeafen}
-            class="p-1.5 rounded hover:bg-[var(--bg-input)] transition-colors text-sm"
+            class="p-1.5 rounded-md hover:bg-[var(--bg-input)] transition-colors"
             classList={{
               'text-[var(--error)]': store.isDeafened(),
-              'text-[var(--text-muted)]': !store.isDeafened()
+              'text-[var(--text-secondary)]': !store.isDeafened()
             }}
             title={store.isDeafened() ? t('VOICE_UNDEAFEN') : t('VOICE_DEAFEN')}
             data-testid="voice-deafen-btn"
           >
-            {store.isDeafened() ? '🔇' : '🎧'}
+            <Show when={store.isDeafened()} fallback={<HeadphonesIcon size={18} />}>
+              <HeadphonesOffIcon size={18} />
+            </Show>
           </button>
+
           <button
             onClick={handleToggleVideo}
-            class="p-1.5 rounded hover:bg-[var(--bg-input)] transition-colors text-sm"
+            class="p-1.5 rounded-md hover:bg-[var(--bg-input)] transition-colors"
             classList={{
               'text-[var(--accent)]': store.isVideoEnabled(),
-              'text-[var(--text-muted)]': !store.isVideoEnabled()
+              'text-[var(--text-secondary)]': !store.isVideoEnabled()
             }}
             title={store.isVideoEnabled() ? t('VOICE_VIDEO_OFF') : t('VOICE_VIDEO_ON')}
             data-testid="voice-video-btn"
           >
-            {store.isVideoEnabled() ? '📹' : '📷'}
+            <Show when={store.isVideoEnabled()} fallback={<VideoOffIcon size={18} />}>
+              <VideoIcon size={18} />
+            </Show>
           </button>
+
           <button
             onClick={handleToggleScreenShare}
-            class="p-1.5 rounded hover:bg-[var(--bg-input)] transition-colors text-sm"
+            class="p-1.5 rounded-md hover:bg-[var(--bg-input)] transition-colors"
             classList={{
               'text-[var(--accent)]': store.isScreenSharing(),
-              'text-[var(--text-muted)]': !store.isScreenSharing()
+              'text-[var(--text-secondary)]': !store.isScreenSharing()
             }}
             title={store.isScreenSharing() ? t('VOICE_STOP_SCREEN_SHARE') : t('VOICE_SCREEN_SHARE')}
             data-testid="voice-screen-share-btn"
           >
-            {store.isScreenSharing() ? '🖥️' : '💻'}
+            <Show when={store.isScreenSharing()} fallback={<ScreenShareIcon size={18} />}>
+              <ScreenShareOffIcon size={18} />
+            </Show>
           </button>
+
           <div class="flex-1" />
+
           <button
             onClick={handleDisconnect}
-            class="p-1.5 rounded hover:bg-[var(--error)]/20 text-[var(--error)] transition-colors text-sm"
+            class="p-1.5 rounded-md bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-colors"
             title={t('VOICE_DISCONNECT')}
             data-testid="voice-disconnect-btn"
           >
-            📞
+            <PhoneOffIcon size={18} />
           </button>
         </div>
       </div>

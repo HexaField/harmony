@@ -1,6 +1,8 @@
 import { createSignal, createEffect, onCleanup, For, Show } from 'solid-js'
 import type { JSX } from 'solid-js'
 import { useAppStore } from '../../store'
+import { pseudonymFromDid, initialsFromName } from '../../utils/pseudonym'
+import { MicOffIcon } from './VoiceIcons'
 
 interface VideoParticipant {
   did: string
@@ -51,13 +53,7 @@ function VideoTile(props: { participant: VideoParticipant; isLocal?: boolean; is
     return !!track && track.readyState === 'live'
   }
 
-  const initials = () => {
-    const parts = props.participant.displayName.split(' ')
-    return parts
-      .map((p) => p[0]?.toUpperCase() ?? '')
-      .join('')
-      .substring(0, 2)
-  }
+  const initials = () => initialsFromName(props.participant.displayName)
 
   return (
     <div
@@ -89,7 +85,7 @@ function VideoTile(props: { participant: VideoParticipant; isLocal?: boolean; is
       </Show>
       <div class="absolute bottom-2 left-2 flex items-center gap-1 bg-black/60 rounded px-2 py-0.5 text-xs text-white">
         <Show when={props.participant.muted}>
-          <span class="text-red-400">🔇</span>
+          <MicOffIcon size={12} class="text-red-400" />
         </Show>
         <span>{props.participant.displayName}</span>
         <Show when={props.isLocal}>
@@ -166,6 +162,12 @@ export function VideoGrid(): JSX.Element {
       setScreenSharer(localParticipant)
     }
 
+    // Helper to resolve display name from members list
+    const resolveDisplayName = (did: string) => {
+      const member = store.members().find((m) => m.did === did)
+      return member?.displayName || pseudonymFromDid(did)
+    }
+
     // Register track callback for remote participants
     connection.onTrack((did: string, track: MediaStreamTrack, kind: 'audio' | 'video' | 'screen') => {
       if (did === localDID) return // Local tracks are handled above
@@ -175,15 +177,18 @@ export function VideoGrid(): JSX.Element {
         if (existing) {
           return prev.map((p) => {
             if (p.did !== did) return p
-            if (kind === 'audio') return { ...p, audioTrack: track }
-            if (kind === 'video') return { ...p, videoTrack: track }
-            if (kind === 'screen') return { ...p, screenTrack: track }
+            // Also update displayName in case members list loaded after initial add
+            const name = resolveDisplayName(did)
+            if (kind === 'audio') return { ...p, audioTrack: track, displayName: name }
+            if (kind === 'video') return { ...p, videoTrack: track, displayName: name }
+            if (kind === 'screen') return { ...p, screenTrack: track, displayName: name }
             return p
           })
         }
+        const name = resolveDisplayName(did)
         const newP: VideoParticipant = {
           did,
-          displayName: did.substring(0, 12) + '…',
+          displayName: name,
           speaking: false,
           muted: false
         }
@@ -196,7 +201,7 @@ export function VideoGrid(): JSX.Element {
       if (kind === 'screen') {
         setScreenSharer({
           did,
-          displayName: did.substring(0, 12) + '…',
+          displayName: resolveDisplayName(did),
           screenTrack: track,
           speaking: false,
           muted: false

@@ -2702,6 +2702,20 @@ export class HarmonyServer {
               this.communitySubscriptions.set(communityId, new Set())
             }
             this.communitySubscriptions.get(communityId)!.add(conn.id)
+
+            // Broadcast online presence to existing community members
+            this.broadcastToCommunity(
+              communityId,
+              {
+                id: `presence-${Date.now()}`,
+                type: 'presence.changed',
+                timestamp: new Date().toISOString(),
+                sender: conn.did,
+                payload: { status: 'online' }
+              },
+              conn.id
+            )
+
             // Send community data to client
             const channels = await this.communityManager.getChannels(communityId)
             // Get community info for name

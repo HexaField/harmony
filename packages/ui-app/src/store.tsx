@@ -1282,6 +1282,17 @@ export function createAppStore(): AppStore {
       }
     })
 
+    client.on('presence', (...args: unknown[]) => {
+      const event = args[0] as { did?: string; status?: string }
+      if (event?.did && event?.status) {
+        setMembers(
+          members().map((m) =>
+            m.did === event.did ? { ...m, status: event.status as 'online' | 'offline' | 'idle' | 'dnd' } : m
+          )
+        )
+      }
+    })
+
     client.on('voice.state', (...args: unknown[]) => {
       const event = args[0] as {
         channelId?: string
@@ -1526,6 +1537,41 @@ export function createAppStore(): AppStore {
     // community list request so communities load on page refresh.
     if (client.isConnected()) {
       client.requestCommunityList()
+
+      // Also replay any communities the client already knows about from auto-join
+      // (community.auto-joined events may have fired before store listeners were ready)
+      const knownCommunities = (client as any)._communities as Map<string, any> | undefined
+      if (knownCommunities?.size) {
+        for (const [communityId, community] of knownCommunities) {
+          const existing = communities().find((c) => c.id === communityId)
+          if (!existing) {
+            setCommunities([
+              ...communities(),
+              {
+                id: communityId,
+                name: community.info?.name || 'Community',
+                description: '',
+                memberCount: community.members?.length ?? 0
+              }
+            ])
+            // Add channels
+            const chans = community.info?.channels ?? []
+            if (chans.length) {
+              setChannels([
+                ...channels(),
+                ...chans.map((ch: any) => ({
+                  id: ch.id,
+                  name: ch.name,
+                  type: ch.type as 'text' | 'voice' | 'announcement',
+                  communityId
+                }))
+              ])
+            }
+          }
+          // Request full member info
+          client.requestCommunityInfo(communityId)
+        }
+      }
     }
 
     // Ensure current user appears in member list when connected

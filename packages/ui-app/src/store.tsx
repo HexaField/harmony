@@ -1421,6 +1421,52 @@ export function createAppStore(): AppStore {
       }
     })
 
+    client.on('community.updated', (...args: unknown[]) => {
+      const event = args[0] as {
+        communityId: string
+        channels?: Array<{ id: string; name: string; type: string }>
+      }
+      if (!event?.communityId) return
+      const existing = communities().find((c) => c.id === event.communityId)
+      if (existing) {
+        // Update existing community's channels if provided
+        if (event.channels) {
+          const newChannels = event.channels
+            .filter((ch) => !channels().some((ec) => ec.id === ch.id))
+            .map((ch) => ({
+              id: ch.id,
+              name: ch.name,
+              type: ch.type as 'text' | 'voice' | 'announcement',
+              communityId: event.communityId
+            }))
+          if (newChannels.length > 0) {
+            setChannels([...channels(), ...newChannels])
+          }
+        }
+      } else {
+        // New community — add to store (e.g. from createCommunity)
+        const communityInfo: CommunityInfo = {
+          id: event.communityId,
+          name: event.communityId, // Name will be updated by community.info.response
+          memberCount: 1
+        }
+        setCommunities([...communities(), communityInfo])
+
+        if (event.channels) {
+          const channelInfos = event.channels.map((ch) => ({
+            id: ch.id,
+            name: ch.name,
+            type: ch.type as 'text' | 'voice' | 'announcement',
+            communityId: event.communityId
+          }))
+          setChannels([...channels(), ...channelInfos])
+        }
+
+        // Request full community info for name/description
+        client.requestCommunityInfo(event.communityId)
+      }
+    })
+
     client.on('community.auto-joined', (...args: unknown[]) => {
       const event = args[0] as {
         communityId: string

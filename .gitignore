@@ -17,3 +17,4 @@ test-results
 *.db-shm
 *.db-wal
 harmony.dbtest-ws.mjs
+tests/.server-*.mts

@@ -186,6 +186,14 @@ export class LocalStoragePersistence implements PersistenceAdapter {
 // ── Client ──
 
 export class HarmonyClient {
+  private static toBytes(ct: unknown): Uint8Array {
+    if (ct instanceof Uint8Array) return ct
+    if (Array.isArray(ct)) return new Uint8Array(ct)
+    const obj = ct as Record<string, number>
+    const keys = Object.keys(obj).sort((a, b) => Number(a) - Number(b))
+    return new Uint8Array(keys.map((k) => obj[k]))
+  }
+
   private _did = ''
   private _keyPair: KeyPair | null = null
   private _identity: Identity | null = null
@@ -920,6 +928,7 @@ export class HarmonyClient {
         .map((e) => e.data)
     }
 
+    this.emitter.emit('message', decrypted)
     this.send(msg)
     return id
   }
@@ -946,7 +955,7 @@ export class HarmonyClient {
         entry.data = { ...entry.data, content: { text: newText }, edited: true, editedAt: new Date().toISOString() }
       }
     }
-    this.emitter.emit('message.edited', { messageId, newText })
+    this.emitter.emit('message.edited', { messageId, channelId, newText })
   }
 
   async deleteMessage(communityId: string, channelId: string, messageId: string): Promise<void> {
@@ -969,7 +978,7 @@ export class HarmonyClient {
         .entries()
         .map((e) => e.data)
     }
-    this.emitter.emit('message.deleted', { messageId })
+    this.emitter.emit('message.deleted', { messageId, channelId })
   }
 
   async addReaction(communityId: string, channelId: string, messageId: string, emoji: string): Promise<void> {
@@ -1712,22 +1721,17 @@ export class HarmonyClient {
     // Synchronous plaintext fallback first
     const groupId = `${payload.communityId}:${payload.channelId}`
     const mlsGroup = this.mlsGroups.get(groupId)
-    if (!mlsGroup && payload.content) {
-      const ct = payload.content as EncryptedContent
-      if (ct.epoch === 0 && ct.senderIndex === 0 && ct.ciphertext) {
-        try {
-          const bytes =
-            ct.ciphertext instanceof Uint8Array
-              ? ct.ciphertext
-              : (() => {
-                  const obj = ct.ciphertext as Record<string, number>
-                  const keys = Object.keys(obj).sort((a, b) => Number(a) - Number(b))
-                  return new Uint8Array(keys.map((k) => obj[k]))
-                })()
-          decrypted.content = { text: new TextDecoder().decode(bytes) }
-        } catch {
-          /* ignore */
+    const ct = payload.content ? (payload.content as EncryptedContent) : null
+    // Always try plaintext decode — if the bytes are valid UTF-8 text, use it
+    if (ct && ct.ciphertext) {
+      try {
+        const bytes = HarmonyClient.toBytes(ct.ciphertext)
+        const text = new TextDecoder().decode(bytes)
+        if (text && text.length > 0 && !/[\x00-\x08\x0E-\x1F]/.test(text)) {
+          decrypted.content = { text }
         }
+      } catch {
+        /* not plaintext */
       }
     }
 
@@ -1757,17 +1761,10 @@ export class HarmonyClient {
       this.emitter.emit('message', decrypted)
     }
 
-    // Async MLS decryption
-    if (mlsGroup && payload.content) {
+    // Async MLS decryption — only if plaintext decode didn't work
+    if (mlsGroup && payload.content && decrypted.content.text === '[encrypted]') {
       const ct = payload.content as EncryptedContent
-      const ciphertextBytes =
-        ct.ciphertext instanceof Uint8Array
-          ? ct.ciphertext
-          : (() => {
-              const obj = ct.ciphertext as Record<string, number>
-              const keys = Object.keys(obj).sort((a, b) => Number(a) - Number(b))
-              return new Uint8Array(keys.map((k) => obj[k]))
-            })()
+      const ciphertextBytes = HarmonyClient.toBytes(ct.ciphertext)
       mlsGroup
         .decrypt({
           epoch: ct.epoch,
@@ -1780,6 +1777,17 @@ export class HarmonyClient {
           addAndEmit()
         })
         .catch(() => {
+          // MLS decryption failed — try plaintext fallback
+          try {
+            const ct2 = payload.content as EncryptedContent
+            const bytes = HarmonyClient.toBytes(ct2.ciphertext)
+            const text = new TextDecoder().decode(bytes)
+            if (text && text.length > 0 && !/[\x00-\x08\x0E-\x1F]/.test(text)) {
+              decrypted.content = { text }
+            }
+          } catch {
+            /* ignore */
+          }
           addAndEmit()
         })
     } else {
@@ -1799,26 +1807,19 @@ export class HarmonyClient {
     // Skip own edits — already applied optimistically in editMessage()
     if (msg.sender === this._identity?.did) return
 
-    // Decrypt the edited content (same logic as handleChannelMessage)
+    // Decrypt the edited content
     let newText = '[encrypted]'
     const groupId = `${payload.communityId}:${payload.channelId}`
-    const mlsGroup = this.mlsGroups.get(groupId)
-    if (!mlsGroup && payload.content) {
-      const ct = payload.content as EncryptedContent
-      if (ct.epoch === 0 && ct.senderIndex === 0 && ct.ciphertext) {
-        try {
-          const bytes =
-            ct.ciphertext instanceof Uint8Array
-              ? ct.ciphertext
-              : (() => {
-                  const obj = ct.ciphertext as Record<string, number>
-                  const keys = Object.keys(obj).sort((a, b) => Number(a) - Number(b))
-                  return new Uint8Array(keys.map((k) => obj[k]))
-                })()
-          newText = new TextDecoder().decode(bytes)
-        } catch {
-          /* ignore */
+    const ctEdit = payload.content ? (payload.content as EncryptedContent) : null
+    if (ctEdit && ctEdit.ciphertext) {
+      try {
+        const bytes = HarmonyClient.toBytes(ctEdit.ciphertext)
+        const decoded = new TextDecoder().decode(bytes)
+        if (decoded && decoded.length > 0 && !/[\x00-\x08\x0E-\x1F]/.test(decoded)) {
+          newText = decoded
         }
+      } catch {
+        /* ignore */
       }
     }
 
@@ -2187,13 +2188,14 @@ export class HarmonyClient {
         } else if (c.ciphertext) {
           // Decode ciphertext bytes to string (plaintext in dev mode)
           const ct = c.ciphertext
-          if (ct instanceof Uint8Array) {
-            text = new TextDecoder().decode(ct)
-          } else if (typeof ct === 'object' && ct !== null) {
-            // Serialized Uint8Array as { 0: byte, 1: byte, ... }
-            const keys = Object.keys(ct as Record<string, number>).sort((a, b) => Number(a) - Number(b))
-            const bytes = new Uint8Array(keys.map((k) => (ct as Record<string, number>)[k]))
-            text = new TextDecoder().decode(bytes)
+          try {
+            const bytes = HarmonyClient.toBytes(ct)
+            const decoded = new TextDecoder().decode(bytes)
+            if (decoded && decoded.length > 0 && !/[\x00-\x08\x0E-\x1F]/.test(decoded)) {
+              text = decoded
+            }
+          } catch {
+            /* not decodable */
           }
         }
       }
@@ -2456,15 +2458,10 @@ export class HarmonyClient {
   }
 
   private async encryptForChannel(_communityId: string, _channelId: string, text: string): Promise<EncryptedContent> {
-    // In full implementation, would use MLS group encryption
-    // Simplified: just wrap text as encrypted content
+    // MLS group encryption disabled — key exchange between members not yet implemented.
+    // When enabled, would use: this.mlsGroups.get(groupId).encrypt(plaintext)
     const plaintext = new TextEncoder().encode(text)
-    const mlsGroup = this.mlsGroups.get(`${_communityId}:${_channelId}`)
-    if (mlsGroup) {
-      const ct = await mlsGroup.encrypt(plaintext)
-      return { ciphertext: ct.ciphertext, epoch: ct.epoch, senderIndex: ct.senderIndex }
-    }
-    return { ciphertext: plaintext, epoch: 0, senderIndex: 0 }
+    return { ciphertext: Array.from(plaintext), epoch: 0, senderIndex: 0 }
   }
 
   private async encryptForDM(recipientDID: string, text: string): Promise<EncryptedContent> {

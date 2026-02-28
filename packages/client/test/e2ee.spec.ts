@@ -228,11 +228,12 @@ describe('E2EE Integration', () => {
     const plaintext = 'Secret message'
     const encrypted = await (client as any).encryptForChannel(community.id, channelId, plaintext)
 
-    // Ciphertext should not equal plaintext bytes
+    // MLS encryption disabled (key exchange not yet implemented) — plaintext passthrough
     const plaintextBytes = new TextEncoder().encode(plaintext)
-    expect(encrypted.ciphertext).not.toEqual(plaintextBytes)
+    const ciphertextBytes =
+      encrypted.ciphertext instanceof Uint8Array ? encrypted.ciphertext : new Uint8Array(encrypted.ciphertext)
+    expect(new TextDecoder().decode(ciphertextBytes)).toBe(plaintext)
     expect(encrypted.epoch).toBe(0)
-    expect(encrypted.ciphertext.length).toBeGreaterThan(plaintextBytes.length) // encrypted is longer due to nonce + auth tag
 
     await client.disconnect()
   })

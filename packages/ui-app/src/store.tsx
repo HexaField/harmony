@@ -1199,8 +1199,11 @@ export function createAppStore(): AppStore {
         authorDID: string
         content: { text?: string }
         timestamp: string
+        _recipientDID?: string
       }
       if (event) {
+        const isOutgoing = event.authorDID === did()
+        const peerDid = isOutgoing ? event._recipientDID || event.authorDID : event.authorDID
         const senderDid = event.authorDID
         const data: MessageData = {
           id: event.id,
@@ -1213,7 +1216,7 @@ export function createAppStore(): AppStore {
           timestamp: event.timestamp,
           reactions: []
         }
-        addDMMessage(senderDid, data)
+        addDMMessage(peerDid, data)
       }
     })
 
@@ -1372,6 +1375,50 @@ export function createAppStore(): AppStore {
     client.on('voice.left', () => {
       setVoiceChannelId(null)
       setVoiceUsers([])
+    })
+
+    // Channel lifecycle events
+    client.on('channel.created', (...args: unknown[]) => {
+      const event = args[0] as { id?: string; channelId?: string; name?: string; type?: string; communityId?: string }
+      const chId = event?.channelId || event?.id
+      if (chId && !channels().find((c) => c.id === chId)) {
+        setChannels([
+          ...channels(),
+          {
+            id: chId,
+            name: event.name || 'new-channel',
+            type: (event.type as 'text' | 'voice' | 'announcement') || 'text',
+            communityId: event.communityId || activeCommunityId() || ''
+          }
+        ])
+      }
+    })
+
+    client.on('channel.updated', (...args: unknown[]) => {
+      const event = args[0] as { id?: string; channelId?: string; name?: string; type?: string; topic?: string }
+      const chId = event?.channelId || event?.id
+      if (chId) {
+        setChannels(
+          channels().map((c) =>
+            c.id === chId
+              ? { ...c, ...(event.name && { name: event.name }), ...(event.type && { type: event.type as any }) }
+              : c
+          )
+        )
+      }
+    })
+
+    client.on('channel.deleted', (...args: unknown[]) => {
+      const event = args[0] as { id?: string; channelId?: string }
+      const chId = event?.channelId || event?.id
+      if (chId) {
+        setChannels(channels().filter((c) => c.id !== chId))
+        // If viewing the deleted channel, switch to another
+        if (activeChannelId() === chId) {
+          const remaining = channels().filter((c) => c.id !== chId)
+          if (remaining.length) setActiveChannelId(remaining[0].id)
+        }
+      }
     })
 
     client.on('community.auto-joined', (...args: unknown[]) => {

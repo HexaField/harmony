@@ -1019,6 +1019,15 @@ export class HarmonyClient {
     dmState.messages.push(dmMsg)
     dmState.lastMessage = dmMsg
 
+    // Emit locally for store tracking (outgoing DM)
+    this.emitter.emit('dm', {
+      id,
+      authorDID: this._did,
+      content: { text },
+      timestamp: dmMsg.timestamp,
+      _recipientDID: recipientDID
+    })
+
     return id
   }
 
@@ -1506,7 +1515,7 @@ export class HarmonyClient {
         this.handleChannelMessage(msg)
         break
       case 'channel.message.updated':
-        this.emitter.emit('message.edited', msg.payload)
+        this.handleChannelMessageUpdated(msg)
         break
       case 'channel.message.deleted':
         this.handleChannelMessageDeleted(msg)
@@ -1776,6 +1785,61 @@ export class HarmonyClient {
     } else {
       addAndEmit()
     }
+  }
+
+  private handleChannelMessageUpdated(msg: ProtocolMessage): void {
+    const payload = msg.payload as {
+      communityId: string
+      channelId: string
+      messageId: string
+      content: EncryptedContent
+      clock?: LamportClock
+    }
+
+    // Decrypt the edited content (same logic as handleChannelMessage)
+    let newText = '[encrypted]'
+    const groupId = `${payload.communityId}:${payload.channelId}`
+    const mlsGroup = this.mlsGroups.get(groupId)
+    if (!mlsGroup && payload.content) {
+      const ct = payload.content as EncryptedContent
+      if (ct.epoch === 0 && ct.senderIndex === 0 && ct.ciphertext) {
+        try {
+          const bytes =
+            ct.ciphertext instanceof Uint8Array
+              ? ct.ciphertext
+              : (() => {
+                  const obj = ct.ciphertext as Record<string, number>
+                  const keys = Object.keys(obj).sort((a, b) => Number(a) - Number(b))
+                  return new Uint8Array(keys.map((k) => obj[k]))
+                })()
+          newText = new TextDecoder().decode(bytes)
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    // Update local CRDT log
+    const key = `${payload.communityId}:${payload.channelId}`
+    const log = this._channelLogs.get(key)
+    if (log) {
+      const entry = log.entries().find((e) => e.data.id === payload.messageId)
+      if (entry) {
+        entry.data.content = { text: newText }
+        entry.data.edited = true
+      }
+      const sub = this._channelSubscriptions.get(key)
+      if (sub) {
+        sub.messages = log.entries().map((e) => e.data)
+      }
+    }
+
+    this.emitter.emit('message.edited', {
+      messageId: payload.messageId,
+      channelId: payload.channelId,
+      communityId: payload.communityId,
+      newText
+    })
   }
 
   private handleChannelMessageDeleted(msg: ProtocolMessage): void {
@@ -2302,12 +2366,12 @@ export class HarmonyClient {
     }
 
     if (!sent) {
-      // Send to any connected server (backward compat / non-community messages)
+      // Non-community messages (DMs, presence) — send to ALL connected servers
+      // so recipient receives it regardless of which server they're on
       for (const sc of this._servers.values()) {
         if (sc.connected && sc.ws) {
           sc.ws.send(serialise(msg))
           sent = true
-          break
         }
       }
     }

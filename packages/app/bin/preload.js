@@ -28,7 +28,8 @@ const desktopBridge = {
           ipcRenderer.once('harmony:server-started', (_event, data) => resolve(data.serverUrl))
         }
       })
-    })
+    }),
+  getScreenSources: () => ipcRenderer.invoke('harmony:screen-sources')
 }
 
 contextBridge.exposeInMainWorld('__HARMONY_DESKTOP__', desktopBridge)

@@ -163,6 +163,22 @@ function registerIPC() {
     harmonyApp.updateConfig(patch)
     return harmonyApp.getConfig()
   })
+
+  ipcMain.handle('harmony:screen-sources', async () => {
+    const { desktopCapturer } = await import('electron')
+    const sources = await desktopCapturer.getSources({
+      types: ['window', 'screen'],
+      thumbnailSize: { width: 320, height: 180 },
+      fetchWindowIcons: true
+    })
+    return sources.map((s) => ({
+      id: s.id,
+      name: s.name,
+      thumbnail: s.thumbnail.toDataURL(),
+      appIcon: s.appIcon?.toDataURL() || null,
+      display_id: s.display_id
+    }))
+  })
 }
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')

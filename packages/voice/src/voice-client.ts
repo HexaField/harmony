@@ -35,6 +35,8 @@ export const BrowserMediaProvider: MediaDeviceProvider = {
 export interface VoiceSignaling {
   /** Send a signaling message to the server and await response */
   sendVoiceSignal(type: string, payload: Record<string, unknown>): Promise<Record<string, unknown>>
+  /** Send a signaling message without awaiting a response (fire-and-forget) */
+  fireVoiceSignal?(type: string, payload: Record<string, unknown>): void
   /** Register a handler for incoming voice signaling messages */
   onVoiceSignal(type: string, handler: (payload: Record<string, unknown>) => void): void
   /** Remove a handler */
@@ -434,8 +436,10 @@ class VoiceConnectionImpl implements VoiceConnection {
     if (this.audioProducer) {
       if (this.localAudioEnabled) {
         this.audioProducer.pause()
+        this.signaling?.fireVoiceSignal?.('voice.mute', {})
       } else {
         this.audioProducer.resume()
+        this.signaling?.fireVoiceSignal?.('voice.unmute', {})
       }
     }
     this.localAudioEnabled = !this.localAudioEnabled
@@ -466,6 +470,7 @@ class VoiceConnectionImpl implements VoiceConnection {
       }
 
       this.localVideoEnabled = true
+      this.signaling?.fireVoiceSignal?.('voice.video', { enabled: true })
 
       // Notify UI about local video track
       if (videoTrack) {
@@ -486,14 +491,32 @@ class VoiceConnectionImpl implements VoiceConnection {
       this.videoStream = null
     }
     this.localVideoEnabled = false
+    this.signaling?.fireVoiceSignal?.('voice.video', { enabled: false })
   }
 
-  async startScreenShare(): Promise<void> {
+  async startScreenShare(sourceId?: string): Promise<void> {
     try {
-      this.screenStream = await this.mediaProvider.getDisplayMedia({
-        video: true,
-        audio: true
-      })
+      if (sourceId) {
+        // Electron: use chromeMediaSource with specific sourceId
+        this.screenStream = await this.mediaProvider.getUserMedia({
+          audio: false,
+          video: {
+            // @ts-expect-error Electron-specific constraints
+            mandatory: {
+              chromeMediaSource: 'desktop',
+              chromeMediaSourceId: sourceId,
+              maxWidth: 1920,
+              maxHeight: 1080,
+              maxFrameRate: 30
+            }
+          }
+        })
+      } else {
+        this.screenStream = await this.mediaProvider.getDisplayMedia({
+          video: true,
+          audio: true
+        })
+      }
 
       const videoTrack = this.screenStream.getVideoTracks()[0]
 

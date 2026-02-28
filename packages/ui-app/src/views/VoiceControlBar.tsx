@@ -60,7 +60,18 @@ export const VoiceControlBar: Component = () => {
         await conn.stopScreenShare()
         store.setScreenSharing(false)
       } else {
-        await conn.startScreenShare()
+        // In Electron, use desktopCapturer to pick a source
+        const desktop = (window as any).__HARMONY_DESKTOP__
+        let sourceId: string | undefined
+        if (desktop?.getScreenSources) {
+          const sources = await desktop.getScreenSources()
+          if (sources.length > 0) {
+            // Use first screen source (TODO: show picker UI)
+            const screen = sources.find((s: any) => s.id.startsWith('screen:')) || sources[0]
+            sourceId = screen.id
+          }
+        }
+        await conn.startScreenShare(sourceId)
         store.setScreenSharing(true)
       }
     } catch (err) {

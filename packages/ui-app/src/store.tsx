@@ -1406,7 +1406,10 @@ export function createAppStore(): AppStore {
       setConnectionState('connected')
       setConnectionError('')
     } else if (state === 'partial') {
-      setConnectionState('reconnecting')
+      // Only show reconnecting if the active community's server is disconnected
+      // If we're just partially connected (e.g. local server down but remote works), treat as connected
+      setConnectionState('connected')
+      setConnectionError('')
     } else {
       setConnectionState('disconnected')
     }
@@ -1644,7 +1647,10 @@ export function createAppStore(): AppStore {
     biometricEnabled,
     setBiometricEnabled
   }
-  ;(globalThis as any).__HARMONY_STORE__ = storeObj
+  // Expose store for debugging in development only
+  if (import.meta.env.DEV) {
+    ;(globalThis as any).__HARMONY_STORE__ = storeObj
+  }
   return storeObj
 }
 

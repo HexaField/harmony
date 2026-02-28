@@ -52,7 +52,7 @@ export interface VoiceConnection {
   toggleVideo(): Promise<void>
   enableVideo(): Promise<void>
   disableVideo(): Promise<void>
-  startScreenShare(): Promise<void>
+  startScreenShare(sourceId?: string): Promise<void>
   stopScreenShare(): Promise<void>
   getLocalVideoStream(): MediaStream | null
   getLocalAudioStream(): MediaStream | null

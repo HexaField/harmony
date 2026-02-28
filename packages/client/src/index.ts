@@ -1240,12 +1240,18 @@ export class HarmonyClient {
           client.send(client.createMessage(type, payload))
         })
       },
+      fireVoiceSignal(type: string, payload: Record<string, unknown>): void {
+        client.send(client.createMessage(type, payload))
+      },
       onVoiceSignal(type: string, handler: (payload: Record<string, unknown>) => void): void {
         if (!signalHandlers.has(type)) signalHandlers.set(type, new Set())
         signalHandlers.get(type)!.add(handler)
+        // Also listen directly on emitter for server-push messages (e.g. voice.new-producer)
+        client.emitter.on(type, handler)
       },
       offVoiceSignal(type: string, handler: (payload: Record<string, unknown>) => void): void {
         signalHandlers.get(type)?.delete(handler)
+        client.emitter.off(type, handler)
       }
     }
   }

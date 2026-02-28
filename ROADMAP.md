@@ -1,6 +1,6 @@
 # Harmony — Roadmap & Feature Status
 
-_Single source of truth. Merged from FEATURES.md, TODO.md, and beta-release-todo.md._ _Updated 2026-02-27 22:35 AEDT._
+_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-02-28 17:50 AEDT._
 
 ---
 
@@ -10,7 +10,7 @@ _Single source of truth. Merged from FEATURES.md, TODO.md, and beta-release-todo
 | ------------------ | ------------------------------------- |
 | Packages           | 36                                    |
 | Estimated LOC      | ~32,000+                              |
-| Vitest passing     | 2,386                                 |
+| Vitest passing     | 2,433                                 |
 | Vitest skipped     | 10                                    |
 | Vitest todo        | 114                                   |
 | Playwright passing | 13 (Discord integration)              |
@@ -191,6 +191,102 @@ _Single source of truth. Merged from FEATURES.md, TODO.md, and beta-release-todo
 | VoiceRoomDO (cloud coordination)        | ➖  | ➖     | ➖  | Cloud Worker DO                |
 | E2EE bridge (Insertable Streams + HKDF) | ✅  | ➖     | ✅  |                                |
 | Voice token exchange                    | ✅  | ✅     | ✅  |                                |
+
+#### Voice Production Detail
+
+| # | Feature | Status | Notes |
+| --- | --- | --- | --- |
+| V1 | mediasoup-client Device integration | ✅ | Device loaded with router RTP capabilities |
+| V2 | Send transport (client→SFU) | ✅ | DTLS connect, `transport.on('produce')` wired |
+| V3 | Recv transport (SFU→client) | ✅ | Separate recv transport, consumer creation |
+| V4 | Audio Producer (mic → SFU) | ✅ | `getUserMedia({audio})` → `transport.produce()` |
+| V5 | Audio Consumer (SFU → speaker) | ✅ | Remote audio consumers attached to `<audio>` elements |
+| V6 | Mute/unmute (pause/resume producer) | ✅ | `fireVoiceSignal` sends `voice.mute`/`voice.unmute` |
+| V7 | Deafen (pause all consumers locally) | 📋 | UI toggle exists, not wired to consumer pause |
+| V8 | Speaking indicators (audio level) | 📋 | Signal exists, no AudioWorklet/analyser |
+| V9 | Voice activity detection (VAD) | ⬜ | AudioWorklet or AnalyserNode for push-to-talk alt |
+| V10 | Echo cancellation / noise suppression | ✅ | getUserMedia constraints enabled |
+| V11 | Automatic gain control | ✅ | getUserMedia constraint enabled |
+| V12 | Audio device selection (input) | ⬜ | `enumerateDevices()` → UI picker → restart producer |
+| V13 | Audio device selection (output) | ⬜ | `setSinkId()` on `<audio>` elements |
+| V14 | Volume control (per-user) | ⬜ | GainNode per consumer stream |
+| V15 | Reconnect on transport failure | ⬜ | ICE restart, transport reconnect signaling |
+| C1 | Video Producer (camera → SFU) | ✅ | `getUserMedia({video})` → `transport.produce()`, 1280x720@30 |
+| C2 | Video Consumer (SFU → display) | ✅ | Remote video consumers with live tracks |
+| C3 | VideoGrid (adaptive layout) | ✅ | SolidJS reactive, `onTrack` for remotes, `onunmute` retry |
+| C4 | Local video preview (self-view) | ✅ | Mirrored local stream in VideoTile |
+| C5 | Camera on/off toggle | ✅ | `enableVideo()`/`disableVideo()` on VoiceConnection |
+| C6 | Camera device selection | ⬜ | `enumerateDevices()` → picker |
+| C7 | Simulcast (VP8 layers) | ⬜ | encodings array on produce(), SFU layer selection |
+| C8 | Bandwidth adaptation | ⬜ | SFU selects simulcast layer per subscriber |
+| C9 | Picture-in-Picture (PiP) | 📋 | Stub exists |
+| C10 | Spotlight / pin participant | ⬜ | UI for pinning one video large |
+| C11 | Video resolution constraints | ⬜ | width/height/frameRate constraint picker |
+| S1 | Screen share Producer | ✅ | `desktopCapturer` → separate producer |
+| S2 | Screen share Consumer + view | ✅ | ScreenShareView renders remote screen stream |
+| S3 | Screen share with audio | ⬜ | `getDisplayMedia({audio: true})` on supported platforms |
+| S4 | Electron desktopCapturer | ✅ | IPC bridge `harmony:screen-sources`, preload `getScreenSources` |
+| S5 | Screen share indicator in UI | 🔧 | `localScreenSharing` flag in store, stop button exists |
+| S6 | Screen share replaces video grid | ⬜ | Layout switch: screen share main + thumbnails |
+
+#### Electron Media Permissions
+
+| #   | Feature                               | Status | Notes                                                       |
+| --- | ------------------------------------- | ------ | ----------------------------------------------------------- |
+| E1  | Permission request handler            | ✅     | `setPermissionRequestHandler` + `setPermissionCheckHandler` |
+| E2  | macOS camera TCC entitlement          | ✅     | `com.apple.security.device.camera` in entitlements.plist    |
+| E3  | macOS microphone TCC entitlement      | ✅     | `com.apple.security.device.audio-input`                     |
+| E4  | macOS screen recording TCC            | ✅     | `com.apple.security.cs.allow-screen-recording`              |
+| E5  | `systemPreferences.askForMediaAccess` | ⬜     | Electron API to trigger macOS permission dialog             |
+| E6  | Permission status UI indicator        | ⬜     | Show when camera/mic blocked                                |
+
+#### Voice Signaling (WebSocket)
+
+| # | Feature | Status | Notes |
+| --- | --- | --- | --- |
+| W1 | voice.token request/response | ✅ | Client sends, server generates JWT |
+| W2 | voice.transport.connect | ✅ | Server handler + client dispatch |
+| W3 | voice.produce signaling | ✅ | Server handler + client dispatch |
+| W4 | voice.consume signaling | ✅ | Server handler + client dispatch |
+| W5 | voice.consumer.resume | ✅ | Server handler + client dispatch |
+| W6 | Client-side signaling dispatch | ✅ | `sendVoiceSignal` (req/res) + `fireVoiceSignal` (fire-and-forget) |
+| W7 | voice.join / voice.leave broadcast | ✅ | Server broadcasts to channel participants |
+| W8 | Participant state sync on join | ✅ | `voice.new-producer` broadcast to existing participants |
+
+#### Voice UI Components
+
+| #   | Feature                              | Status | Notes                                               |
+| --- | ------------------------------------ | ------ | --------------------------------------------------- |
+| U1  | VoiceControlBar — mute wired         | ✅     | `toggleAudio` pauses/resumes producer               |
+| U2  | VoiceControlBar — deafen wired       | 📋     | Toggle exists, needs consumer integration           |
+| U3  | VoiceControlBar — camera wired       | ✅     | Calls `enableVideo()`/`disableVideo()`              |
+| U4  | VoiceControlBar — screen share wired | ✅     | Calls `startScreenShare()` with desktopCapturer     |
+| U5  | VoiceControlBar — disconnect wired   | ✅     | Calls `leaveVoice`, transport cleanup               |
+| U6  | VideoGrid — render real streams      | ✅     | Reactive SolidJS, local + remote MediaStreams       |
+| U7  | ScreenShareView — render real stream | ✅     | Large view + presenter info                         |
+| U8  | VoiceChannelPanel — participant list | 🔧     | Shows avatars, participant count unreliable         |
+| U9  | VoiceManager integration             | ⬜     | `voice.ts` VoiceManager not used anywhere           |
+| U10 | Voice settings panel                 | ⬜     | Device selection, volume, noise suppression toggles |
+| U11 | Voice connection quality indicator   | ⬜     | ICE connection state → UI                           |
+| U12 | Participant audio indicators         | ⬜     | Green ring when speaking (from AudioWorklet)        |
+
+#### E2EE for Voice/Video
+
+| #   | Feature                            | Status | Notes                                                |
+| --- | ---------------------------------- | ------ | ---------------------------------------------------- |
+| X1  | E2EE bridge key injection          | ✅     | E2EEBridge interface + HKDF                          |
+| X2  | Insertable Streams transform       | ⬜     | RTCRtpSender/Receiver transform for frame encryption |
+| X3  | E2EE key rotation on member change | ⬜     | Re-key when participant joins/leaves                 |
+
+#### Cross-Device E2E Testing
+
+| #   | Feature                             | Status | Notes                              |
+| --- | ----------------------------------- | ------ | ---------------------------------- |
+| T1  | Cross-device voice E2E (real audio) | ✅     | Mac ↔ Linux, 22/23 passing         |
+| T2  | Cross-device video E2E              | ✅     | Camera → remote consumer verified  |
+| T3  | Screen share E2E                    | 🔧     | desktopCapturer works, no E2E test |
+| T4  | Voice reconnection test             | ✅     | Leave/rejoin cycle verified        |
+| T5  | Mute/unmute E2E                     | ✅     | Producer pause/resume verified     |
 
 ### E2EE (End-to-End Encryption)
 
@@ -485,7 +581,18 @@ Everything below is done and committed.
 - Security: readBody() 5MB limit, security headers, DID length validation, DID ownership enforcement
 - Moderation: slow mode, per-community rate limits, raid detection + auto-lockdown, account age rules, VC requirement rules
 - Notifications: mention detection, DM/reply notifications, notification.list/mark-read/count protocol, real-time push
-- Tests: 2386 passing (was 2364), 22 new tests across auth + moderation + notifications
+- Tests: 2433 passing (was 2364), 22 new tests across auth + moderation + notifications
+- Full mediasoup-client WebRTC integration: Device, send/recv transports, producers, consumers
+- Cross-device voice/video E2E: Mac ↔ Linux, 22/23 tests passing (audio, video, mute, leave/rejoin)
+- Community resync on reconnect: server queries RDF store for memberships, sends `community.auto-joined`
+- Multi-server voice routing: `communityId` injection in all voice signaling payloads
+- Electron screen share: `desktopCapturer` IPC bridge, preload `getScreenSources`
+- VideoGrid reactive rewrite: SolidJS signals, `onTrack` for remotes, `onunmute` retry
+- VoiceClient `debugState()` method for E2E testing introspection
+- `fireVoiceSignal` (fire-and-forget) vs `sendVoiceSignal` (request-response) pattern
+- Voice signaling fix: `onVoiceSignal` emitter listener for server-push messages
+- Electron builds: macOS arm64 DMG (195MB) + Linux x64 AppImage (192MB)
+- Merged FEATURES.md back into ROADMAP.md (single source of truth)
 
 ---
 
@@ -502,7 +609,7 @@ Everything below is done and committed.
 | 5 | Register domain | ⬜ | Josh | `harmony.chat` or similar → Cloudflare |
 | 6 | Stripe API keys | ⬜ | Josh | Test + live keys |
 | 7 | Billing integration | ⬜ | Agent | Wire Stripe into cloud worker per billing plan |
-| 8 | Voice E2E test | ⬜ | Manual | Real audio/video between two Electron clients via mediasoup |
+| 8 | Voice E2E test | ✅ | Agent | Mac ↔ Linux, 22/23 E2E tests passing (mediasoup SFU) |
 | 9 | Electron build pipeline | ⬜ | Josh + Agent | macOS notarization, Windows signing, auto-update |
 | 10 | Capacitor build pipeline | ⬜ | Josh + Agent | APK signing, iOS provisioning |
 | 11 | Secrets management | ⬜ | Josh | `wrangler secret put` for OAuth, Stripe, etc. |
@@ -682,3 +789,4 @@ Cloud: Portal Worker + Cloud Worker on Cloudflare. Clients connect via WSS. Self
 | CI workflow           | `~/Desktop/harmony/.github/workflows/ci.yml`                                |
 | Deploy workflow       | `~/Desktop/harmony/.github/workflows/deploy.yml`                            |
 | Release workflow      | `~/Desktop/harmony/.github/workflows/release.yml`                           |
+| Voice E2E tests       | `~/Desktop/harmony/harmony-e2e-voice.cjs`                                   |

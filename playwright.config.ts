@@ -34,6 +34,10 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         baseURL: 'http://localhost:5173'
       }
+    },
+    {
+      name: 'discord-mock',
+      testMatch: /discord-mock-e2e\.spec\.ts/
     }
   ]
 })

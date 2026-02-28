@@ -26,6 +26,7 @@ async function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      autoplayPolicy: 'no-user-gesture-required',
       preload: join(import.meta.dirname ?? __dirname, '..', 'bin', 'preload.js')
     }
   })
@@ -134,7 +135,7 @@ function registerIPC() {
   ipcMain.handle('harmony:cancel-migration', () => harmonyApp.cancelMigration())
 
   // Server lifecycle IPC
-  const serverHost = process.env.HARMONY_HOST ?? '127.0.0.1'
+  const serverHost = process.env.HARMONY_HOST ?? '0.0.0.0'
 
   ipcMain.handle('harmony:start-server', async () => {
     await harmonyApp.startServer()
@@ -163,6 +164,8 @@ function registerIPC() {
     return harmonyApp.getConfig()
   })
 }
+
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
 app.whenReady().then(async () => {
   // Grant media permissions (camera, microphone, screen capture)

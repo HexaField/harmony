@@ -47,13 +47,20 @@ export interface VoiceConnection {
   participants: VoiceParticipant[]
   localAudioEnabled: boolean
   localVideoEnabled: boolean
+  localScreenSharing: boolean
   toggleAudio(): Promise<void>
   toggleVideo(): Promise<void>
+  enableVideo(): Promise<void>
+  disableVideo(): Promise<void>
   startScreenShare(): Promise<void>
   stopScreenShare(): Promise<void>
+  getLocalVideoStream(): MediaStream | null
+  getLocalAudioStream(): MediaStream | null
+  getLocalScreenStream(): MediaStream | null
   onParticipantJoined(cb: (p: VoiceParticipant) => void): void
   onParticipantLeft(cb: (did: string) => void): void
   onSpeakingChanged(cb: (did: string, speaking: boolean) => void): void
+  onTrack(cb: (did: string, track: MediaStreamTrack, kind: 'audio' | 'video' | 'screen') => void): void
   disconnect(): Promise<void>
 }
 

@@ -129,8 +129,8 @@ export class HarmonyApp {
     const dbPath = join(this.dataDir, 'harmony.db')
     const mediaPath = join(this.dataDir, 'media')
 
-    const serverHost = process.env.HARMONY_HOST ?? '127.0.0.1'
-    const announcedIp = process.env.HARMONY_ANNOUNCED_IP ?? serverHost
+    const serverHost = process.env.HARMONY_HOST ?? '0.0.0.0'
+    const announcedIp = process.env.HARMONY_ANNOUNCED_IP ?? '192.168.1.111'
 
     const config: RuntimeConfig = {
       server: { host: serverHost, port: this.state.serverPort },

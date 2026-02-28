@@ -607,6 +607,11 @@ Everything below is done and committed.
 - Store init race fix: replays client's internal `_communities` Map for pre-mount auto-joined communities
 - Real-time presence updates: `presence` event listener in store + server broadcasts `presence.changed` during resync
 - `getMembersWithDisplayNames()` helper extracted for DRY member resolution (RDF store → display names + online status)
+- Message edit decryption: `handleChannelMessageUpdated` decrypts ciphertext before emitting `message.edited`
+- DM multi-server routing: non-community messages sent to ALL connected servers (was first-only, missing cross-server recipients)
+- Optimistic DM tracking: sender's store records outgoing DMs under peer DID key
+- Channel lifecycle events in store: `channel.created`, `channel.updated`, `channel.deleted` listeners added
+- **51-test cross-device E2E suite** (`harmony-flows.cjs`): messaging, edit/delete, reactions, channel CRUD, voice, DMs, typing, threads, pins, roles, presence — all green on Mac+Linux
 
 ---
 
@@ -641,16 +646,16 @@ Everything below is done and committed.
 
 ### Phase 2: Manual Verification on Dev
 
-| #   | Task                   | Notes                                                                            |
-| --- | ---------------------- | -------------------------------------------------------------------------------- |
-| 1   | Full onboarding flow   | Real browser                                                                     |
-| 2   | Voice with real media  | Two Electron clients, real mics                                                  |
-| 3   | Multi-user real-time   | Two machines, messages + typing + presence                                       |
-| 4   | Mobile                 | Capacitor APK on real Android device                                             |
-| 5   | Self-hosted Docker     | `docker compose up` → Electron → create community → restart → verify persistence |
-| 6   | Migration flow         | Real Discord server → import → verify                                            |
-| 7   | E2EE wire verification | Inspect WS frames, confirm encryption                                            |
-| 8   | Cloud billing          | Create community, hit free tier limits, verify enforcement                       |
+| # | Task | Status | Notes |
+| --- | --- | --- | --- |
+| 1 | Full onboarding flow | ⬜ | Real browser |
+| 2 | Voice with real media | ✅ | Two Electron clients (Mac+Linux), mute/unmute/leave verified |
+| 3 | Multi-user real-time | ✅ | 51 E2E tests: messages, edit/delete, reactions, channels, DMs, voice, threads, pins, roles, presence |
+| 4 | Mobile | ⬜ | Capacitor APK on real Android device |
+| 5 | Self-hosted Docker | ⬜ | `docker compose up` → Electron → create community → restart → verify persistence |
+| 6 | Migration flow | ⬜ | Real Discord server → import → verify |
+| 7 | E2EE wire verification | ⬜ | Inspect WS frames, confirm encryption |
+| 8 | Cloud billing | ⬜ | Create community, hit free tier limits, verify enforcement |
 
 ### Phase 3: Staging
 

@@ -323,17 +323,32 @@ export class MediasoupAdapter implements SFUAdapter {
   /**
    * Get all producers in a room (for a new joiner to consume).
    */
-  getProducers(roomId: string): Array<{ producerId: string; participantId: string; kind: string }> {
+  getProducers(roomId: string): Array<{ producerId: string; participantId: string; kind: string; mediaType?: string }> {
     const room = this.rooms.get(roomId)
     if (!room) return []
 
-    const result: Array<{ producerId: string; participantId: string; kind: string }> = []
+    const result: Array<{ producerId: string; participantId: string; kind: string; mediaType?: string }> = []
     for (const [participantId, producers] of room.producers) {
       for (const producer of producers) {
+        if (producer.closed) continue // skip closed producers
         result.push({ producerId: producer.id, participantId, kind: producer.kind })
       }
     }
     return result
+  }
+
+  removeProducer(roomId: string, producerId: string): void {
+    const room = this.rooms.get(roomId)
+    if (!room) return
+    for (const [participantId, producers] of room.producers) {
+      const idx = producers.findIndex((p) => p.id === producerId)
+      if (idx !== -1) {
+        const producer = producers[idx]
+        if (!producer.closed) producer.close()
+        producers.splice(idx, 1)
+        break
+      }
+    }
   }
 
   /**

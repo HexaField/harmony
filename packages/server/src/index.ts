@@ -2982,7 +2982,9 @@ export class HarmonyServer {
     }
     const payload = msg.payload as { roomId: string }
     try {
-      const producers = (this.sfuAdapter as any).getProducers(payload.roomId) ?? []
+      const allProducers = (this.sfuAdapter as any).getProducers(payload.roomId) ?? []
+      // Exclude requester's own producers — they shouldn't consume their own media
+      const producers = allProducers.filter((p: any) => p.participantId !== conn.did)
       this.sendToConnection(conn, {
         id: `vgp-${Date.now()}`,
         type: 'voice.get-producers.response',

@@ -1383,11 +1383,15 @@ export class HarmonyServer {
     if (!this.validateRequiredStrings(conn, payload, ['communityId', 'channelId', 'messageId'])) return
     if (!this.validateMembership(conn, payload.communityId)) return
 
-    this.broadcastToCommunity(payload.communityId, {
-      ...msg,
-      type: 'channel.message.updated',
-      sender: conn.did
-    })
+    this.broadcastToCommunity(
+      payload.communityId,
+      {
+        ...msg,
+        type: 'channel.message.updated',
+        sender: conn.did
+      },
+      conn.id
+    )
   }
 
   private async handleChannelDelete(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
@@ -1396,11 +1400,15 @@ export class HarmonyServer {
     if (!this.validateMembership(conn, payload.communityId)) return
 
     await this.messageStore.deleteMessage(payload.messageId)
-    this.broadcastToCommunity(payload.communityId, {
-      ...msg,
-      type: 'channel.message.deleted',
-      sender: conn.did
-    })
+    this.broadcastToCommunity(
+      payload.communityId,
+      {
+        ...msg,
+        type: 'channel.message.deleted',
+        sender: conn.did
+      },
+      conn.id
+    )
   }
 
   private async handleChannelTyping(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {

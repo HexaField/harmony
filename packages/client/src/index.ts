@@ -1796,6 +1796,9 @@ export class HarmonyClient {
       clock?: LamportClock
     }
 
+    // Skip own edits — already applied optimistically in editMessage()
+    if (msg.sender === this._identity?.did) return
+
     // Decrypt the edited content (same logic as handleChannelMessage)
     let newText = '[encrypted]'
     const groupId = `${payload.communityId}:${payload.channelId}`
@@ -1843,6 +1846,9 @@ export class HarmonyClient {
   }
 
   private handleChannelMessageDeleted(msg: ProtocolMessage): void {
+    // Skip own deletes — already applied optimistically in deleteMessage()
+    if (msg.sender === this._identity?.did) return
+
     const payload = msg.payload as { communityId: string; channelId: string; messageId: string }
     const key = `${payload.communityId}:${payload.channelId}`
     this._channelLogs.get(key)?.tombstone(payload.messageId)

@@ -433,16 +433,32 @@ class VoiceConnectionImpl implements VoiceConnection {
   // --- Public API ---
 
   async toggleAudio(): Promise<void> {
-    if (this.audioProducer) {
-      if (this.localAudioEnabled) {
-        this.audioProducer.pause()
-        this.signaling?.fireVoiceSignal?.('voice.mute', {})
-      } else {
-        this.audioProducer.resume()
+    if (this.localAudioEnabled) {
+      // Fully stop audio — close producer and stop tracks
+      if (this.audioProducer) {
+        this.audioProducer.close()
+        this.audioProducer = null
+      }
+      if (this.audioStream) {
+        for (const track of this.audioStream.getTracks()) track.stop()
+        this.audioStream = null
+      }
+      this.localAudioEnabled = false
+      this.signaling?.fireVoiceSignal?.('voice.mute', {})
+    } else {
+      // Re-acquire audio and produce
+      try {
+        this.audioStream = await this.mediaProvider.getUserMedia({ audio: true })
+        const audioTrack = this.audioStream.getAudioTracks()[0]
+        if (audioTrack && this.sendTransport) {
+          this.audioProducer = await this.sendTransport.produce({ track: audioTrack })
+        }
+        this.localAudioEnabled = true
         this.signaling?.fireVoiceSignal?.('voice.unmute', {})
+      } catch (err) {
+        console.error('[Voice] Failed to re-enable audio:', err)
       }
     }
-    this.localAudioEnabled = !this.localAudioEnabled
   }
 
   async toggleVideo(): Promise<void> {
@@ -558,6 +574,16 @@ class VoiceConnectionImpl implements VoiceConnection {
     this.localScreenSharing = false
     const participant = this.participants.find((p) => p.did === this.localDID)
     if (participant) participant.screenSharing = false
+  }
+
+  setDeafened(deafened: boolean): void {
+    for (const consumer of this.consumers.values()) {
+      if (deafened) {
+        consumer.pause()
+      } else {
+        consumer.resume()
+      }
+    }
   }
 
   /** Get the local audio stream (for audio level meters etc.) */

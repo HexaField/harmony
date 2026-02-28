@@ -54,6 +54,7 @@ export interface VoiceConnection {
   disableVideo(): Promise<void>
   startScreenShare(sourceId?: string): Promise<void>
   stopScreenShare(): Promise<void>
+  setDeafened(deafened: boolean): void
   getLocalVideoStream(): MediaStream | null
   getLocalAudioStream(): MediaStream | null
   getLocalScreenStream(): MediaStream | null

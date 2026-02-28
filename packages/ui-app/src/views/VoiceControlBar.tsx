@@ -126,14 +126,26 @@ export const VoiceControlBar: Component = () => {
     store.setVoiceConnectionState('idle')
   }
 
-  const handleToggleMute = () => {
-    store.setMuted(!store.isMuted())
+  const handleToggleMute = async () => {
+    try {
+      const conn = store.client()?.getVoiceConnection()
+      if (conn) await conn.toggleAudio()
+      store.setMuted(!store.isMuted())
+    } catch (err) {
+      console.error('[Voice] Mute toggle failed:', err)
+    }
   }
 
-  const handleToggleDeafen = () => {
+  const handleToggleDeafen = async () => {
     const newDeafened = !store.isDeafened()
     store.setDeafened(newDeafened)
-    if (newDeafened) store.setMuted(true)
+    if (newDeafened && !store.isMuted()) {
+      const conn = store.client()?.getVoiceConnection()
+      if (conn) await conn.toggleAudio()
+      store.setMuted(true)
+    }
+    const conn = store.client()?.getVoiceConnection()
+    conn?.setDeafened(newDeafened)
   }
 
   const handleToggleVideo = async () => {

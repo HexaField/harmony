@@ -2169,23 +2169,20 @@ export class HarmonyServer {
     })
   }
 
-  private async handleCommunityInfo(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as { communityId: string }
-    const info = await this.communityManager.getInfo(payload.communityId)
-
-    // Gather all members from quad store (imported members)
+  private async getMembersWithDisplayNames(
+    communityId: string
+  ): Promise<Array<{ did: string; displayName: string; status: string; linked: boolean }>> {
     const allMembers: Array<{ did: string; displayName: string; status: string; linked: boolean }> = []
     const memberQuads = await this.config.store.match({
       predicate: RDFPredicate.type,
       object: HarmonyType.Member,
-      graph: payload.communityId
+      graph: communityId
     })
     for (const mq of memberQuads) {
-      // Get the actual DID from the author quad
       const authorQuads = await this.config.store.match({
         subject: mq.subject,
         predicate: HarmonyPredicate.author,
-        graph: payload.communityId
+        graph: communityId
       })
       const memberDid = authorQuads.length
         ? typeof authorQuads[0].object === 'string'
@@ -2196,26 +2193,23 @@ export class HarmonyServer {
       const nameQuads = await this.config.store.match({
         subject: mq.subject,
         predicate: HarmonyPredicate.name,
-        graph: payload.communityId
+        graph: communityId
       })
       const displayName = nameQuads.length
         ? typeof nameQuads[0].object === 'string'
           ? nameQuads[0].object
           : nameQuads[0].object.value
         : memberDid
-      // Members with harmony:member: prefix are unlinked (imported from Discord, no real DID yet)
       const linked = !mq.subject.startsWith('harmony:member:')
       allMembers.push({ did: memberDid, displayName, status: 'offline', linked })
     }
 
     // Update online presence from connected members
-    const connIds = this.communitySubscriptions.get(payload.communityId)
-    const onlineDids = new Set<string>()
+    const connIds = this.communitySubscriptions.get(communityId)
     if (connIds) {
       for (const cid of connIds) {
         const c = this._connections.get(cid)
         if (c) {
-          onlineDids.add(c.did)
           const existing = allMembers.find((m) => m.did === c.did)
           if (existing) {
             existing.status = c.presence?.status ?? 'online'
@@ -2230,6 +2224,13 @@ export class HarmonyServer {
         }
       }
     }
+    return allMembers
+  }
+
+  private async handleCommunityInfo(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { communityId: string }
+    const info = await this.communityManager.getInfo(payload.communityId)
+    const allMembers = await this.getMembersWithDisplayNames(payload.communityId)
 
     this.sendToConnection(conn, {
       id: `info-${Date.now()}`,
@@ -2703,6 +2704,10 @@ export class HarmonyServer {
             this.communitySubscriptions.get(communityId)!.add(conn.id)
             // Send community data to client
             const channels = await this.communityManager.getChannels(communityId)
+            // Get community info for name
+            const info = await this.communityManager.getInfo(communityId)
+            const communityName = info?.name || ''
+
             this.sendToConnection(conn, {
               id: `resync-${Date.now()}-${communityId}`,
               type: 'community.auto-joined' as any,
@@ -2710,9 +2715,24 @@ export class HarmonyServer {
               sender: 'server',
               payload: {
                 communityId,
-                communityName: '',
+                communityName,
                 channels,
                 members
+              }
+            })
+
+            // Also send community.info.response so client populates members with display names
+            const allMembers = await this.getMembersWithDisplayNames(communityId)
+            this.sendToConnection(conn, {
+              id: `info-resync-${Date.now()}-${communityId}`,
+              type: 'community.info.response',
+              timestamp: new Date().toISOString(),
+              sender: 'server',
+              payload: {
+                communityId,
+                info: info ?? null,
+                members: allMembers,
+                onlineMembers: allMembers.filter((m) => m.status !== 'offline')
               }
             })
           }

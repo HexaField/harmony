@@ -361,10 +361,24 @@ describe('@harmony/voice', () => {
   })
 
   describe('Client Connection (additional)', () => {
+    const makeMockMedia = () =>
+      ({
+        getUserMedia: async () => ({
+          getTracks: () => [{ stop: () => {}, kind: 'video' }],
+          getAudioTracks: () => [{ stop: () => {}, kind: 'audio' }],
+          getVideoTracks: () => [{ stop: () => {}, kind: 'video' }]
+        }),
+        getDisplayMedia: async () => ({
+          getTracks: () => [{ stop: () => {}, kind: 'video', onended: null }],
+          getAudioTracks: () => [],
+          getVideoTracks: () => [{ stop: () => {}, kind: 'video', onended: null }]
+        })
+      }) as any
+
     it('MUST start/stop screen sharing', async () => {
       const room = await manager.createRoom('comm1', 'ch1')
       const token = await manager.generateJoinToken(room.id, 'did:key:alice', makeZCAPProof())
-      const voiceClient = new VoiceClient()
+      const voiceClient = new VoiceClient(makeMockMedia())
       const conn = await voiceClient.joinRoom(token)
 
       const self: VoiceParticipant = {
@@ -387,11 +401,7 @@ describe('@harmony/voice', () => {
     it('MUST enable/disable video via injectable media provider', async () => {
       const room = await manager.createRoom('comm1', 'ch1')
       const token = await manager.generateJoinToken(room.id, 'did:key:alice', makeZCAPProof())
-      const mockMedia: any = {
-        getUserMedia: async () => ({ getTracks: () => [{ stop: () => {} }] }),
-        getDisplayMedia: async () => ({ getTracks: () => [{ stop: () => {} }] })
-      }
-      const voiceClient = new VoiceClient(mockMedia)
+      const voiceClient = new VoiceClient(makeMockMedia())
       const conn = await voiceClient.joinRoom(token)
 
       await conn.enableVideo()
@@ -423,8 +433,16 @@ describe('@harmony/voice', () => {
       const token = await manager.generateJoinToken(room.id, 'did:key:alice', makeZCAPProof())
       const stopped: string[] = []
       const mockMedia: any = {
-        getUserMedia: async () => ({ getTracks: () => [{ stop: () => stopped.push('video') }] }),
-        getDisplayMedia: async () => ({ getTracks: () => [{ stop: () => stopped.push('screen') }] })
+        getUserMedia: async () => ({
+          getTracks: () => [{ stop: () => stopped.push('video') }],
+          getAudioTracks: () => [],
+          getVideoTracks: () => [{ stop: () => stopped.push('video'), kind: 'video' }]
+        }),
+        getDisplayMedia: async () => ({
+          getTracks: () => [{ stop: () => stopped.push('screen') }],
+          getAudioTracks: () => [],
+          getVideoTracks: () => [{ stop: () => stopped.push('screen'), kind: 'video', onended: null }]
+        })
       }
       const voiceClient = new VoiceClient(mockMedia)
       const conn = await voiceClient.joinRoom(token)

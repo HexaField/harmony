@@ -165,6 +165,29 @@ function registerIPC() {
 }
 
 app.whenReady().then(async () => {
+  // Grant media permissions (camera, microphone, screen capture)
+  const { session, systemPreferences } = await import('electron')
+
+  // macOS: proactively request TCC permissions
+  if (process.platform === 'darwin') {
+    try {
+      const micStatus = await systemPreferences.askForMediaAccess('microphone')
+      const camStatus = await systemPreferences.askForMediaAccess('camera')
+      console.log(`Media permissions — mic: ${micStatus}, camera: ${camStatus}`)
+    } catch (err) {
+      console.warn('Could not request media permissions:', err)
+    }
+  }
+
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+    const allowed = ['media', 'mediaKeySystem', 'display-capture', 'notifications']
+    callback(allowed.includes(permission))
+  })
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) => {
+    const allowed = ['media', 'mediaKeySystem', 'display-capture', 'notifications']
+    return allowed.includes(permission)
+  })
+
   // Start the server runtime
   try {
     await harmonyApp.launch()

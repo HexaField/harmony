@@ -19,7 +19,7 @@ import { VCService } from '@harmony/vc'
 import type { ZCAPService, Capability } from '@harmony/zcap'
 import type { MLSGroup, MLSProvider, DMChannel, DMProvider } from '@harmony/e2ee'
 import { SimplifiedMLSProvider, SimplifiedDMProvider } from '@harmony/e2ee'
-import type { VoiceClient, VoiceConnection } from '@harmony/voice'
+import type { VoiceClient, VoiceConnection, VoiceSignaling } from '@harmony/voice'
 import type { MediaClient, MediaRef, FileInput, DecryptedFile } from '@harmony/media'
 import type { ClientSearchIndex, SearchQuery, SearchResult } from '@harmony/search'
 import type { GovernanceEngine, ProposalDef, Proposal } from '@harmony/governance'
@@ -1197,9 +1197,65 @@ export class HarmonyClient {
 
   // ── Voice ──
 
+  /** Create a VoiceSignaling adapter that routes through our WebSocket */
+  private createVoiceSignaling(): VoiceSignaling {
+    const client = this
+    const signalHandlers = new Map<string, Set<(payload: Record<string, unknown>) => void>>()
+
+    // Listen for incoming voice signals from server
+    const incomingHandler = (payload: any) => {
+      const type = payload?.type as string
+      if (type && signalHandlers.has(type)) {
+        for (const handler of signalHandlers.get(type)!) {
+          handler(payload)
+        }
+      }
+    }
+    client.emitter.on('voice.signal', incomingHandler)
+
+    return {
+      async sendVoiceSignal(type: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+        return new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            cleanup()
+            reject(new Error(`Voice signal ${type} timed out`))
+          }, 10000)
+
+          const responseType = type + '.response'
+          const handler = (responsePayload: any) => {
+            cleanup()
+            if (responsePayload.error) {
+              reject(new Error(responsePayload.error))
+            } else {
+              resolve(responsePayload)
+            }
+          }
+
+          const cleanup = () => {
+            clearTimeout(timeout)
+            client.emitter.off(responseType, handler)
+          }
+
+          client.emitter.on(responseType, handler)
+          client.send(client.createMessage(type, payload))
+        })
+      },
+      onVoiceSignal(type: string, handler: (payload: Record<string, unknown>) => void): void {
+        if (!signalHandlers.has(type)) signalHandlers.set(type, new Set())
+        signalHandlers.get(type)!.add(handler)
+      },
+      offVoiceSignal(type: string, handler: (payload: Record<string, unknown>) => void): void {
+        signalHandlers.get(type)?.delete(handler)
+      }
+    }
+  }
+
   async joinVoice(channelId: string): Promise<VoiceConnection> {
     if (!this.voiceClient) throw new Error('Voice client not configured')
     if (!this.isConnected()) throw new Error('Not connected')
+
+    // Wire signaling before joining
+    this.voiceClient.setSignaling(this.createVoiceSignaling())
 
     // Request token from server
     this.send(this.createMessage('voice.token', { channelId }))
@@ -1246,6 +1302,10 @@ export class HarmonyClient {
 
   getVoiceConnection(): VoiceConnection | null {
     return this.voiceClient?.getActiveRoom() ?? null
+  }
+
+  getVoiceClient(): VoiceClient | null {
+    return this.voiceClient
   }
 
   // ── Media ──
@@ -1575,6 +1635,13 @@ export class HarmonyClient {
       case 'voice.produced':
       case 'voice.consumed':
       case 'voice.new-producer':
+      case 'voice.produce.response':
+      case 'voice.consume.response':
+      case 'voice.transport.connect.response':
+      case 'voice.transport.connect-recv.response':
+      case 'voice.transport.create-recv.response':
+      case 'voice.consumer.resume.response':
+      case 'voice.get-producers.response':
         this.emitter.emit(msg.type as string, msg.payload)
         break
       case 'voice.offer':

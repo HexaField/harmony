@@ -1502,7 +1502,7 @@ export function createAppStore(): AppStore {
     refreshServers()
   }
 
-  return {
+  const storeObj = {
     did,
     setDid,
     mnemonic,
@@ -1644,6 +1644,8 @@ export function createAppStore(): AppStore {
     biometricEnabled,
     setBiometricEnabled
   }
+  ;(globalThis as any).__HARMONY_STORE__ = storeObj
+  return storeObj
 }
 
 export const AppContext = createContext<AppStore>()

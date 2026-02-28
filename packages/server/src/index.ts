@@ -1163,6 +1163,12 @@ export class HarmonyServer {
       case 'voice.transport.connect':
         await this.handleVoiceTransportConnect(conn, msg)
         break
+      case 'voice.transport.connect-recv':
+        await this.handleVoiceTransportConnectRecv(conn, msg)
+        break
+      case 'voice.transport.create-recv':
+        await this.handleVoiceCreateRecvTransport(conn, msg)
+        break
       case 'voice.produce':
         await this.handleVoiceProduce(conn, msg)
         break
@@ -1171,6 +1177,9 @@ export class HarmonyServer {
         break
       case 'voice.consumer.resume':
         await this.handleVoiceConsumerResume(conn, msg)
+        break
+      case 'voice.get-producers':
+        await this.handleVoiceGetProducers(conn, msg)
         break
       case 'thread.create':
         await this.handleThreadCreate(conn, msg)
@@ -2701,7 +2710,8 @@ export class HarmonyServer {
   }
 
   private async handleVoiceTransportConnect(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as { channelId: string; dtlsParameters: unknown }
+    const payload = msg.payload as { channelId?: string; roomId?: string; dtlsParameters: unknown }
+    const roomId = payload.roomId ?? payload.channelId
     if (!this.sfuAdapter || !('connectTransport' in this.sfuAdapter)) {
       this.sendToConnection(conn, {
         id: `err-${Date.now()}`,
@@ -2713,13 +2723,13 @@ export class HarmonyServer {
       return
     }
     try {
-      await (this.sfuAdapter as any).connectTransport(payload.channelId, conn.did, payload.dtlsParameters)
+      await (this.sfuAdapter as any).connectTransport(roomId, conn.did, payload.dtlsParameters, 'send')
       this.sendToConnection(conn, {
         id: `vtc-${Date.now()}`,
-        type: 'voice.transport.connected' as ProtocolMessage['type'],
+        type: 'voice.transport.connect.response' as ProtocolMessage['type'],
         timestamp: new Date().toISOString(),
         sender: 'server',
-        payload: { channelId: payload.channelId }
+        payload: { roomId, connected: true }
       })
     } catch (err) {
       this.sendToConnection(conn, {
@@ -2733,7 +2743,13 @@ export class HarmonyServer {
   }
 
   private async handleVoiceProduce(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as { channelId: string; kind: 'audio' | 'video'; rtpParameters: unknown }
+    const payload = msg.payload as {
+      channelId?: string
+      roomId?: string
+      kind: 'audio' | 'video'
+      rtpParameters: unknown
+    }
+    const roomId = payload.roomId ?? payload.channelId
     if (!this.sfuAdapter || !('produce' in this.sfuAdapter)) {
       this.sendToConnection(conn, {
         id: `err-${Date.now()}`,
@@ -2745,22 +2761,18 @@ export class HarmonyServer {
       return
     }
     try {
-      const producerId = await (this.sfuAdapter as any).produce(
-        payload.channelId,
-        conn.did,
-        payload.rtpParameters,
-        payload.kind
-      )
+      const producerId = await (this.sfuAdapter as any).produce(roomId, conn.did, payload.rtpParameters, payload.kind)
       this.sendToConnection(conn, {
         id: `vp-${Date.now()}`,
-        type: 'voice.produced' as ProtocolMessage['type'],
+        type: 'voice.produce.response' as ProtocolMessage['type'],
         timestamp: new Date().toISOString(),
         sender: 'server',
-        payload: { channelId: payload.channelId, producerId, kind: payload.kind }
+        payload: { roomId, producerId, kind: payload.kind }
       })
 
       // Notify other participants about the new producer so they can consume
-      const participants = this.voiceChannelParticipants.get(payload.channelId)
+      const channelId = roomId ?? ''
+      const participants = this.voiceChannelParticipants.get(channelId)
       if (participants) {
         for (const connId of participants) {
           if (connId === conn.id) continue
@@ -2771,7 +2783,7 @@ export class HarmonyServer {
               type: 'voice.new-producer' as ProtocolMessage['type'],
               timestamp: new Date().toISOString(),
               sender: conn.did,
-              payload: { channelId: payload.channelId, producerId, kind: payload.kind, producerDid: conn.did }
+              payload: { roomId, producerId, kind: payload.kind, participantId: conn.did }
             })
           }
         }
@@ -2788,7 +2800,8 @@ export class HarmonyServer {
   }
 
   private async handleVoiceConsume(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as { channelId: string; producerId: string; rtpCapabilities: unknown }
+    const payload = msg.payload as { channelId?: string; roomId?: string; producerId: string; rtpCapabilities: unknown }
+    const roomId = payload.roomId ?? payload.channelId
     if (!this.sfuAdapter || !('consume' in this.sfuAdapter)) {
       this.sendToConnection(conn, {
         id: `err-${Date.now()}`,
@@ -2801,18 +2814,18 @@ export class HarmonyServer {
     }
     try {
       const result = await (this.sfuAdapter as any).consume(
-        payload.channelId,
+        roomId,
         conn.did,
         payload.producerId,
         payload.rtpCapabilities
       )
       this.sendToConnection(conn, {
         id: `vc-${Date.now()}`,
-        type: 'voice.consumed' as ProtocolMessage['type'],
+        type: 'voice.consume.response' as ProtocolMessage['type'],
         timestamp: new Date().toISOString(),
         sender: 'server',
         payload: {
-          channelId: payload.channelId,
+          roomId,
           consumerId: result.consumerId,
           producerId: result.producerId,
           kind: result.kind,
@@ -2830,9 +2843,108 @@ export class HarmonyServer {
     }
   }
 
-  private async handleVoiceConsumerResume(_conn: ServerConnection, _msg: ProtocolMessage): Promise<void> {
-    // Consumer resume is a client-side operation; server acknowledges
-    // In a full implementation, this would resume the server-side consumer
+  private async handleVoiceConsumerResume(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { consumerId: string }
+    // Acknowledge — consumer resume is handled client-side in mediasoup-client
+    this.sendToConnection(conn, {
+      id: `vcr-${Date.now()}`,
+      type: 'voice.consumer.resume.response',
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: { consumerId: payload.consumerId }
+    })
+  }
+
+  private async handleVoiceCreateRecvTransport(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    if (!this.sfuAdapter) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'NO_SFU', message: 'SFU adapter not configured' }
+      })
+      return
+    }
+    const payload = msg.payload as { roomId: string }
+    try {
+      const params = await (this.sfuAdapter as any).createRecvTransport(payload.roomId, conn.did)
+      this.sendToConnection(conn, {
+        id: `vtcr-${Date.now()}`,
+        type: 'voice.transport.create-recv.response',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: {
+          transportId: params.transportId,
+          iceParameters: params.iceParameters,
+          iceCandidates: params.iceCandidates,
+          dtlsParameters: params.dtlsParameters
+        }
+      })
+    } catch (err) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'RECV_TRANSPORT_FAILED', message: String(err) }
+      })
+    }
+  }
+
+  private async handleVoiceTransportConnectRecv(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    if (!this.sfuAdapter) return
+    const payload = msg.payload as { roomId: string; dtlsParameters: any }
+    try {
+      await (this.sfuAdapter as any).connectTransport(payload.roomId, conn.did, payload.dtlsParameters, 'recv')
+      this.sendToConnection(conn, {
+        id: `vtcr-${Date.now()}`,
+        type: 'voice.transport.connect-recv.response',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { connected: true }
+      })
+    } catch (err) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'RECV_CONNECT_FAILED', message: String(err) }
+      })
+    }
+  }
+
+  private async handleVoiceGetProducers(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    if (!this.sfuAdapter) {
+      this.sendToConnection(conn, {
+        id: `vgp-${Date.now()}`,
+        type: 'voice.get-producers.response',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { producers: [] }
+      })
+      return
+    }
+    const payload = msg.payload as { roomId: string }
+    try {
+      const producers = (this.sfuAdapter as any).getProducers(payload.roomId) ?? []
+      this.sendToConnection(conn, {
+        id: `vgp-${Date.now()}`,
+        type: 'voice.get-producers.response',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { producers }
+      })
+    } catch {
+      this.sendToConnection(conn, {
+        id: `vgp-${Date.now()}`,
+        type: 'voice.get-producers.response',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { producers: [] }
+      })
+    }
   }
 
   private async handleReconciliation(_conn: ServerConnection, msg: ProtocolMessage): Promise<void> {

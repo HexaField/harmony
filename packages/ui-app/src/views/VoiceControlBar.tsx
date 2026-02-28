@@ -27,6 +27,7 @@ export const VoiceControlBar: Component = () => {
 
   const handleToggleMute = () => {
     store.setMuted(!store.isMuted())
+    // TODO: wire to voice connection toggleAudio when ready
   }
 
   const handleToggleDeafen = () => {
@@ -35,12 +36,36 @@ export const VoiceControlBar: Component = () => {
     if (newDeafened) store.setMuted(true)
   }
 
-  const handleToggleVideo = () => {
-    store.setVideoEnabled(!store.isVideoEnabled())
+  const handleToggleVideo = async () => {
+    try {
+      const conn = store.client()?.getVoiceConnection()
+      if (!conn) return
+      if (store.isVideoEnabled()) {
+        await conn.disableVideo()
+        store.setVideoEnabled(false)
+      } else {
+        await conn.enableVideo()
+        store.setVideoEnabled(true)
+      }
+    } catch (err) {
+      console.error('[Voice] Camera toggle failed:', err)
+    }
   }
 
-  const handleToggleScreenShare = () => {
-    store.setScreenSharing(!store.isScreenSharing())
+  const handleToggleScreenShare = async () => {
+    try {
+      const conn = store.client()?.getVoiceConnection()
+      if (!conn) return
+      if (store.isScreenSharing()) {
+        await conn.stopScreenShare()
+        store.setScreenSharing(false)
+      } else {
+        await conn.startScreenShare()
+        store.setScreenSharing(true)
+      }
+    } catch (err) {
+      console.error('[Voice] Screen share toggle failed:', err)
+    }
   }
 
   return (

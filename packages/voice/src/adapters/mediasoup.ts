@@ -29,7 +29,8 @@ const MEDIA_CODECS = [
 
 interface RoomState {
   router: msTypes.Router
-  transports: Map<string, msTypes.WebRtcTransport>
+  sendTransports: Map<string, msTypes.WebRtcTransport>
+  recvTransports: Map<string, msTypes.WebRtcTransport>
   producers: Map<string, msTypes.Producer[]>
   consumers: Map<string, msTypes.Consumer[]>
   participants: Set<string>
@@ -88,7 +89,8 @@ export class MediasoupAdapter implements SFUAdapter {
 
     this.rooms.set(roomId, {
       router,
-      transports: new Map(),
+      sendTransports: new Map(),
+      recvTransports: new Map(),
       producers: new Map(),
       consumers: new Map(),
       participants: new Set()
@@ -107,7 +109,7 @@ export class MediasoupAdapter implements SFUAdapter {
       preferUdp: true
     })
 
-    room.transports.set(participantId, transport)
+    room.sendTransports.set(participantId, transport)
     room.participants.add(participantId)
 
     // Encode transport params into JWT
@@ -134,7 +136,10 @@ export class MediasoupAdapter implements SFUAdapter {
     if (!room) return
 
     // Close all transports (which closes producers/consumers)
-    for (const transport of room.transports.values()) {
+    for (const transport of room.sendTransports.values()) {
+      transport.close()
+    }
+    for (const transport of room.recvTransports.values()) {
       transport.close()
     }
 
@@ -152,10 +157,15 @@ export class MediasoupAdapter implements SFUAdapter {
     const room = this.rooms.get(roomId)
     if (!room) return
 
-    const transport = room.transports.get(participantId)
-    if (transport) {
-      transport.close()
-      room.transports.delete(participantId)
+    const sendTransport = room.sendTransports.get(participantId)
+    if (sendTransport) {
+      sendTransport.close()
+      room.sendTransports.delete(participantId)
+    }
+    const recvTransport = room.recvTransports.get(participantId)
+    if (recvTransport) {
+      recvTransport.close()
+      room.recvTransports.delete(participantId)
     }
 
     // Clean up producers and consumers
@@ -194,12 +204,18 @@ export class MediasoupAdapter implements SFUAdapter {
   /**
    * Connect a participant's transport (called after client-side ICE/DTLS).
    */
-  async connectTransport(roomId: string, participantId: string, dtlsParameters: msTypes.DtlsParameters): Promise<void> {
+  async connectTransport(
+    roomId: string,
+    participantId: string,
+    dtlsParameters: msTypes.DtlsParameters,
+    direction: 'send' | 'recv' = 'send'
+  ): Promise<void> {
     const room = this.rooms.get(roomId)
     if (!room) throw new Error('Room not found')
 
-    const transport = room.transports.get(participantId)
-    if (!transport) throw new Error('Transport not found')
+    const transportMap = direction === 'send' ? room.sendTransports : room.recvTransports
+    const transport = transportMap.get(participantId)
+    if (!transport) throw new Error(`${direction} transport not found`)
 
     await transport.connect({ dtlsParameters })
   }
@@ -216,8 +232,8 @@ export class MediasoupAdapter implements SFUAdapter {
     const room = this.rooms.get(roomId)
     if (!room) throw new Error('Room not found')
 
-    const transport = room.transports.get(participantId)
-    if (!transport) throw new Error('Transport not found')
+    const transport = room.sendTransports.get(participantId)
+    if (!transport) throw new Error('Send transport not found')
 
     const producer = await transport.produce({ kind, rtpParameters })
 
@@ -250,8 +266,8 @@ export class MediasoupAdapter implements SFUAdapter {
       throw new Error('Cannot consume this producer')
     }
 
-    const transport = room.transports.get(consumerParticipantId)
-    if (!transport) throw new Error('Consumer transport not found')
+    const transport = room.recvTransports.get(consumerParticipantId)
+    if (!transport) throw new Error('Consumer recv transport not found')
 
     const consumer = await transport.consume({
       producerId,
@@ -270,6 +286,54 @@ export class MediasoupAdapter implements SFUAdapter {
       kind: consumer.kind,
       rtpParameters: consumer.rtpParameters
     }
+  }
+
+  /**
+   * Create a recv transport for a participant (for consuming remote producers).
+   */
+  async createRecvTransport(
+    roomId: string,
+    participantId: string
+  ): Promise<{
+    transportId: string
+    iceParameters: msTypes.IceParameters
+    iceCandidates: msTypes.IceCandidate[]
+    dtlsParameters: msTypes.DtlsParameters
+  }> {
+    const room = this.rooms.get(roomId)
+    if (!room) throw new Error('Room not found')
+
+    const transport = await room.router.createWebRtcTransport({
+      listenIps: [this.webRtcListenIp],
+      enableUdp: true,
+      enableTcp: true,
+      preferUdp: true
+    })
+
+    room.recvTransports.set(participantId, transport)
+
+    return {
+      transportId: transport.id,
+      iceParameters: transport.iceParameters,
+      iceCandidates: transport.iceCandidates,
+      dtlsParameters: transport.dtlsParameters
+    }
+  }
+
+  /**
+   * Get all producers in a room (for a new joiner to consume).
+   */
+  getProducers(roomId: string): Array<{ producerId: string; participantId: string; kind: string }> {
+    const room = this.rooms.get(roomId)
+    if (!room) return []
+
+    const result: Array<{ producerId: string; participantId: string; kind: string }> = []
+    for (const [participantId, producers] of room.producers) {
+      for (const producer of producers) {
+        result.push({ producerId: producer.id, participantId, kind: producer.kind })
+      }
+    }
+    return result
   }
 
   /**

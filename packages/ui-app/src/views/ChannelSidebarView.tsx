@@ -153,8 +153,8 @@ export const ChannelSidebarView: Component = () => {
                 if (client) {
                   try {
                     await client.joinVoice(channel.id)
-                  } catch {
-                    /* voice client not configured — update store directly */
+                  } catch (err) {
+                    console.error('[Voice] joinVoice failed:', err)
                     store.setVoiceChannelId(channel.id)
                   }
                 } else {

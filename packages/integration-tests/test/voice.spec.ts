@@ -40,7 +40,22 @@ const clients: HarmonyClient[] = []
 
 async function makeClient(): Promise<HarmonyClient> {
   const auth = await createIdentityAndVP()
-  const voiceClient = new VoiceClient()
+  const voiceClient = new VoiceClient({
+    mediaProvider: {
+      getUserMedia: async () =>
+        ({
+          getTracks: () => [{ stop: () => {}, kind: 'video' }],
+          getAudioTracks: () => [{ stop: () => {}, kind: 'audio' }],
+          getVideoTracks: () => [{ stop: () => {}, kind: 'video' }]
+        }) as unknown as MediaStream,
+      getDisplayMedia: async () =>
+        ({
+          getTracks: () => [{ stop: () => {}, kind: 'video', onended: null }],
+          getAudioTracks: () => [],
+          getVideoTracks: () => [{ stop: () => {}, kind: 'video', onended: null }]
+        }) as unknown as MediaStream
+    }
+  })
   const client = new HarmonyClient({
     wsFactory: (url: string) => new WebSocket(url) as any,
     voiceClient

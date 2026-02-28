@@ -1,4 +1,4 @@
-import { For, Show, createSignal, createEffect, on, type Component } from 'solid-js'
+import { For, Show, createSignal, createEffect, on, lazy, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { MarkdownRenderer } from '../components/Shared/index.js'
 import { RelativeTime } from '../components/Shared/index.js'
@@ -6,6 +6,7 @@ import { addToast } from '../components/Shared/index.js'
 import { t } from '../i18n/strings.js'
 import type { MessageData, AttachmentData } from '../types.js'
 import { pseudonymFromDid } from '../utils/pseudonym.js'
+import { VideoGrid } from '../components/Voice/VideoGrid.tsx'
 
 const COMMON_EMOJI = ['👍', '❤️', '😂', '🎉', '😮', '😢', '🔥', '👀']
 const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25MB
@@ -392,6 +393,11 @@ export const MessageArea: Component = () => {
           <img src={lightboxSrc()!} class="max-w-[90vw] max-h-[90vh] object-contain rounded-lg" alt="" />
         </div>
       </Show>
+      {/* Video grid for voice channel */}
+      <Show when={store.voiceChannelId()}>
+        <VideoGrid />
+      </Show>
+
       {/* Messages */}
       <div class="flex-1 overflow-y-auto px-4 py-2">
         <Show when={loadingHistory()}>

@@ -1647,10 +1647,8 @@ export function createAppStore(): AppStore {
     biometricEnabled,
     setBiometricEnabled
   }
-  // Expose store for debugging in development only
-  if (import.meta.env.DEV) {
-    ;(globalThis as any).__HARMONY_STORE__ = storeObj
-  }
+  // Expose store globally for testing/debugging
+  ;(globalThis as any).__HARMONY_STORE__ = storeObj
   return storeObj
 }
 

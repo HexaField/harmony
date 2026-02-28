@@ -806,6 +806,9 @@ export class HarmonyServer {
                   sender: 'server',
                   payload: { authenticated: true, did: result.did }
                 })
+
+                // Re-sync communities the user belongs to
+                this.resyncMemberships(conn).catch(() => {})
               } else {
                 this.sendRaw(ws, {
                   id: 'auth-fail',
@@ -2670,6 +2673,52 @@ export class HarmonyServer {
       if (connId === conn.id) continue // don't echo back to sender
       const c = this._connections.get(connId)
       if (c) this.sendToConnection(c, speakingMsg)
+    }
+  }
+
+  /** After auth, resync communities the user belongs to */
+  private async resyncMemberships(conn: ServerConnection): Promise<void> {
+    try {
+      // Query the store for all communities
+      const communityQuads = await this.store.match({
+        predicate: RDFPredicate.type,
+        object: HarmonyType.Community
+      })
+      const communityIds = communityQuads.map((q) => q.subject)
+      console.log(`[resync] Found ${communityIds.length} communities in store for ${conn.did?.substring(0, 30)}`)
+
+      for (const communityId of communityIds) {
+        try {
+          const members = await this.communityManager.getMembers(communityId)
+          const isMember = members.some((m) => m.did === conn.did)
+          if (isMember && !conn.communities.includes(communityId)) {
+            console.log(`[resync] ${conn.did?.substring(0, 30)} is member of ${communityId.substring(0, 40)}`)
+            conn.communities.push(communityId)
+            if (!this.communitySubscriptions.has(communityId)) {
+              this.communitySubscriptions.set(communityId, new Set())
+            }
+            this.communitySubscriptions.get(communityId)!.add(conn.id)
+            // Send community data to client
+            const channels = await this.communityManager.getChannels(communityId)
+            this.sendToConnection(conn, {
+              id: `resync-${Date.now()}-${communityId}`,
+              type: 'community.auto-joined' as any,
+              timestamp: new Date().toISOString(),
+              sender: 'server',
+              payload: {
+                communityId,
+                communityName: '',
+                channels,
+                members
+              }
+            })
+          }
+        } catch {
+          // Community data might be corrupt
+        }
+      }
+    } catch (e) {
+      console.error('[resync] Failed:', e)
     }
   }
 

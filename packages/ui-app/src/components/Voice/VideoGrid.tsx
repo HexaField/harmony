@@ -7,7 +7,9 @@ interface VideoParticipant {
   displayName: string
   audioTrack?: MediaStreamTrack
   videoTrack?: MediaStreamTrack
+  videoStream?: MediaStream
   screenTrack?: MediaStreamTrack
+  screenStream?: MediaStream
   speaking: boolean
   muted: boolean
 }
@@ -17,10 +19,24 @@ function VideoTile(props: { participant: VideoParticipant; isLocal?: boolean; is
 
   createEffect(() => {
     const track = props.isScreen ? props.participant.screenTrack : props.participant.videoTrack
+    const stream = props.isScreen ? props.participant.screenStream : props.participant.videoStream
     if (videoRef && track && track.readyState === 'live') {
-      const stream = new MediaStream([track])
-      videoRef.srcObject = stream
-      videoRef.play().catch(() => {})
+      // Use original stream if available (avoids clone issues), otherwise wrap track
+      videoRef.srcObject = stream && stream.active ? stream : new MediaStream([track])
+      const attemptPlay = () => {
+        videoRef?.play().catch(() => {})
+      }
+      attemptPlay()
+      // If track is muted (TCC delay), retry on unmute
+      if (track.muted) {
+        const onUnmute = () => {
+          attemptPlay()
+          track.removeEventListener('unmute', onUnmute)
+        }
+        track.addEventListener('unmute', onUnmute)
+      }
+      // Also retry after a short delay (some browsers need time)
+      setTimeout(attemptPlay, 500)
     } else if (videoRef) {
       videoRef.srcObject = null
     }
@@ -132,8 +148,10 @@ export function VideoGrid(): JSX.Element {
       did: localDID,
       displayName: localName,
       videoTrack: isVideoEnabled ? videoStream?.getVideoTracks()[0] : undefined,
+      videoStream: isVideoEnabled ? (videoStream ?? undefined) : undefined,
       audioTrack: audioStream?.getAudioTracks()[0],
       screenTrack: connection.localScreenSharing ? screenStream?.getVideoTracks()[0] : undefined,
+      screenStream: connection.localScreenSharing ? (screenStream ?? undefined) : undefined,
       speaking: false,
       muted: isMuted
     }

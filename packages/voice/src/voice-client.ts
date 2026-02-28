@@ -573,6 +573,50 @@ class VoiceConnectionImpl implements VoiceConnection {
     return this.screenStream
   }
 
+  /** Debug introspection of internal state */
+  debugState(): Record<string, unknown> {
+    const consumers: Array<Record<string, unknown>> = []
+    if (this.consumers) {
+      for (const [id, c] of this.consumers) {
+        consumers.push({
+          id,
+          kind: c.kind,
+          paused: c.paused,
+          closed: c.closed,
+          producerId: c.producerId,
+          track: c.track ? { state: c.track.readyState, kind: c.track.kind, muted: c.track.muted } : null
+        })
+      }
+    }
+    return {
+      localAudioEnabled: this.localAudioEnabled,
+      localVideoEnabled: this.localVideoEnabled,
+      localScreenSharing: this.localScreenSharing,
+      hasAudioProducer: !!this.audioProducer,
+      audioProducerPaused: this.audioProducer?.paused,
+      hasVideoProducer: !!this.videoProducer,
+      videoProducerPaused: this.videoProducer?.paused,
+      hasScreenProducer: !!this.screenProducer,
+      sendTransport: this.sendTransport
+        ? {
+            id: this.sendTransport.id,
+            closed: this.sendTransport.closed,
+            connectionState: this.sendTransport.connectionState
+          }
+        : null,
+      recvTransport: this.recvTransport
+        ? {
+            id: this.recvTransport.id,
+            closed: this.recvTransport.closed,
+            connectionState: this.recvTransport.connectionState
+          }
+        : null,
+      deviceLoaded: this.msDevice?.loaded,
+      consumers,
+      participantCount: this.participants.length
+    }
+  }
+
   /** Register callback for remote media tracks */
   onTrack(cb: MediaStreamTrackCb): void {
     this.trackCbs.push(cb)

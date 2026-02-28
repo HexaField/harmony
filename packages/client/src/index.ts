@@ -1198,9 +1198,13 @@ export class HarmonyClient {
   // ── Voice ──
 
   /** Create a VoiceSignaling adapter that routes through our WebSocket */
-  private createVoiceSignaling(): VoiceSignaling {
+  private createVoiceSignaling(communityId?: string): VoiceSignaling {
     const client = this
     const signalHandlers = new Map<string, Set<(payload: Record<string, unknown>) => void>>()
+
+    // Helper to inject communityId for routing
+    const routedPayload = (payload: Record<string, unknown>): Record<string, unknown> =>
+      communityId ? { ...payload, communityId } : payload
 
     // Listen for incoming voice signals from server
     const incomingHandler = (payload: any) => {
@@ -1237,11 +1241,11 @@ export class HarmonyClient {
           }
 
           client.emitter.on(responseType, handler)
-          client.send(client.createMessage(type, payload))
+          client.send(client.createMessage(type, routedPayload(payload)))
         })
       },
       fireVoiceSignal(type: string, payload: Record<string, unknown>): void {
-        client.send(client.createMessage(type, payload))
+        client.send(client.createMessage(type, routedPayload(payload)))
       },
       onVoiceSignal(type: string, handler: (payload: Record<string, unknown>) => void): void {
         if (!signalHandlers.has(type)) signalHandlers.set(type, new Set())
@@ -1260,11 +1264,15 @@ export class HarmonyClient {
     if (!this.voiceClient) throw new Error('Voice client not configured')
     if (!this.isConnected()) throw new Error('Not connected')
 
-    // Wire signaling before joining
-    this.voiceClient.setSignaling(this.createVoiceSignaling())
+    // Extract communityId from channelId for proper server routing
+    // channelId format: "community:XXX:channel:YYY"
+    const communityId = channelId.match(/^(community:[^:]+)/)?.[1] ?? undefined
+
+    // Wire signaling before joining — route to the community's server
+    this.voiceClient.setSignaling(this.createVoiceSignaling(communityId))
 
     // Request token from server
-    this.send(this.createMessage('voice.token', { channelId }))
+    this.send(this.createMessage('voice.token', { channelId, communityId }))
 
     // Wait for voice.token.response
     const tokenResponse = await new Promise<{ token: string; mode: string }>((resolve, reject) => {
@@ -1289,7 +1297,7 @@ export class HarmonyClient {
     })
 
     // Send voice.join for participant tracking
-    this.send(this.createMessage('voice.join', { channelId }))
+    this.send(this.createMessage('voice.join', { channelId, communityId }))
 
     const connection = await this.voiceClient.joinRoom(tokenResponse.token)
     this.emitter.emit('voice.joined', { channelId, mode: tokenResponse.mode })

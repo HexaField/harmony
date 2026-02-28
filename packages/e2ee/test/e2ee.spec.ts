@@ -172,11 +172,7 @@ describe('@harmony/e2ee', () => {
       const { welcome } = await group.addMember(bobKP)
 
       // Bob joins via welcome
-      const bobGroup = await mlsProvider.joinFromWelcome(welcome, {
-        publicKey: bobEnc.publicKey,
-        secretKey: bobSig.secretKey,
-        type: 'Ed25519'
-      })
+      const bobGroup = await mlsProvider.joinFromWelcome(welcome, bobEnc, bobSig)
 
       // Creator encrypts a message
       const plaintext = new TextEncoder().encode('hello bob!')
@@ -201,11 +197,7 @@ describe('@harmony/e2ee', () => {
         encryptionKeyPair: bobEnc
       })
       const { welcome } = await group.addMember(bobKP)
-      const bobGroup = await mlsProvider.joinFromWelcome(welcome, {
-        publicKey: bobEnc.publicKey,
-        secretKey: bobSig.secretKey,
-        type: 'Ed25519'
-      })
+      const bobGroup = await mlsProvider.joinFromWelcome(welcome, bobEnc, bobSig)
 
       // Bob tries to decrypt pre-join message — should fail (epoch mismatch)
       await expect(bobGroup.decrypt(preJoinCt)).rejects.toThrow()
@@ -254,11 +246,7 @@ describe('@harmony/e2ee', () => {
         encryptionKeyPair: bobEnc
       })
       const { welcome } = await group.addMember(bobKP)
-      const bobGroup = await mlsProvider.joinFromWelcome(welcome, {
-        publicKey: bobEnc.publicKey,
-        secretKey: bobSig.secretKey,
-        type: 'Ed25519'
-      })
+      const bobGroup = await mlsProvider.joinFromWelcome(welcome, bobEnc, bobSig)
 
       // Remove Bob
       await group.removeMember(1)
@@ -307,11 +295,7 @@ describe('@harmony/e2ee', () => {
         encryptionKeyPair: bobEnc
       })
       const { welcome } = await group.addMember(bobKP)
-      const bobGroup = await mlsProvider.joinFromWelcome(welcome, {
-        publicKey: bobEnc.publicKey,
-        secretKey: bobSig.secretKey,
-        type: 'Ed25519'
-      })
+      const bobGroup = await mlsProvider.joinFromWelcome(welcome, bobEnc, bobSig)
 
       const ct = await group.encrypt(new TextEncoder().encode('shared message'))
       const result = await bobGroup.decrypt(ct)
@@ -442,11 +426,7 @@ describe('@harmony/e2ee', () => {
       })
       const { welcome } = await group.addMember(bobKP2) // epoch 3
 
-      const bobGroup2 = await mlsProvider.joinFromWelcome(welcome, {
-        publicKey: bobEnc2.publicKey,
-        secretKey: bobSig2.secretKey,
-        type: 'Ed25519'
-      })
+      const bobGroup2 = await mlsProvider.joinFromWelcome(welcome, bobEnc2, bobSig2)
 
       const ct = await group.encrypt(new TextEncoder().encode('welcome back'))
       const result = await bobGroup2.decrypt(ct)
@@ -791,11 +771,7 @@ describe('@harmony/e2ee', () => {
         encryptionKeyPair: bobEnc
       })
       const { welcome, commit: _commit } = await group.addMember(bobKP)
-      const bobGroup = await mlsProvider.joinFromWelcome(welcome, {
-        publicKey: bobEnc.publicKey,
-        secretKey: bobSig.secretKey,
-        type: 'Ed25519'
-      })
+      const bobGroup = await mlsProvider.joinFromWelcome(welcome, bobEnc, bobSig)
       // Bob processes the add commit
       // Creator updates keys and Bob processes it
       const updateCommit = await group.updateKeys()

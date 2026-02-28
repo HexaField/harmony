@@ -398,19 +398,26 @@ export class SimplifiedMLSProvider implements MLSProvider {
     }
   }
 
-  async joinFromWelcome(welcome: Welcome, keyPair: KeyPair): Promise<MLSGroup> {
+  async joinFromWelcome(welcome: Welcome, encryptionKeyPair: KeyPair, signingKeyPair: KeyPair): Promise<MLSGroup> {
     // Decrypt the welcome using the initKey (which is the encryption public key used as HKDF input)
-    const welcomeKey = hkdf(sha256, keyPair.publicKey, undefined, new TextEncoder().encode('harmony-mls-welcome'), 32)
+    const welcomeKey = hkdf(
+      sha256,
+      encryptionKeyPair.publicKey,
+      undefined,
+      new TextEncoder().encode('harmony-mls-welcome'),
+      32
+    )
     const nonce = welcome.encryptedGroupState.slice(0, 24)
     const encrypted = welcome.encryptedGroupState.slice(24)
     const cipher = xchacha20poly1305(welcomeKey, nonce)
     const stateBytes = cipher.decrypt(encrypted)
     const state = deserializeGroupState(stateBytes)
 
-    // Set the joining member's own keys
-    state.mySigningKey = keyPair.secretKey
-    state.myEncryptionKey = keyPair.secretKey // In simplified version, reuse
-    state.mySigningPublicKey = keyPair.publicKey
+    // Set the joining member's own keys (encryption = X25519, signing = Ed25519)
+    state.mySigningKey = signingKeyPair.secretKey
+    state.myEncryptionKey = encryptionKeyPair.secretKey
+    state.mySigningPublicKey = signingKeyPair.publicKey
+    state.myEncryptionPublicKey = encryptionKeyPair.publicKey
 
     return new SimplifiedMLSGroup(state)
   }

@@ -381,7 +381,7 @@ describe('E2EE Unit - MLS Provider', () => {
     const { welcome, commit: _commit } = await aliceGroup.addMember(bobKP)
 
     // Bob joins from welcome
-    const bobGroup = await mlsProvider.joinFromWelcome(welcome, bobEncKP)
+    const bobGroup = await mlsProvider.joinFromWelcome(welcome, bobEncKP, bobSigKP)
 
     expect(bobGroup.memberCount()).toBe(2)
     expect(aliceGroup.memberCount()).toBe(2)

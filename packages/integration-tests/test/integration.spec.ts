@@ -312,7 +312,7 @@ describe('5. E2EE Message Round-Trip', () => {
     const { welcome } = await group.addMember(bobKeyPackage)
 
     // Bob joins from welcome
-    const bobGroup = await mlsProvider.joinFromWelcome(welcome, encKpB)
+    const bobGroup = await mlsProvider.joinFromWelcome(welcome, encKpB, kpB)
 
     // Alice encrypts
     const plaintext = new TextEncoder().encode('Hello Bob, this is encrypted!')

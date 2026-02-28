@@ -87,7 +87,7 @@ export interface MLSProvider {
 
   createKeyPackage(params: { did: string; signingKeyPair: KeyPair; encryptionKeyPair: KeyPair }): Promise<KeyPackage>
 
-  joinFromWelcome(welcome: Welcome, keyPair: KeyPair): Promise<MLSGroup>
+  joinFromWelcome(welcome: Welcome, encryptionKeyPair: KeyPair, signingKeyPair: KeyPair): Promise<MLSGroup>
 
   loadGroup(state: Uint8Array, keyPair: KeyPair): Promise<MLSGroup>
 }

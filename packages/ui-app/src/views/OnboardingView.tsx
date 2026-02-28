@@ -4,9 +4,17 @@ import { t } from '../i18n/strings.js'
 import { createCryptoProvider } from '@harmony/crypto'
 import { IdentityManager } from '@harmony/identity'
 import { openExternal } from '../utils/open-external.js'
+import { MigrationWizard } from './MigrationWizard.tsx'
 // HarmonyClient is now managed by the store
 
-type OnboardingStep = 'welcome' | 'mnemonic-display' | 'mnemonic-confirm' | 'recover' | 'setup'
+type OnboardingStep =
+  | 'welcome'
+  | 'mnemonic-display'
+  | 'mnemonic-confirm'
+  | 'recover'
+  | 'setup'
+  | 'discord-migrate'
+  | 'portal-login'
 
 const STORAGE_PREFIX = 'harmony:'
 
@@ -58,6 +66,8 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
   const [setupName, setSetupName] = createSignal('')
   const [discordLinked, setDiscordLinked] = createSignal(false)
   const [discordUsername, setDiscordUsername] = createSignal('')
+  const [portalUrl, setPortalUrl] = createSignal((import.meta as any).env?.VITE_PORTAL_URL || 'http://localhost:3000')
+  const [portalWaiting, setPortalWaiting] = createSignal(false)
 
   // Confirmation quiz state
   const [quizIndices, setQuizIndices] = createSignal<number[]>([])
@@ -363,7 +373,7 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
           <div class="text-center">
             <div class="text-5xl mb-4">🎵</div>
             <h1 class="text-3xl font-bold mb-2">{t('ONBOARDING_WELCOME')}</h1>
-            <p class="text-[var(--text-secondary)] mb-8">{t('COMMUNITY_CREATE')}</p>
+            <p class="text-[var(--text-secondary)] mb-8">{t('ONBOARDING_WELCOME_DESC')}</p>
             <div class="space-y-3">
               <button
                 onClick={handleCreate}
@@ -377,6 +387,33 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
                 class="w-full py-3 px-6 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)] font-semibold transition-colors"
               >
                 {t('ONBOARDING_RECOVER_IDENTITY')}
+              </button>
+
+              {/* Divider */}
+              <div class="flex items-center gap-3 py-2">
+                <div class="flex-1 h-px bg-[var(--border)]" />
+                <span class="text-xs text-[var(--text-muted)] uppercase">{t('ONBOARDING_OR_DIVIDER')}</span>
+                <div class="flex-1 h-px bg-[var(--border)]" />
+              </div>
+
+              {/* Discord migration */}
+              <button
+                onClick={() => setStep('discord-migrate')}
+                class="w-full py-3 px-6 rounded-lg bg-[#5865F2]/20 hover:bg-[#5865F2]/30 border border-[#5865F2]/30 text-[var(--text-primary)] font-semibold transition-colors flex items-center justify-center gap-2"
+              >
+                <svg width="20" height="15" viewBox="0 0 71 55" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M60.1 4.9A58.5 58.5 0 0 0 45.4.2a.2.2 0 0 0-.2.1 40.7 40.7 0 0 0-1.8 3.7 54 54 0 0 0-16.2 0A26.4 26.4 0 0 0 25.4.3a.2.2 0 0 0-.2-.1A58.3 58.3 0 0 0 10.5 5a.2.2 0 0 0-.1 0A60.1 60.1 0 0 0 .1 45a.2.2 0 0 0 .1.2 58.8 58.8 0 0 0 17.7 9 .2.2 0 0 0 .3-.1 42 42 0 0 0 3.6-5.9.2.2 0 0 0-.1-.3 38.8 38.8 0 0 1-5.5-2.6.2.2 0 0 1 0-.4c.4-.3.7-.6 1.1-.8a.2.2 0 0 1 .2 0 42 42 0 0 0 35.6 0 .2.2 0 0 1 .2 0l1 .9a.2.2 0 0 1 0 .3 36.4 36.4 0 0 1-5.5 2.6.2.2 0 0 0-.1.4 47.1 47.1 0 0 0 3.6 5.8.2.2 0 0 0 .3.1A58.6 58.6 0 0 0 70.5 45a.2.2 0 0 0 .1-.2 59.7 59.7 0 0 0-10.5-40z M23.7 36.8c-3.5 0-6.3-3.2-6.3-7s2.8-7 6.3-7 6.4 3.2 6.3 7-2.8 7-6.3 7zm23.2 0c-3.5 0-6.3-3.2-6.3-7s2.8-7 6.3-7 6.4 3.2 6.3 7-2.8 7-6.3 7z" />
+                </svg>
+                {t('ONBOARDING_IMPORT_DISCORD')}
+              </button>
+
+              {/* Portal sign-in */}
+              <button
+                onClick={() => setStep('portal-login')}
+                class="w-full py-3 px-6 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--border)] border border-[var(--border)] text-[var(--text-primary)] font-semibold transition-colors flex items-center justify-center gap-2"
+              >
+                <span>🌐</span>
+                {t('ONBOARDING_SIGN_IN_PORTAL')}
               </button>
             </div>
             <Show when={error()}>
@@ -719,6 +756,194 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
             >
               {t('SETUP_SKIP')}
             </button>
+          </div>
+        </Show>
+
+        {/* Discord Migration — creates identity then opens migration wizard */}
+        <Show when={step() === 'discord-migrate'}>
+          <div>
+            <h2 class="text-2xl font-bold mb-2 text-center">{t('ONBOARDING_IMPORT_DISCORD')}</h2>
+            <p class="text-[var(--text-secondary)] text-sm mb-6 text-center">{t('ONBOARDING_IMPORT_DISCORD_DESC')}</p>
+
+            <div class="space-y-4">
+              {/* Step 1: Create identity first (if not already created) */}
+              <Show when={!store.isOnboarded()}>
+                <div class="bg-[var(--bg-input)] border border-[var(--border)] rounded-lg p-4">
+                  <p class="text-sm text-[var(--text-secondary)] mb-3">
+                    First, we'll create your Harmony identity. This is your sovereign key — no email, no password, no
+                    server controls it.
+                  </p>
+                  <button
+                    onClick={async () => {
+                      await handleCreate()
+                      // After create, skip straight to mnemonic display — migration continues after setup
+                    }}
+                    disabled={loading()}
+                    class="w-full py-3 px-6 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-semibold transition-colors disabled:opacity-50"
+                  >
+                    {loading() ? t('LOADING') : t('ONBOARDING_CREATE_IDENTITY')}
+                  </button>
+                </div>
+              </Show>
+
+              {/* If identity exists, show migration wizard inline */}
+              <Show when={store.isOnboarded()}>
+                <MigrationWizard initialStep="hosting" onClose={() => setStep('welcome')} />
+              </Show>
+
+              <Show when={error()}>
+                <p class="text-[var(--error)] text-sm">{error()}</p>
+              </Show>
+
+              <button
+                onClick={() => {
+                  setStep('welcome')
+                  setError('')
+                }}
+                class="w-full text-center text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+              >
+                {t('ONBOARDING_BACK')}
+              </button>
+            </div>
+          </div>
+        </Show>
+
+        {/* Portal Sign-in — authenticate via portal OAuth, recover identity */}
+        <Show when={step() === 'portal-login'}>
+          <div>
+            <h2 class="text-2xl font-bold mb-2 text-center">{t('ONBOARDING_SIGN_IN_PORTAL')}</h2>
+            <p class="text-[var(--text-secondary)] text-sm mb-6 text-center">{t('ONBOARDING_SIGN_IN_PORTAL_DESC')}</p>
+
+            <div class="space-y-4">
+              {/* Portal URL input */}
+              <div>
+                <label class="text-sm text-[var(--text-muted)] block mb-1">Portal URL</label>
+                <input
+                  type="url"
+                  value={portalUrl()}
+                  onInput={(e) => setPortalUrl(e.currentTarget.value)}
+                  class="w-full p-3 rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm"
+                  placeholder="https://portal.harmony.chat"
+                />
+              </div>
+
+              {/* Sign in with Discord through portal */}
+              <button
+                onClick={async () => {
+                  setLoading(true)
+                  setError('')
+                  try {
+                    // First create a temporary identity
+                    const crypto = createCryptoProvider()
+                    const idMgr = new IdentityManager(crypto)
+                    const result = await idMgr.create()
+
+                    // Store it temporarily
+                    pendingIdentity = result.identity
+                    pendingKeyPair = result.keyPair
+                    pendingMnemonic = result.mnemonic
+
+                    // Initiate Discord OAuth via portal
+                    const url = portalUrl().replace(/\/$/, '')
+                    const res = await fetch(`${url}/api/identity/link`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        provider: 'discord',
+                        userDID: result.identity.did,
+                        source: (window as any).__HARMONY_DESKTOP__ ? 'desktop' : 'browser'
+                      })
+                    })
+
+                    if (!res.ok) {
+                      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+                      throw new Error(err.error || `Portal error: ${res.status}`)
+                    }
+
+                    const data = await res.json()
+                    if (data.redirectUrl) {
+                      openExternal(data.redirectUrl)
+                      // Start polling for completion
+                      startOAuthPolling(url, result.identity.did)
+                      setPortalWaiting(true)
+
+                      // Commit identity to store so OAuth completion handler works
+                      store.setDid(result.identity.did)
+                      store.setMnemonic(result.mnemonic)
+                      store.setIdentity(result.identity)
+                      store.setKeyPair(result.keyPair)
+                    }
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : String(err))
+                  } finally {
+                    setLoading(false)
+                  }
+                }}
+                disabled={loading() || portalWaiting()}
+                class="w-full py-3 px-6 rounded-lg bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <Show when={!portalWaiting()} fallback={<span>Waiting for Discord login...</span>}>
+                  <svg
+                    width="20"
+                    height="15"
+                    viewBox="0 0 71 55"
+                    fill="currentColor"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M60.1 4.9A58.5 58.5 0 0 0 45.4.2a.2.2 0 0 0-.2.1 40.7 40.7 0 0 0-1.8 3.7 54 54 0 0 0-16.2 0A26.4 26.4 0 0 0 25.4.3a.2.2 0 0 0-.2-.1A58.3 58.3 0 0 0 10.5 5a.2.2 0 0 0-.1 0A60.1 60.1 0 0 0 .1 45a.2.2 0 0 0 .1.2 58.8 58.8 0 0 0 17.7 9 .2.2 0 0 0 .3-.1 42 42 0 0 0 3.6-5.9.2.2 0 0 0-.1-.3 38.8 38.8 0 0 1-5.5-2.6.2.2 0 0 1 0-.4c.4-.3.7-.6 1.1-.8a.2.2 0 0 1 .2 0 42 42 0 0 0 35.6 0 .2.2 0 0 1 .2 0l1 .9a.2.2 0 0 1 0 .3 36.4 36.4 0 0 1-5.5 2.6.2.2 0 0 0-.1.4 47.1 47.1 0 0 0 3.6 5.8.2.2 0 0 0 .3.1A58.6 58.6 0 0 0 70.5 45a.2.2 0 0 0 .1-.2 59.7 59.7 0 0 0-10.5-40z M23.7 36.8c-3.5 0-6.3-3.2-6.3-7s2.8-7 6.3-7 6.4 3.2 6.3 7-2.8 7-6.3 7zm23.2 0c-3.5 0-6.3-3.2-6.3-7s2.8-7 6.3-7 6.4 3.2 6.3 7-2.8 7-6.3 7z" />
+                  </svg>
+                  Sign in with Discord
+                </Show>
+              </button>
+
+              {/* Show success when Discord linked */}
+              <Show when={discordLinked()}>
+                <div class="bg-green-500/10 border border-green-500/30 rounded-lg p-4 text-center">
+                  <p class="text-green-400 font-semibold">
+                    ✓ {t('SETUP_DISCORD_LINKED', { username: discordUsername() })}
+                  </p>
+                  <p class="text-sm text-[var(--text-muted)] mt-2">Your identity has been created and linked.</p>
+                  <button
+                    onClick={() => {
+                      setGeneratedMnemonic(pendingMnemonic)
+                      setStep('mnemonic-display')
+                    }}
+                    class="mt-3 py-2 px-6 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-semibold transition-colors"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </Show>
+
+              {/* Recover with mnemonic */}
+              <div class="flex items-center gap-3 py-1">
+                <div class="flex-1 h-px bg-[var(--border)]" />
+                <span class="text-xs text-[var(--text-muted)] uppercase">{t('ONBOARDING_OR_DIVIDER')}</span>
+                <div class="flex-1 h-px bg-[var(--border)]" />
+              </div>
+
+              <button
+                onClick={() => setStep('recover')}
+                class="w-full py-2 px-6 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)] text-sm font-semibold transition-colors"
+              >
+                {t('ONBOARDING_RECOVER_IDENTITY')}
+              </button>
+
+              <Show when={error()}>
+                <p class="text-[var(--error)] text-sm text-center">{error()}</p>
+              </Show>
+
+              <button
+                onClick={() => {
+                  setStep('welcome')
+                  setError('')
+                  setPortalWaiting(false)
+                }}
+                class="w-full text-center text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+              >
+                {t('ONBOARDING_BACK')}
+              </button>
+            </div>
           </div>
         </Show>
       </div>

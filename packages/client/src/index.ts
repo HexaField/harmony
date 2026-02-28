@@ -204,6 +204,7 @@ export class HarmonyClient {
 
   // Multi-server connection map
   private _servers: Map<string, ServerConnection> = new Map()
+  private _pendingConnects: Map<string, Promise<void>> = new Map()
 
   // Community → server URL mapping
   private _communityServerMap: Map<string, string> = new Map()
@@ -321,6 +322,29 @@ export class HarmonyClient {
     keyPair: KeyPair
     vp?: VerifiablePresentation
   }): Promise<void> {
+    // If already connected to this server, resolve immediately
+    const existing = this._servers.get(params.serverUrl)
+    if (existing?.connected) return
+
+    // If a connection is already in progress, return that promise
+    const pending = this._pendingConnects.get(params.serverUrl)
+    if (pending) return pending
+
+    const connectPromise = this._connectImpl(params)
+    this._pendingConnects.set(params.serverUrl, connectPromise)
+    try {
+      await connectPromise
+    } finally {
+      this._pendingConnects.delete(params.serverUrl)
+    }
+  }
+
+  private async _connectImpl(params: {
+    serverUrl: string
+    identity: Identity
+    keyPair: KeyPair
+    vp?: VerifiablePresentation
+  }): Promise<void> {
     this._serverUrl = params.serverUrl
     this._identity = params.identity
     this._keyPair = params.keyPair
@@ -355,7 +379,8 @@ export class HarmonyClient {
           holderKeyPair: this._keyPair,
           credentials: [vc]
         })
-      } catch {
+      } catch (vpErr) {
+        console.error('[Harmony] VP creation failed:', vpErr)
         // VP creation failed — will connect without auth
       }
     }
@@ -395,6 +420,8 @@ export class HarmonyClient {
             payload: this._vp
           }
           ws.send(serialise(authMsg))
+        } else {
+          console.warn('[Harmony] No VP available for auth — connecting without auth')
         }
       }
 
@@ -665,12 +692,17 @@ export class HarmonyClient {
     })
   }
 
-  async joinCommunity(communityId: string): Promise<CommunityState> {
+  async joinCommunity(communityId: string, serverUrl?: string): Promise<CommunityState> {
     const msg = this.createMessage('community.join', {
       communityId,
       membershipVC: {} as VerifiableCredential,
       encryptionPublicKey: new Uint8Array(32)
     })
+
+    // If serverUrl specified, pre-map so send() routes correctly
+    if (serverUrl) {
+      this._communityServerMap.set(communityId, serverUrl)
+    }
     this.send(msg)
 
     return new Promise((resolve) => {

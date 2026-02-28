@@ -337,7 +337,7 @@ export function createAppStore(): AppStore {
   const [mnemonic, _setMnemonic] = createSignal('')
   const [displayName, _setDisplayName] = createSignal('')
   const [identity, setIdentity] = createSignal<Identity | null>(null)
-  const [keyPair, setKeyPair] = createSignal<KeyPair | null>(null)
+  const [keyPair, _setKeyPair] = createSignal<KeyPair | null>(null)
   const [_client, _setClient] = createSignal<HarmonyClient | null>(null)
   const [servers, setServers] = createSignal<ServerConnection[]>([])
 
@@ -718,10 +718,23 @@ export function createAppStore(): AppStore {
   const persistIdentity = () => {
     const d = did()
     const m = mnemonic()
+    const kp = keyPair()
     if (d && m) {
-      persistToBackend({
+      const patch: Record<string, unknown> = {
         identity: { did: d, mnemonic: m, displayName: displayName(), createdAt: '' }
-      })
+      }
+      if (kp) {
+        // Persist keyPair as base64 for serialization
+        patch.keyPair = {
+          publicKey:
+            typeof kp.publicKey === 'string'
+              ? kp.publicKey
+              : btoa(String.fromCharCode(...new Uint8Array(kp.publicKey))),
+          secretKey:
+            typeof kp.secretKey === 'string' ? kp.secretKey : btoa(String.fromCharCode(...new Uint8Array(kp.secretKey)))
+        }
+      }
+      persistToBackend(patch)
     }
   }
   const setDid = (d: string) => {
@@ -740,6 +753,10 @@ export function createAppStore(): AppStore {
     if (myDid) {
       setMembers(members().map((m) => (m.did === myDid ? { ...m, displayName: n || pseudonymFromDid(myDid) } : m)))
     }
+  }
+  const setKeyPair = (k: KeyPair | null) => {
+    _setKeyPair(k)
+    persistIdentity()
   }
   const setTheme = (t: 'dark' | 'light') => {
     _setTheme(t)

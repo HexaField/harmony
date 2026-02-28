@@ -91,15 +91,21 @@ export const EmptyStateView: Component = () => {
         store.setConnectionState('reconnecting')
         await Promise.race([
           client.connect({ serverUrl, identity, keyPair }),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 5000))
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 15000))
         ])
         store.refreshServers()
         store.setConnectionState('connected')
         store.setConnectionError('')
+      } else {
       }
 
       if (communityId) {
-        const communityState = await client.joinCommunity(communityId)
+        const communityState = await Promise.race([
+          client.joinCommunity(communityId, serverUrl),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Join timed out — the server may not have this community')), 15000)
+          )
+        ])
 
         const communityInfo: CommunityInfo = {
           id: communityState.id,

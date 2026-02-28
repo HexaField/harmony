@@ -973,7 +973,8 @@ export class HarmonyServer {
       }
 
       return { authenticated: true, did: vp.holder }
-    } catch {
+    } catch (err) {
+      console.error('[Harmony] Auth error:', err)
       return { authenticated: false, error: 'Authentication error' }
     }
   }

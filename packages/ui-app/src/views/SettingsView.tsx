@@ -494,12 +494,12 @@ export const SettingsView: Component = () => {
             <div>
               <label class="text-sm text-[var(--text-muted)]">{t('SETTINGS_REPO')}</label>
               <a
-                href="https://github.com/nicoth-in/harmony"
+                href="https://github.com/hexafield/harmony"
                 target="_blank"
                 rel="noopener"
                 class="text-sm mt-1 block text-[var(--accent)] hover:underline"
               >
-                github.com/nicoth-in/harmony
+                github.com/hexafield/harmony
               </a>
             </div>
           </div>

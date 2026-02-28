@@ -2,9 +2,14 @@
 export const en = {
   // Onboarding
   ONBOARDING_WELCOME: 'Welcome to Harmony',
+  ONBOARDING_WELCOME_DESC: 'Sovereign communication for communities that own their space.',
   ONBOARDING_CREATE_IDENTITY: 'Create your identity',
   ONBOARDING_RECOVER_IDENTITY: 'Recover existing identity',
-  ONBOARDING_IMPORT_DISCORD: 'Migrate a Community',
+  ONBOARDING_IMPORT_DISCORD: 'Migrate from Discord',
+  ONBOARDING_IMPORT_DISCORD_DESC: 'Bring your server, channels, messages, and members to Harmony.',
+  ONBOARDING_SIGN_IN_PORTAL: 'Sign in via Portal',
+  ONBOARDING_SIGN_IN_PORTAL_DESC: 'Already have a Harmony account? Sign in through the portal.',
+  ONBOARDING_OR_DIVIDER: 'or',
   ONBOARDING_MNEMONIC_BACKUP: 'Save your recovery phrase',
   ONBOARDING_MNEMONIC_CONFIRM: 'Confirm your recovery phrase',
   ONBOARDING_LINK_DISCORD: 'Link your Discord account',

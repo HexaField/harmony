@@ -147,7 +147,7 @@ _Single source of truth for all features, voice/video detail, and release planni
 | Channel sidebar                             | ➖  | ➖     | ✅  |
 | Channel pins (pin/unpin/list, 50-pin limit) | ✅  | ✅     | ✅  |
 | Server list bar (multi-community)           | ➖  | ➖     | ✅  |
-| Member sidebar (with presence)              | ➖  | ➖     | ✅  |
+| Member sidebar (with presence)              | ✅  | ✅     | ✅  |
 | Join via invite code                        | ✅  | ✅     | ✅  |
 | Create community modal                      | ➖  | ➖     | ✅  |
 | Create channel modal                        | ➖  | ➖     | ✅  |
@@ -201,10 +201,10 @@ _Single source of truth for all features, voice/video detail, and release planni
 | V3 | Recv transport (SFU→client) | ✅ | Separate recv transport, consumer creation |
 | V4 | Audio Producer (mic → SFU) | ✅ | `getUserMedia({audio})` → `transport.produce()` |
 | V5 | Audio Consumer (SFU → speaker) | ✅ | Remote audio consumers attached to `<audio>` elements |
-| V6 | Mute/unmute (pause/resume producer) | ✅ | `fireVoiceSignal` sends `voice.mute`/`voice.unmute` |
-| V7 | Deafen (pause all consumers locally) | 📋 | UI toggle exists, not wired to consumer pause |
-| V8 | Speaking indicators (audio level) | 📋 | Signal exists, no AudioWorklet/analyser |
-| V9 | Voice activity detection (VAD) | ⬜ | AudioWorklet or AnalyserNode for push-to-talk alt |
+| V6 | Mute/unmute (full stop/restart) | ✅ | `closeProducer()` stops tracks + notifies server; unmute re-acquires mic + new producer |
+| V7 | Deafen (pause all consumers locally) | ✅ | `setDeafened()` pauses/resumes all consumers; deafen auto-mutes |
+| V8 | Speaking indicators (audio level) | ✅ | AnalyserNode 100ms poll → `voice.speaking` signal → cross-device sync via store |
+| V9 | Voice activity detection (VAD) | ✅ | AnalyserNode-based speaking detection, threshold-based |
 | V10 | Echo cancellation / noise suppression | ✅ | getUserMedia constraints enabled |
 | V11 | Automatic gain control | ✅ | getUserMedia constraint enabled |
 | V12 | Audio device selection (input) | ⬜ | `enumerateDevices()` → UI picker → restart producer |
@@ -252,23 +252,26 @@ _Single source of truth for all features, voice/video detail, and release planni
 | W6 | Client-side signaling dispatch | ✅ | `sendVoiceSignal` (req/res) + `fireVoiceSignal` (fire-and-forget) |
 | W7 | voice.join / voice.leave broadcast | ✅ | Server broadcasts to channel participants |
 | W8 | Participant state sync on join | ✅ | `voice.new-producer` broadcast to existing participants |
+| W9 | `voice.producer-closed` signaling | ✅ | Server broadcasts when client closes producer; remote consumers cleaned up |
+| W10 | `voice.speaking` relay | ✅ | Server relays speaking state changes to all other channel participants |
+| W11 | Self-consumption prevention | ✅ | `getProducers` excludes requester's own; skip closed producers |
 
 #### Voice UI Components
 
-| #   | Feature                              | Status | Notes                                               |
-| --- | ------------------------------------ | ------ | --------------------------------------------------- |
-| U1  | VoiceControlBar — mute wired         | ✅     | `toggleAudio` pauses/resumes producer               |
-| U2  | VoiceControlBar — deafen wired       | 📋     | Toggle exists, needs consumer integration           |
-| U3  | VoiceControlBar — camera wired       | ✅     | Calls `enableVideo()`/`disableVideo()`              |
-| U4  | VoiceControlBar — screen share wired | ✅     | Calls `startScreenShare()` with desktopCapturer     |
-| U5  | VoiceControlBar — disconnect wired   | ✅     | Calls `leaveVoice`, transport cleanup               |
-| U6  | VideoGrid — render real streams      | ✅     | Reactive SolidJS, local + remote MediaStreams       |
-| U7  | ScreenShareView — render real stream | ✅     | Large view + presenter info                         |
-| U8  | VoiceChannelPanel — participant list | 🔧     | Shows avatars, participant count unreliable         |
-| U9  | VoiceManager integration             | ⬜     | `voice.ts` VoiceManager not used anywhere           |
-| U10 | Voice settings panel                 | ⬜     | Device selection, volume, noise suppression toggles |
-| U11 | Voice connection quality indicator   | ⬜     | ICE connection state → UI                           |
-| U12 | Participant audio indicators         | ⬜     | Green ring when speaking (from AudioWorklet)        |
+| # | Feature | Status | Notes |
+| --- | --- | --- | --- |
+| U1 | VoiceControlBar — mute wired | ✅ | `toggleAudio` → `closeProducer()` on mute, re-acquire + new producer on unmute |
+| U2 | VoiceControlBar — deafen wired | ✅ | `setDeafened()` pauses/resumes all consumers + auto-mutes |
+| U3 | VoiceControlBar — camera wired | ✅ | Calls `enableVideo()`/`disableVideo()` |
+| U4 | VoiceControlBar — screen share wired | ✅ | Calls `startScreenShare()` with desktopCapturer |
+| U5 | VoiceControlBar — disconnect wired | ✅ | Calls `leaveVoice`, transport cleanup |
+| U6 | VideoGrid — render real streams | ✅ | Reactive SolidJS, local + remote MediaStreams |
+| U7 | ScreenShareView — render real stream | ✅ | Large view + presenter info |
+| U8 | VoiceChannelPanel — participant list | 🔧 | Shows avatars, participant count unreliable |
+| U9 | VoiceManager integration | ⬜ | `voice.ts` VoiceManager not used anywhere |
+| U10 | Voice settings panel | ⬜ | Device selection, volume, noise suppression toggles |
+| U11 | Voice connection quality indicator | ⬜ | ICE connection state → UI |
+| U12 | Participant audio indicators | ✅ | Speaking state synced cross-device via `voice.speaking` events |
 
 #### E2EE for Voice/Video
 
@@ -593,6 +596,17 @@ Everything below is done and committed.
 - Voice signaling fix: `onVoiceSignal` emitter listener for server-push messages
 - Electron builds: macOS arm64 DMG (195MB) + Linux x64 AppImage (192MB)
 - Merged FEATURES.md back into ROADMAP.md (single source of truth)
+- Robust media lifecycle: mute/video/screenshare all fully stop (close producer + stop tracks) not just pause
+- `voice.producer-closed` server broadcast: remote clients tear down matching consumers + fire `onTrackRemoved`
+- Self-consumption prevention: `getProducers` excludes requester's own producers, skips closed producers
+- Cross-device speaking indicators: AnalyserNode → `voice.speaking` signal → server relay → remote store
+- Deafen wired: `setDeafened()` pauses/resumes all consumers, auto-mutes on deafen
+- `onTrackRemoved` callback: VideoGrid removes tiles when producer-closed arrives
+- VideoGrid callback leak fixed: registered once per session via `callbacksRegistered` flag
+- Full member list sync on reconnect: `community.info.response` with display names sent during `resyncMemberships`
+- Store init race fix: replays client's internal `_communities` Map for pre-mount auto-joined communities
+- Real-time presence updates: `presence` event listener in store + server broadcasts `presence.changed` during resync
+- `getMembersWithDisplayNames()` helper extracted for DRY member resolution (RDF store → display names + online status)
 
 ---
 

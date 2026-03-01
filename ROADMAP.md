@@ -1,6 +1,6 @@
 # Harmony — Roadmap & Feature Status
 
-_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-01 15:50 AEDT._
+_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-01 16:35 AEDT._
 
 ---
 
@@ -10,7 +10,7 @@ _Single source of truth for all features, voice/video detail, and release planni
 | ------------------ | ---------------------------------------- |
 | Packages           | 36                                       |
 | Estimated LOC      | ~32,000+                                 |
-| Vitest passing     | 2,565                                    |
+| Vitest passing     | 2,533                                    |
 | Vitest skipped     | 10                                       |
 | Vitest todo        | 114                                      |
 | Playwright passing | 79 (31 cross-topology + 48 discord-mock) |
@@ -662,6 +662,13 @@ Everything below is done and committed.
 - `PENTEST-RESULTS.md` deleted — all 11 findings remediated, tracked in security section
 - App.tsx: silent `catch {}` blocks now log `console.error("[App] init error:")` — was hiding identity init failures
 - Superseded CDP test scripts deleted; voice + MLS scripts kept in `tests/scripts/`
+- Beta polish B7–B12 completed:
+  - B7: Document title `(count) Harmony` + canvas favicon badge (red circle with count, caps at 99+)
+  - B8: Full emoji picker (7 categories, 350+ emoji, search, shortcode resolution `:fire:` → 🔥)
+  - B9/B10/B12: Already implemented (confirmed via visual verification)
+  - B11: Member profile popover on author name click (avatar, DID, status, role badges)
+- 11 new unit tests (emoji shortcode resolution, document title logic, unread count aggregation)
+- All B1–B12 items visually verified in browser via CDP automation
 
 ---
 
@@ -683,13 +690,13 @@ Everything below is done and committed.
 ### 🟡 Should Fix
 
 | # | Item | Status | Notes |
-| --- | --- | --- | --- |
-| B7 | Favicon badge / document title unread | ⬜ | Browser tab gives no indication of unread messages. |
-| B8 | Emoji picker for message compose | ⬜ | Reaction picker exists but no emoji picker for composing. `:emoji:` shortcodes don't resolve. |
-| B9 | Italic/spoiler/link not rendered | ⬜ | MarkdownRenderer identifies them but MessageArea only renders code-block, code, bold, heading as markup. |
-| B10 | Image lightbox on click | ⬜ | `lightboxSrc` signal + overlay exist but not wired to attachment clicks in messages. |
-| B11 | Member profile popover | ⬜ | `MemberCard`/`MemberProfile` components exist but clicking member name in messages doesn't trigger them. |
-| B12 | Channel topic in header | ⬜ | Channel topic/description not displayed in channel header area. |
+| --- | --- | --- | --- | --- |
+| B7 | Favicon badge / document title unread | ✅ | `(count) Harmony` in document title + canvas-drawn favicon badge with red circle + count. |
+| B8 | Emoji picker for message compose | ✅ | Full categorized picker (7 categories, 350+ emoji), search, shortcode resolution (`:fire:` → 🔥). |
+| B9 | Italic/spoiler/link not rendered | ✅ | Already implemented in B3 MarkdownRenderer rewrite — all inline types render in MessageArea. |
+| B10 | Image lightbox on click | ✅ | Already wired — `setLightboxSrc(attachment.url)` on image click, full-screen overlay with dismiss. |
+| B11 | Member profile popover | ✅ | Click author name → popover with avatar, DID, status, role badges. Dismiss on click-outside. |
+| B12 | Channel topic in header | ✅ | Already implemented in MainLayout — shows ` | topic` next to channel name when present. |
 
 ---
 

@@ -6,6 +6,7 @@ import { addToast } from '../components/Shared/index.js'
 import { t } from '../i18n/strings.js'
 import type { MessageData, AttachmentData } from '../types.js'
 import { pseudonymFromDid } from '../utils/pseudonym.js'
+import { EmojiPicker, resolveShortcodes } from '../components/EmojiPicker.tsx'
 import { VideoGrid } from '../components/Voice/VideoGrid.tsx'
 
 const COMMON_EMOJI = ['👍', '❤️', '😂', '🎉', '😮', '😢', '🔥', '👀']
@@ -46,6 +47,8 @@ export const MessageArea: Component = () => {
   const [threadName, setThreadName] = createSignal('')
   const [contextMenu, setContextMenu] = createSignal<{ msgId: string; x: number; y: number } | null>(null)
   const [replyTo, setReplyTo] = createSignal<{ id: string; content: string; authorName: string } | null>(null)
+  const [composeEmojiOpen, setComposeEmojiOpen] = createSignal(false)
+  const [memberPopover, setMemberPopover] = createSignal<{ did: string; x: number; y: number } | null>(null)
   let messagesEndRef: HTMLDivElement | undefined
   let typingTimeout: ReturnType<typeof setTimeout> | undefined
   let fileInputRef: HTMLInputElement | undefined
@@ -194,9 +197,10 @@ export const MessageArea: Component = () => {
   }
 
   async function sendMessage() {
-    const text = inputContent().trim()
+    const raw = inputContent().trim()
+    if (!raw && pendingAttachments().length === 0) return
+    const text = resolveShortcodes(raw)
     const attachments = pendingAttachments()
-    if (!text && attachments.length === 0) return
     const client = store.client()
     const communityId = store.activeCommunityId()
     const channelId = store.activeChannelId()
@@ -393,6 +397,84 @@ export const MessageArea: Component = () => {
           <img src={lightboxSrc()!} class="max-w-[90vw] max-h-[90vh] object-contain rounded-lg" alt="" />
         </div>
       </Show>
+
+      {/* Member popover */}
+      <Show when={memberPopover()}>
+        {(popover) => {
+          const member = () => store.members().find((m) => m.did === popover().did)
+          const memberName = () => member()?.displayName || pseudonymFromDid(popover().did)
+          const memberInitials = () => memberName().substring(0, 2).toUpperCase()
+          const statusColor = () => {
+            switch (member()?.status) {
+              case 'online':
+                return 'bg-green-500'
+              case 'idle':
+                return 'bg-yellow-500'
+              case 'dnd':
+                return 'bg-red-500'
+              default:
+                return 'bg-gray-500'
+            }
+          }
+          const statusLabel = () => {
+            switch (member()?.status) {
+              case 'online':
+                return 'Online'
+              case 'idle':
+                return 'Idle'
+              case 'dnd':
+                return 'Do Not Disturb'
+              default:
+                return 'Offline'
+            }
+          }
+          return (
+            <div class="fixed inset-0 z-50" onClick={() => setMemberPopover(null)}>
+              <div
+                class="absolute w-64 bg-[var(--bg-surface)] rounded-lg border border-[var(--border)] shadow-xl overflow-hidden"
+                style={{
+                  left: `${Math.min(popover().x, window.innerWidth - 280)}px`,
+                  top: `${Math.min(popover().y + 8, window.innerHeight - 200)}px`
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Banner */}
+                <div class="h-16 bg-[var(--accent)]" />
+                {/* Avatar */}
+                <div class="relative px-4 -mt-8">
+                  <div class="w-16 h-16 rounded-full bg-[var(--accent)] border-4 border-[var(--bg-surface)] flex items-center justify-center text-white font-bold text-lg">
+                    {memberInitials()}
+                  </div>
+                  <div
+                    class={`absolute bottom-0 left-14 w-4 h-4 rounded-full border-2 border-[var(--bg-surface)] ${statusColor()}`}
+                  />
+                </div>
+                {/* Info */}
+                <div class="px-4 pt-2 pb-3">
+                  <div class="font-bold text-[var(--text-primary)]">{memberName()}</div>
+                  <div class="text-xs text-[var(--text-muted)] mt-0.5 truncate">{popover().did}</div>
+                  <div class="flex items-center gap-1.5 mt-2">
+                    <div class={`w-2 h-2 rounded-full ${statusColor()}`} />
+                    <span class="text-xs text-[var(--text-muted)]">{statusLabel()}</span>
+                  </div>
+                  <Show when={member()?.roles && member()!.roles.length > 0}>
+                    <div class="flex flex-wrap gap-1 mt-2">
+                      <For each={member()!.roles}>
+                        {(role) => (
+                          <span class="px-1.5 py-0.5 text-[10px] rounded bg-[var(--accent)]/20 text-[var(--accent)]">
+                            {role}
+                          </span>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                </div>
+              </div>
+            </div>
+          )
+        }}
+      </Show>
+
       {/* Video grid for voice channel */}
       <Show when={store.voiceChannelId()}>
         <VideoGrid />
@@ -472,7 +554,15 @@ export const MessageArea: Component = () => {
                 <div class="ml-3 min-w-0 flex-1">
                   <Show when={!isGrouped()}>
                     <div class="flex items-baseline gap-2">
-                      <span class="font-semibold text-sm hover:underline cursor-pointer">{resolvedName()}</span>
+                      <span
+                        class="font-semibold text-sm hover:underline cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setMemberPopover({ did: msg.authorDid, x: e.clientX, y: e.clientY })
+                        }}
+                      >
+                        {resolvedName()}
+                      </span>
                       <span class="text-xs text-[var(--text-muted)]">{timeInfo.display}</span>
                       <Show when={msg.edited}>
                         <span class="text-xs text-[var(--text-muted)] italic">{t('MESSAGE_EDITED_LABEL')}</span>
@@ -947,6 +1037,21 @@ export const MessageArea: Component = () => {
             placeholder={t('MESSAGE_PLACEHOLDER', { channel: activeChannel()?.name ?? 'channel' })}
             style={{ 'max-height': '120px' }}
           />
+          <div class="relative shrink-0">
+            <button
+              class="p-3 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              title="Emoji"
+              onClick={() => setComposeEmojiOpen(!composeEmojiOpen())}
+            >
+              😀
+            </button>
+            <Show when={composeEmojiOpen()}>
+              <EmojiPicker
+                onSelect={(emoji) => setInputContent((prev) => prev + emoji)}
+                onClose={() => setComposeEmojiOpen(false)}
+              />
+            </Show>
+          </div>
           <button
             onClick={sendMessage}
             disabled={!inputContent().trim() && pendingAttachments().length === 0}

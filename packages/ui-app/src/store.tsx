@@ -1,4 +1,4 @@
-import { createSignal, createContext, useContext } from 'solid-js'
+import { createSignal, createContext, useContext, createEffect, on } from 'solid-js'
 import { pseudonymFromDid } from './utils/pseudonym.js'
 import type { KeyPair } from '@harmony/crypto'
 import type { Identity } from '@harmony/identity'
@@ -81,6 +81,7 @@ export interface AppStore {
   // Channel unreads
   channelUnreadCount: (channelId: string) => number
   markChannelRead: (channelId: string) => void
+  totalUnreadCount: () => number
 
   // Members
   members: () => MemberData[]
@@ -330,6 +331,51 @@ export function restoreIdentityFromLocalStorage(): {
     /* corrupt data / SSR */
   }
   return null
+}
+
+// Favicon badge — draws a red circle with count on a canvas and sets it as favicon
+let _faviconCanvas: HTMLCanvasElement | null = null
+function updateFaviconBadge(count: number): void {
+  if (typeof document === 'undefined') return
+  let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
+  if (!link) {
+    link = document.createElement('link')
+    link.rel = 'icon'
+    document.head.appendChild(link)
+  }
+  if (count <= 0) {
+    // Reset to default
+    link.href = '/favicon.ico'
+    return
+  }
+  if (!_faviconCanvas) {
+    _faviconCanvas = document.createElement('canvas')
+    _faviconCanvas.width = 32
+    _faviconCanvas.height = 32
+  }
+  const ctx = _faviconCanvas.getContext('2d')
+  if (!ctx) return
+  // Draw base icon (simple H)
+  ctx.clearRect(0, 0, 32, 32)
+  ctx.fillStyle = '#5865F2'
+  ctx.beginPath()
+  ctx.roundRect(0, 0, 32, 32, 6)
+  ctx.fill()
+  ctx.fillStyle = '#ffffff'
+  ctx.font = 'bold 20px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('H', 16, 17)
+  // Draw badge
+  const badgeText = count > 99 ? '99+' : String(count)
+  ctx.fillStyle = '#ED4245'
+  ctx.beginPath()
+  ctx.arc(24, 8, 10, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = '#ffffff'
+  ctx.font = `bold ${count > 99 ? 8 : 10}px sans-serif`
+  ctx.fillText(badgeText, 24, 9)
+  link.href = _faviconCanvas.toDataURL('image/png')
 }
 
 export function createAppStore(): AppStore {
@@ -825,6 +871,28 @@ export function createAppStore(): AppStore {
       setChannelUnreadVersion((v) => v + 1)
     }
   }
+
+  const totalUnreadCount = (): number => {
+    channelUnreadVersion() // track reactivity
+    let total = 0
+    for (const count of channelUnreadMap.values()) total += count
+    // Include DM unreads
+    for (const convo of dmConversations()) total += convo.unreadCount
+    return total
+  }
+
+  // Update document title with unread count
+  createEffect(
+    on(
+      () => totalUnreadCount(),
+      (count) => {
+        const base = 'Harmony'
+        document.title = count > 0 ? `(${count}) ${base}` : base
+        // Update favicon with badge
+        updateFaviconBadge(count)
+      }
+    )
+  )
 
   const addChannelMessage = (channelId: string, m: MessageData) => {
     const existing = channelMessageCache.get(channelId) ?? []
@@ -1785,6 +1853,7 @@ export function createAppStore(): AppStore {
     setChannelMessages,
     channelUnreadCount,
     markChannelRead,
+    totalUnreadCount,
     members,
     setMembers,
     dmConversations,

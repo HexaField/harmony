@@ -1,5 +1,6 @@
 import type { VoiceConnection, VoiceParticipant, JoinOptions } from './room-manager.js'
 import type { E2EEBridge } from './e2ee-bridge.js'
+import { createEncryptTransform, createDecryptTransform } from './insertable-streams.js'
 
 type ParticipantJoinedCb = (p: VoiceParticipant) => void
 type ParticipantLeftCb = (did: string) => void
@@ -75,6 +76,22 @@ export class VoiceClient {
       this.mode = opts?.mode ?? 'test'
       this.signaling = opts?.signaling
     }
+  }
+
+  /**
+   * Set or rotate the E2EE encryption key for voice frames.
+   * Delegates to the E2EEBridge's epoch change mechanism.
+   */
+  setEncryptionKey(key: Uint8Array, epoch: number): void {
+    if (!this.e2eeBridge) {
+      throw new Error('E2EE bridge not configured')
+    }
+    this.e2eeBridge.onEpochChange(key, epoch)
+  }
+
+  /** Get the E2EE bridge instance (if configured) */
+  getE2EEBridge(): E2EEBridge | undefined {
+    return this.e2eeBridge
   }
 
   setSignaling(signaling: VoiceSignaling): void {
@@ -396,6 +413,9 @@ class VoiceConnectionImpl implements VoiceConnection {
 
       this.audioProducer = await this.sendTransport.produce({ track: audioTrack })
 
+      // Attach E2EE encrypt transform if available
+      this.attachSenderTransform(this.audioProducer, 'audio')
+
       // Set up speaking detection
       this.setupSpeakingDetection(this.audioStream)
 
@@ -477,6 +497,9 @@ class VoiceConnectionImpl implements VoiceConnection {
 
       this.consumers.set(consumer.id, consumer)
 
+      // Attach E2EE decrypt transform if available
+      this.attachReceiverTransform(consumer, consumeKind as 'audio' | 'video')
+
       // Resume the consumer
       await this.signaling!.sendVoiceSignal('voice.consumer.resume', {
         consumerId: consumer.id
@@ -487,6 +510,50 @@ class VoiceConnectionImpl implements VoiceConnection {
       for (const cb of this.trackCbs) cb(participantId, track, kind)
     } catch (err) {
       console.error('[Voice] Failed to consume producer:', err)
+    }
+  }
+
+  /**
+   * Attach an encrypt TransformStream to an RTCRtpSender (via mediasoup producer).
+   * Uses the Insertable Streams / Encoded Transforms API when available.
+   * Fails silently if not supported (graceful degradation).
+   */
+  private attachSenderTransform(producer: any, kind: 'audio' | 'video'): void {
+    if (!this.e2eeBridge || !producer) return
+
+    try {
+      const sender: RTCRtpSender | undefined = producer.rtpSender
+      if (!sender) return
+
+      // Encoded Transforms API (Chrome 86+)
+      if ('createEncodedStreams' in sender) {
+        const { readable, writable } = (sender as any).createEncodedStreams()
+        const transform = createEncryptTransform(this.e2eeBridge, kind)
+        readable.pipeThrough(transform).pipeTo(writable)
+      }
+    } catch (err) {
+      console.warn('[Voice] Failed to attach sender E2EE transform (graceful degradation):', err)
+    }
+  }
+
+  /**
+   * Attach a decrypt TransformStream to an RTCRtpReceiver (via mediasoup consumer).
+   * Uses the Insertable Streams / Encoded Transforms API when available.
+   */
+  private attachReceiverTransform(consumer: any, kind: 'audio' | 'video'): void {
+    if (!this.e2eeBridge || !consumer) return
+
+    try {
+      const receiver: RTCRtpReceiver | undefined = consumer.rtpReceiver
+      if (!receiver) return
+
+      if ('createEncodedStreams' in receiver) {
+        const { readable, writable } = (receiver as any).createEncodedStreams()
+        const transform = createDecryptTransform(this.e2eeBridge, kind)
+        readable.pipeThrough(transform).pipeTo(writable)
+      }
+    } catch (err) {
+      console.warn('[Voice] Failed to attach receiver E2EE transform (graceful degradation):', err)
     }
   }
 
@@ -560,6 +627,7 @@ class VoiceConnectionImpl implements VoiceConnection {
 
       if (videoTrack && this.sendTransport) {
         this.videoProducer = await this.sendTransport.produce({ track: videoTrack })
+        this.attachSenderTransform(this.videoProducer, 'video')
       }
 
       this.localVideoEnabled = true
@@ -615,6 +683,9 @@ class VoiceConnectionImpl implements VoiceConnection {
           track: videoTrack,
           appData: { type: 'screen' }
         })
+
+        // Attach E2EE encrypt transform for screen share (treated as video)
+        this.attachSenderTransform(this.screenProducer, 'video')
 
         // Auto-stop when user ends share via browser UI
         videoTrack.onended = () => {

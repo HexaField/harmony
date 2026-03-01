@@ -1,4 +1,5 @@
 import { createSignal, For, Show, onCleanup, type Component } from 'solid-js'
+import { useAppStore } from '../store.js'
 
 export interface NotificationItem {
   id: string
@@ -9,6 +10,7 @@ export interface NotificationItem {
   read: boolean
   channelId?: string
   communityId?: string
+  messageId?: string
 }
 
 const [notifications, setNotifications] = createSignal<NotificationItem[]>([])
@@ -37,14 +39,22 @@ export function getNotifications(): NotificationItem[] {
 /** Wire notification events from the HarmonyClient */
 export function wireNotificationEvents(client: { on: (event: string, handler: (...args: unknown[]) => void) => void }) {
   client.on('notification.new', (...args: unknown[]) => {
-    const data = args[0] as { type?: string; title?: string; body?: string; channelId?: string; communityId?: string }
+    const data = args[0] as {
+      type?: string
+      title?: string
+      body?: string
+      channelId?: string
+      communityId?: string
+      messageId?: string
+    }
     addNotification({
       type: (data.type as NotificationItem['type']) ?? 'system',
       title: data.title ?? 'Notification',
       body: data.body ?? '',
       timestamp: new Date().toISOString(),
       channelId: data.channelId,
-      communityId: data.communityId
+      communityId: data.communityId,
+      messageId: data.messageId
     })
   })
 
@@ -67,6 +77,7 @@ export function wireNotificationEvents(client: { on: (event: string, handler: (.
 
 export const NotificationBell: Component = () => {
   const [open, setOpen] = createSignal(false)
+  const store = useAppStore()
 
   function handleClickOutside(e: MouseEvent) {
     const el = (e.target as HTMLElement).closest('.notification-centre')
@@ -119,7 +130,16 @@ export const NotificationBell: Component = () => {
                 class={`p-3 border-b border-[var(--border)] hover:bg-[var(--bg-hover)] cursor-pointer transition-colors ${
                   notif.read ? 'opacity-60' : ''
                 }`}
-                onClick={() => markNotificationRead(notif.id)}
+                onClick={() => {
+                  markNotificationRead(notif.id)
+                  if (notif.communityId) {
+                    if (store.showDMView()) store.setShowDMView(false)
+                    store.setActiveCommunityId(notif.communityId)
+                  }
+                  if (notif.channelId) store.setActiveChannelId(notif.channelId)
+                  if (notif.messageId) store.setScrollToMessageId(notif.messageId)
+                  setOpen(false)
+                }}
               >
                 <div class="flex items-start gap-2">
                   <Show when={!notif.read}>

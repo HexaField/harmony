@@ -34,6 +34,24 @@ function fileIcon(mimeType: string): string {
 
 export const MessageArea: Component = () => {
   const store = useAppStore()
+
+  // Scroll to message when triggered by notification click
+  createEffect(() => {
+    const msgId = store.scrollToMessageId()
+    if (msgId) {
+      // Defer to allow DOM to update after channel switch
+      requestAnimationFrame(() => {
+        const el = document.getElementById(`message-${msgId}`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          el.classList.add('highlight-flash')
+          setTimeout(() => el.classList.remove('highlight-flash'), 2000)
+        }
+        store.setScrollToMessageId(null)
+      })
+    }
+  })
+
   const [inputContent, setInputContent] = createSignal('')
   const [loadingHistory, setLoadingHistory] = createSignal(false)
   const [editContent, setEditContent] = createSignal('')
@@ -527,6 +545,7 @@ export const MessageArea: Component = () => {
 
             return (
               <div
+                id={`message-${msg.id}`}
                 class="group flex px-2 py-0.5 hover:bg-[var(--bg-surface)]/30 rounded transition-colors relative"
                 classList={{ 'mt-4': !isGrouped(), 'mt-0': isGrouped() }}
                 onContextMenu={(e) => {

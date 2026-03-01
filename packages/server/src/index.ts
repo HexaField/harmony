@@ -1971,6 +1971,33 @@ export class HarmonyServer {
       sender: conn.did,
       payload: channel
     })
+
+    // Check if community has any MLS-enabled members
+    let hasE2EEMembers = false
+    for (const [did] of this.keyPackages) {
+      const memberConns = this.connections().filter((c) => c.did === did)
+      for (const mc of memberConns) {
+        if (this.communitySubscriptions.get(payload.communityId)?.has(mc.id)) {
+          hasE2EEMembers = true
+          break
+        }
+      }
+      if (hasE2EEMembers) break
+    }
+
+    if (hasE2EEMembers) {
+      this.sendToConnection(conn, {
+        id: `mls-newch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: 'mls.group.setup.needed' as ProtocolMessage['type'],
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: {
+          communityId: payload.communityId,
+          channelId: channel.id,
+          groupId: `${payload.communityId}:${channel.id}`
+        }
+      })
+    }
   }
 
   private async handleChannelUpdate(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {

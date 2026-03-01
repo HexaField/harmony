@@ -255,6 +255,10 @@ export interface AppStore {
 
   // Data Claim
   hasClaimedData: () => boolean
+
+  // Scroll-to-message (set by notification click, consumed by MessageArea)
+  scrollToMessageId: () => string | null
+  setScrollToMessageId: (id: string | null) => void
   setHasClaimedData: (v: boolean) => void
   claimedDataMeta: () => {
     messageCount: number
@@ -622,6 +626,7 @@ export function createAppStore(): AppStore {
   }
 
   // Data Claim state
+  const [scrollToMessageId, setScrollToMessageId] = createSignal<string | null>(null)
   const _savedClaimedMeta: {
     messageCount: number
     channelCount: number
@@ -1951,6 +1956,8 @@ export function createAppStore(): AppStore {
     addAutoJoinedCommunity,
     hasClaimedData,
     setHasClaimedData: _setHasClaimedData,
+    scrollToMessageId,
+    setScrollToMessageId,
     claimedDataMeta,
     setClaimedDataMeta: _setClaimedDataMeta,
     showDataClaim,

@@ -681,31 +681,7 @@ export class HarmonyClient {
           const setupMLS = async () => {
             for (const channel of state.channels) {
               try {
-                const groupId = `${event.communityId}:${channel.id}`
-                const group = await this.mlsProvider!.createGroup({
-                  groupId,
-                  creatorDID: this._did,
-                  creatorKeyPair: this._keyPair!,
-                  creatorEncryptionKeyPair: this._encryptionKeyPair!
-                })
-                this.mlsGroups.set(groupId, group)
-
-                // Upload key package so others can fetch it
-                const kp = await this.mlsProvider!.createKeyPackage({
-                  did: this._did,
-                  signingKeyPair: this._keyPair!,
-                  encryptionKeyPair: this._encryptionKeyPair!
-                })
-                this.send(this.createMessage('mls.keypackage.upload', { keyPackage: kp }))
-
-                // Notify server about group setup
-                this.send(
-                  this.createMessage('mls.group.setup', {
-                    communityId: event.communityId,
-                    channelId: channel.id,
-                    groupId
-                  })
-                )
+                await this.setupMLSGroupForChannel(event.communityId, channel.id)
               } catch {
                 // MLS setup failed for this channel — plaintext fallback
               }
@@ -1738,6 +1714,16 @@ export class HarmonyClient {
         this.handleCommunityAutoJoined(msg)
         break
       default:
+        // Handle MLS group setup for new channels
+        if ((msg.type as string) === 'mls.group.setup.needed') {
+          const p = msg.payload as { communityId: string; channelId: string; groupId: string }
+          if (!this.mlsGroups.has(p.groupId)) {
+            this.setupMLSGroupForChannel(p.communityId, p.channelId).catch(() => {
+              // MLS setup failed — plaintext fallback
+            })
+          }
+          break
+        }
         // Emit unhandled server messages generically
         this.emitter.emit(msg.type as string, msg.payload)
         this.emitter.emit('message', msg)
@@ -2516,6 +2502,38 @@ export class HarmonyClient {
     } catch {
       return null
     }
+  }
+
+  /** Set up an MLS group for a single channel (reusable) */
+  async setupMLSGroupForChannel(communityId: string, channelId: string): Promise<void> {
+    const groupId = `${communityId}:${channelId}`
+    if (this.mlsGroups.has(groupId)) return
+    if (!this.mlsProvider || !this._keyPair || !this._encryptionKeyPair) return
+
+    const group = await this.mlsProvider.createGroup({
+      groupId,
+      creatorDID: this._did,
+      creatorKeyPair: this._keyPair,
+      creatorEncryptionKeyPair: this._encryptionKeyPair
+    })
+    this.mlsGroups.set(groupId, group)
+
+    // Upload key package so others can fetch it
+    const kp = await this.mlsProvider.createKeyPackage({
+      did: this._did,
+      signingKeyPair: this._keyPair,
+      encryptionKeyPair: this._encryptionKeyPair
+    })
+    this.send(this.createMessage('mls.keypackage.upload', { keyPackage: kp }))
+
+    // Notify server about group setup
+    this.send(
+      this.createMessage('mls.group.setup', {
+        communityId,
+        channelId,
+        groupId
+      })
+    )
   }
 
   /** Check if a channel has E2EE enabled */

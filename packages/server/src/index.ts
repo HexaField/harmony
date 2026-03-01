@@ -692,6 +692,7 @@ export class HarmonyServer {
     new Map()
   /** Track which members have been notified to group creators (groupId → Set<memberDID>) */
   private e2eeNotified: Map<string, Set<string>> = new Map()
+  private _serverKeyPair: KeyPair | null = null
 
   /** Send mls.member.joined to group creator, deduplicating */
   private notifyMlsMemberJoined(
@@ -782,7 +783,29 @@ export class HarmonyServer {
     this.sfuAdapter = adapter
   }
 
+  private async createSessionToken(did: string): Promise<string> {
+    const payload = { did, iat: Date.now(), exp: Date.now() + 7 * 24 * 60 * 60 * 1000 } // 7 days
+    const payloadStr = JSON.stringify(payload)
+    const sig = await this.crypto.sign(new TextEncoder().encode(payloadStr), this._serverKeyPair!.secretKey)
+    return btoa(payloadStr) + '.' + btoa(String.fromCharCode(...sig))
+  }
+
+  private async verifySessionToken(token: string): Promise<{ did: string } | null> {
+    try {
+      const [payloadB64, sigB64] = token.split('.')
+      const payloadStr = atob(payloadB64)
+      const payload = JSON.parse(payloadStr)
+      if (payload.exp < Date.now()) return null
+      const sig = Uint8Array.from(atob(sigB64), (c) => c.charCodeAt(0))
+      const valid = await this.crypto.verify(new TextEncoder().encode(payloadStr), sig, this._serverKeyPair!.publicKey)
+      return valid ? { did: payload.did } : null
+    } catch {
+      return null
+    }
+  }
+
   async start(): Promise<void> {
+    this._serverKeyPair = await this.crypto.generateSigningKeyPair()
     this.wss = new WebSocketServer({ port: this.config.port, host: this.config.host, maxPayload: 1024 * 1024 })
 
     // Wait for server to be listening before continuing
@@ -815,6 +838,45 @@ export class HarmonyServer {
           const msg = deserialise<ProtocolMessage>(data.toString())
 
           if (!authenticated) {
+            // Try session token auth first
+            if ((msg.type as string) === 'auth.token.verify' && msg.payload) {
+              const tokenPayload = msg.payload as { token: string }
+              const result = await this.verifySessionToken(tokenPayload.token)
+              if (result) {
+                authenticated = true
+                clearTimeout(authTimeout)
+                const conn: ServerConnection = {
+                  id: connId,
+                  did: result.did,
+                  authenticatedAt: new Date().toISOString(),
+                  communities: [],
+                  presence: { status: 'online' },
+                  ws,
+                  rateLimitCounter: 0,
+                  rateLimitWindowStart: Date.now()
+                }
+                this._connections.set(connId, conn)
+                const newToken = await this.createSessionToken(result.did)
+                this.sendToConnection(conn, {
+                  id: 'auth-ok',
+                  type: 'sync.response',
+                  timestamp: new Date().toISOString(),
+                  sender: 'server',
+                  payload: { authenticated: true, did: result.did, sessionToken: newToken }
+                })
+                this.resyncMemberships(conn).catch(() => {})
+              } else {
+                this.sendRaw(ws, {
+                  id: 'token-invalid',
+                  type: 'auth.token.expired' as ProtocolMessage['type'],
+                  timestamp: new Date().toISOString(),
+                  sender: 'server',
+                  payload: { message: 'Token invalid or expired' }
+                })
+                // Don't close — let client fall back to VP auth
+              }
+              return
+            }
             // First message must be auth (VP presentation)
             if (msg.type === 'sync.state' && msg.payload) {
               const vp = msg.payload as VerifiablePresentation
@@ -833,12 +895,13 @@ export class HarmonyServer {
                   rateLimitWindowStart: Date.now()
                 }
                 this._connections.set(connId, conn)
+                const sessionToken = await this.createSessionToken(result.did)
                 this.sendToConnection(conn, {
                   id: 'auth-ok',
                   type: 'sync.response',
                   timestamp: new Date().toISOString(),
                   sender: 'server',
-                  payload: { authenticated: true, did: result.did }
+                  payload: { authenticated: true, did: result.did, sessionToken }
                 })
 
                 // Re-sync communities the user belongs to
@@ -1070,6 +1133,19 @@ export class HarmonyServer {
   }
 
   private async handleMessage(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    // Session token refresh
+    if ((msg.type as string) === 'auth.token.request') {
+      const token = await this.createSessionToken(conn.did)
+      this.sendToConnection(conn, {
+        id: msg.id + '-response',
+        type: 'auth.token.response' as ProtocolMessage['type'],
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { token }
+      })
+      return
+    }
+
     switch (msg.type) {
       case 'channel.send':
         await this.handleChannelSend(conn, msg)

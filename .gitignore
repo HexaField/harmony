@@ -19,6 +19,3 @@ test-results
 *.db-wal
 harmony.dbtest-ws.mjs
 tests/.server-*.mts
-*-browser-test.cjs
-verify-mls.cjs
-gen-identity.*

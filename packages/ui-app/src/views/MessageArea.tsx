@@ -1,4 +1,4 @@
-import { For, Show, createSignal, createEffect, on, lazy, type Component } from 'solid-js'
+import { For, Show, createSignal, createEffect, on, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { MarkdownRenderer } from '../components/Shared/index.js'
 import { RelativeTime } from '../components/Shared/index.js'

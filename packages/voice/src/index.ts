@@ -10,7 +10,6 @@ export type {
 export { VoiceRoomManager } from './room-manager.js'
 export { VoiceClient, BrowserMediaProvider } from './voice-client.js'
 export type { VoiceSignaling, VoiceClientOptions, MediaDeviceProvider } from './voice-client.js'
-export type { MediaDeviceProvider } from './voice-client.js'
 export { InMemoryAdapter } from './adapters/in-memory.js'
 export { E2EEBridge } from './e2ee-bridge.js'
 export { createEncryptTransform, createDecryptTransform } from './insertable-streams.js'

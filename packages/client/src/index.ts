@@ -103,7 +103,7 @@ export type Unsubscribe = () => void
 
 // ── Event Emitter ──
 
-type EventHandler = (...args: unknown[]) => void
+type EventHandler = (...args: any[]) => void
 
 class EventEmitter {
   private handlers: Map<string, Set<EventHandler>> = new Map()

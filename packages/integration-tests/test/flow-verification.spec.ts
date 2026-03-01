@@ -27,6 +27,7 @@ import { createLogger } from '../../server-runtime/src/logger.js'
 import { HarmonyType, HarmonyPredicate, RDFPredicate, XSDDatatype } from '@harmony/vocab'
 import { createCloudApp } from '../../cloud/src/index.js'
 import { PortalService } from '../../portal/src/index.js'
+import { createPortalDB } from '../../portal/src/db.js'
 
 const crypto = createCryptoProvider()
 const didProvider = new DIDKeyProvider(crypto)
@@ -572,7 +573,7 @@ describe('Flow 10: Portal Service', () => {
   let portal: PortalService
 
   beforeAll(async () => {
-    portal = new PortalService(crypto)
+    portal = new PortalService(crypto, createPortalDB(':memory:'))
     await portal.initialize()
   })
 

@@ -7,6 +7,7 @@ import { createCryptoProvider } from '@harmony/crypto'
 import { DIDKeyProvider } from '@harmony/did'
 import { createApp } from '../../portal/src/server.js'
 import { PortalService } from '../../portal/src/index.js'
+import { createPortalDB } from '../../portal/src/db.js'
 import type { Server } from 'http'
 
 const crypto = createCryptoProvider()
@@ -344,7 +345,7 @@ describe('Portal HTTP API — Full Coverage', () => {
 
     it('POST /api/friends/store + POST /api/friends/find round-trip', async () => {
       // Create identity and link Discord
-      const portal = new PortalService(crypto)
+      const portal = new PortalService(crypto, createPortalDB(':memory:'))
       await portal.initialize()
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)

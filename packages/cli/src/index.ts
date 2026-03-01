@@ -6,6 +6,7 @@ import { IdentityManager, type Identity } from '@harmony/identity'
 import { MemoryQuadStore, type QuadStore } from '@harmony/quads'
 import { MigrationService, type EncryptedExportBundle } from '@harmony/migration'
 import { PortalService } from '@harmony/portal'
+import { createPortalDB } from '@harmony/portal/db'
 
 export interface CLIContext {
   crypto: CryptoProvider
@@ -27,7 +28,7 @@ export function createCLIContext(): CLIContext {
     vcService: new VCService(crypto),
     zcapService: new ZCAPService(crypto),
     store: new MemoryQuadStore(),
-    portal: new PortalService(crypto),
+    portal: new PortalService(crypto, createPortalDB()),
     migration: new MigrationService(crypto)
   }
 }

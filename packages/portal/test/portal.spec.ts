@@ -34,7 +34,7 @@ function createTestBundle(adminDID: string): EncryptedExportBundle {
 describe('@harmony/portal', () => {
   describe('Identity Service', () => {
     it('MUST create identity and return mnemonic', async () => {
-      const portal = new PortalService(crypto)
+      const portal = new PortalService(crypto, testDB())
       await portal.initialize()
       const result = await portal.createIdentity()
       expect(result.identity.did).toMatch(/^did:key:z/)
@@ -42,7 +42,7 @@ describe('@harmony/portal', () => {
     })
 
     it('MUST resolve identity by DID', async () => {
-      const portal = new PortalService(crypto)
+      const portal = new PortalService(crypto, testDB())
       await portal.initialize()
       const { identity } = await portal.createIdentity()
       const resolved = await portal.resolveIdentity(identity.did)
@@ -51,7 +51,7 @@ describe('@harmony/portal', () => {
     })
 
     it('MUST return null for unknown DID', async () => {
-      const portal = new PortalService(crypto)
+      const portal = new PortalService(crypto, testDB())
       await portal.initialize()
       const result = await portal.resolveIdentity('did:key:zUnknown')
       expect(result).toBeNull()
@@ -60,7 +60,7 @@ describe('@harmony/portal', () => {
 
   describe('OAuth Linking', () => {
     it('MUST generate valid OAuth redirect URL', async () => {
-      const portal = new PortalService(crypto)
+      const portal = new PortalService(crypto, testDB())
       await portal.initialize()
       const result = await portal.initiateOAuthLink({ provider: 'discord', userDID: 'did:key:z1' })
       expect(result.redirectUrl).toContain('discord')
@@ -68,7 +68,7 @@ describe('@harmony/portal', () => {
     })
 
     it('MUST issue VC linking DID to provider identity', async () => {
-      const portal = new PortalService(crypto)
+      const portal = new PortalService(crypto, testDB())
       await portal.initialize()
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)
@@ -88,7 +88,7 @@ describe('@harmony/portal', () => {
 
   describe('Encrypted Storage', () => {
     it('MUST store and retrieve encrypted bundle', async () => {
-      const portal = new PortalService(crypto)
+      const portal = new PortalService(crypto, testDB())
       await portal.initialize()
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)
@@ -99,7 +99,7 @@ describe('@harmony/portal', () => {
     })
 
     it('MUST reject retrieval by non-admin DID', async () => {
-      const portal = new PortalService(crypto)
+      const portal = new PortalService(crypto, testDB())
       await portal.initialize()
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)
@@ -109,7 +109,7 @@ describe('@harmony/portal', () => {
     })
 
     it('MUST delete bundle with proof', async () => {
-      const portal = new PortalService(crypto)
+      const portal = new PortalService(crypto, testDB())
       await portal.initialize()
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)
@@ -120,7 +120,7 @@ describe('@harmony/portal', () => {
     })
 
     it('MUST list exports for admin DID', async () => {
-      const portal = new PortalService(crypto)
+      const portal = new PortalService(crypto, testDB())
       await portal.initialize()
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)
@@ -131,7 +131,7 @@ describe('@harmony/portal', () => {
     })
 
     it('MUST serve metadata without decryption', async () => {
-      const portal = new PortalService(crypto)
+      const portal = new PortalService(crypto, testDB())
       await portal.initialize()
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)
@@ -144,7 +144,7 @@ describe('@harmony/portal', () => {
 
   describe('Friend Graph', () => {
     it('MUST find DIDs for linked Discord user IDs', async () => {
-      const portal = new PortalService(crypto)
+      const portal = new PortalService(crypto, testDB())
       await portal.initialize()
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)
@@ -163,7 +163,7 @@ describe('@harmony/portal', () => {
     })
 
     it('MUST return only users who have linked', async () => {
-      const portal = new PortalService(crypto)
+      const portal = new PortalService(crypto, testDB())
       await portal.initialize()
       const found = await portal.findLinkedIdentities(['unknown1', 'unknown2'])
       expect(found.size).toBe(0)
@@ -177,7 +177,7 @@ describe('@harmony/portal HTTP Server', () => {
   let portal: PortalService
 
   beforeAll(async () => {
-    portal = new PortalService(crypto, didProvider)
+    portal = new PortalService(crypto, testDB())
     const app = await createApp(portal)
     await new Promise<void>((resolve) => {
       server = app.listen(0, () => {
@@ -409,21 +409,21 @@ describe('@harmony/portal HTTP Server', () => {
 
 describe('@harmony/portal Edge Cases', () => {
   it('MUST support GitHub OAuth provider', async () => {
-    const portal = new PortalService(crypto)
+    const portal = new PortalService(crypto, testDB())
     await portal.initialize()
     const result = await portal.initiateOAuthLink({ provider: 'github', userDID: 'did:key:z1' })
     expect(result.redirectUrl).toContain('github')
   })
 
   it('MUST support Google OAuth provider', async () => {
-    const portal = new PortalService(crypto)
+    const portal = new PortalService(crypto, testDB())
     await portal.initialize()
     const result = await portal.initiateOAuthLink({ provider: 'google', userDID: 'did:key:z1' })
     expect(result.redirectUrl).toContain('google')
   })
 
   it('MUST issue OAuthIdentityCredential for non-discord providers', async () => {
-    const portal = new PortalService(crypto)
+    const portal = new PortalService(crypto, testDB())
     await portal.initialize()
     const kp = await crypto.generateSigningKeyPair()
     const doc = await didProvider.create(kp)
@@ -441,7 +441,7 @@ describe('@harmony/portal Edge Cases', () => {
   })
 
   it('completeOAuthLink MUST throw if portal not initialized', async () => {
-    const portal = new PortalService(crypto)
+    const portal = new PortalService(crypto, testDB())
     const kp = await crypto.generateSigningKeyPair()
     const doc = await didProvider.create(kp)
     await expect(
@@ -458,13 +458,13 @@ describe('@harmony/portal Edge Cases', () => {
   })
 
   it('MUST reject retrieval of nonexistent export', async () => {
-    const portal = new PortalService(crypto)
+    const portal = new PortalService(crypto, testDB())
     await portal.initialize()
     await expect(portal.retrieveExport('nonexistent', 'did:key:z1')).rejects.toThrow('not found')
   })
 
   it('MUST reject deletion by non-admin', async () => {
-    const portal = new PortalService(crypto)
+    const portal = new PortalService(crypto, testDB())
     await portal.initialize()
     const kp = await crypto.generateSigningKeyPair()
     const doc = await didProvider.create(kp)
@@ -474,14 +474,14 @@ describe('@harmony/portal Edge Cases', () => {
   })
 
   it('MUST return empty list for admin with no exports', async () => {
-    const portal = new PortalService(crypto)
+    const portal = new PortalService(crypto, testDB())
     await portal.initialize()
     const list = await portal.listExports('did:key:zNobody')
     expect(list).toHaveLength(0)
   })
 
   it('discord linking MUST be discoverable via findLinkedIdentities', async () => {
-    const portal = new PortalService(crypto)
+    const portal = new PortalService(crypto, testDB())
     await portal.initialize()
     const kp = await crypto.generateSigningKeyPair()
     const doc = await didProvider.create(kp)
@@ -499,7 +499,7 @@ describe('@harmony/portal Edge Cases', () => {
   })
 
   it('MUST isolate exports between different admins', async () => {
-    const portal = new PortalService(crypto)
+    const portal = new PortalService(crypto, testDB())
     await portal.initialize()
     const kp1 = await crypto.generateSigningKeyPair()
     const doc1 = await didProvider.create(kp1)
@@ -512,7 +512,7 @@ describe('@harmony/portal Edge Cases', () => {
   })
 
   it('OAuth state MUST be unique each time', async () => {
-    const portal = new PortalService(crypto)
+    const portal = new PortalService(crypto, testDB())
     await portal.initialize()
     const r1 = await portal.initiateOAuthLink({ provider: 'discord', userDID: 'did:key:z1' })
     const r2 = await portal.initiateOAuthLink({ provider: 'discord', userDID: 'did:key:z1' })
@@ -523,7 +523,7 @@ describe('@harmony/portal Edge Cases', () => {
 describe('@harmony/portal Friends & Discord Profile', () => {
   describe('storeFriendsList / discoverFriends', () => {
     it('POST /api/friends/store stores friend IDs for a DID', async () => {
-      const portal = new PortalService(crypto)
+      const portal = new PortalService(crypto, testDB())
       await portal.initialize()
       portal.storeFriendsList('did:key:zAlice', ['d1', 'd2', 'd3'])
       const stored = portal.getStoredFriendIds('did:key:zAlice')
@@ -531,7 +531,7 @@ describe('@harmony/portal Friends & Discord Profile', () => {
     })
 
     it('GET /api/friends/:did returns stored friends (via discoverFriends)', async () => {
-      const portal = new PortalService(crypto)
+      const portal = new PortalService(crypto, testDB())
       await portal.initialize()
       portal.storeFriendsList('did:key:zBob', ['d10', 'd20'])
       // No friends linked, so discover returns empty
@@ -540,7 +540,7 @@ describe('@harmony/portal Friends & Discord Profile', () => {
     })
 
     it('POST /api/friends/discover cross-references stored friend IDs with linked accounts', async () => {
-      const portal = new PortalService(crypto)
+      const portal = new PortalService(crypto, testDB())
       await portal.initialize()
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)
@@ -569,7 +569,7 @@ describe('@harmony/portal Friends & Discord Profile', () => {
     })
 
     it('discover returns empty when no friends have linked', async () => {
-      const portal = new PortalService(crypto)
+      const portal = new PortalService(crypto, testDB())
       await portal.initialize()
       portal.storeFriendsList('did:key:zLonely', ['nobody1', 'nobody2'])
       const friends = await portal.discoverFriends('did:key:zLonely')
@@ -577,7 +577,7 @@ describe('@harmony/portal Friends & Discord Profile', () => {
     })
 
     it('discover returns matches when friends have linked', async () => {
-      const portal = new PortalService(crypto)
+      const portal = new PortalService(crypto, testDB())
       await portal.initialize()
 
       // Link two Discord accounts
@@ -615,7 +615,7 @@ describe('@harmony/portal Friends & Discord Profile', () => {
 
   describe('Discord profile endpoint', () => {
     it('getDiscordProfile returns linked Discord info', async () => {
-      const portal = new PortalService(crypto)
+      const portal = new PortalService(crypto, testDB())
       await portal.initialize()
       const kp = await crypto.generateSigningKeyPair()
       const doc = await didProvider.create(kp)
@@ -635,7 +635,7 @@ describe('@harmony/portal Friends & Discord Profile', () => {
     })
 
     it('getDiscordProfile returns null when no Discord link exists', async () => {
-      const portal = new PortalService(crypto)
+      const portal = new PortalService(crypto, testDB())
       await portal.initialize()
       const profile = portal.getDiscordProfile('did:key:zNoLink')
       expect(profile).toBeNull()
@@ -700,7 +700,7 @@ describe('@harmony/portal HTTP Friends & Discord Profile', () => {
 
 describe('@harmony/portal OAuth Security', () => {
   it('generateState MUST produce cryptographically random 64-char hex strings', async () => {
-    const portal = new PortalService(crypto)
+    const portal = new PortalService(crypto, testDB())
     await portal.initialize()
     // Generate multiple states and verify entropy
     const states: string[] = []
@@ -717,7 +717,7 @@ describe('@harmony/portal OAuth Security', () => {
   })
 
   it('OAuth callback MUST reject replayed state tokens', async () => {
-    const portal = new PortalService(crypto, didProvider)
+    const portal = new PortalService(crypto, testDB())
     const app = await createApp(portal)
     const server = await new Promise<Server>((resolve) => {
       const s = app.listen(0, () => resolve(s))

@@ -589,4 +589,65 @@ describe('@harmony/credentials', () => {
     it.todo('MUST display credential details on selection')
     it.todo('SHOULD show credential validity status (active/expired/revoked)')
   })
+
+  describe('Credential Issuer Policy Enforcement', () => {
+    it('MUST allow role-based issuance with matching requiredRole', async () => {
+      const credType = await registry.registerType(
+        'comm1',
+        makeTypeDef({ issuerPolicy: { kind: 'role-based', requiredRole: 'artist-reviewer' } }),
+        aliceDID
+      )
+      const vc = await issuer.issueCredential(
+        credType.id,
+        { artForm: 'Painting' },
+        aliceDID,
+        aliceKP,
+        bobDID,
+        'comm1',
+        ['artist-reviewer']
+      )
+      expect(vc.id).toBeTruthy()
+      expect(vc.credentialSubject.artForm).toBe('Painting')
+    })
+
+    it('MUST reject role-based issuance with wrong role', async () => {
+      const credType = await registry.registerType(
+        'comm1',
+        makeTypeDef({ issuerPolicy: { kind: 'role-based', requiredRole: 'artist-reviewer' } }),
+        aliceDID
+      )
+      await expect(
+        issuer.issueCredential(credType.id, { artForm: 'Painting' }, aliceDID, aliceKP, bobDID, 'comm1', ['member'])
+      ).rejects.toThrow()
+    })
+
+    it('MUST allow admin-only issuance with admin role', async () => {
+      const credType = await registry.registerType(
+        'comm1',
+        makeTypeDef({ issuerPolicy: { kind: 'admin-only' } }),
+        aliceDID
+      )
+      const vc = await issuer.issueCredential(
+        credType.id,
+        { artForm: 'Sculpture' },
+        aliceDID,
+        aliceKP,
+        bobDID,
+        'comm1',
+        ['admin']
+      )
+      expect(vc.id).toBeTruthy()
+    })
+
+    it('MUST reject admin-only issuance without admin role', async () => {
+      const credType = await registry.registerType(
+        'comm1',
+        makeTypeDef({ issuerPolicy: { kind: 'admin-only' } }),
+        aliceDID
+      )
+      await expect(
+        issuer.issueCredential(credType.id, { artForm: 'Sculpture' }, aliceDID, aliceKP, bobDID, 'comm1', ['member'])
+      ).rejects.toThrow('Only admins can issue this credential type')
+    })
+  })
 })

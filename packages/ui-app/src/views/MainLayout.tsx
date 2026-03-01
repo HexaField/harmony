@@ -17,6 +17,7 @@ import { DMConversationView } from './DMConversationView.tsx'
 import { NewDMModal } from './NewDMModal.tsx'
 import { ThreadView } from './ThreadView.tsx'
 import { MigrationWizard } from '../components/Migration/index.tsx'
+import { NotificationBell } from '../components/NotificationCentre.tsx'
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = createSignal(typeof window !== 'undefined' && window.innerWidth < 768)
@@ -35,17 +36,59 @@ export const MainLayout: Component = () => {
   const [showMobileSidebar, setShowMobileSidebar] = createSignal(false)
   const [showMobileMembers, setShowMobileMembers] = createSignal(false)
 
-  // Keyboard shortcut: Ctrl+K for search
+  // Keyboard shortcuts
   if (typeof window !== 'undefined') {
-    window.addEventListener('keydown', (e) => {
+    const handleKeydown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd+K → toggle search overlay
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault()
         store.setShowSearch(!store.showSearch())
+        return
       }
-      if (e.key === 'Escape' && store.showSearch()) {
-        store.setShowSearch(false)
+      // Ctrl/Cmd+E → toggle emoji picker (dispatch custom event for MessageArea to pick up)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('harmony:toggle-emoji-picker'))
+        return
       }
-    })
+      // Escape → close any open overlay/modal (priority order)
+      if (e.key === 'Escape') {
+        if (store.showSearch()) {
+          store.setShowSearch(false)
+          return
+        }
+        if (store.showSettings()) {
+          store.setShowSettings(false)
+          return
+        }
+        if (store.showCreateCommunity()) {
+          store.setShowCreateCommunity(false)
+          return
+        }
+        if (store.showCreateChannel()) {
+          store.setShowCreateChannel(false)
+          return
+        }
+        if (store.showNewDMModal()) {
+          store.setShowNewDMModal(false)
+          return
+        }
+        if (store.showCommunitySettings()) {
+          store.setShowCommunitySettings(false)
+          return
+        }
+        if (store.showChannelSettings()) {
+          store.setShowChannelSettings(null)
+          return
+        }
+        if (store.activeThread()) {
+          store.setActiveThread(null)
+          return
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeydown)
+    onCleanup(() => window.removeEventListener('keydown', handleKeydown))
   }
 
   return (
@@ -209,6 +252,7 @@ const TitleBarView: Component<{ onHamburger?: () => void; onMembers?: () => void
         <span class="text-[var(--text-muted)] text-sm truncate">{activeChannel()!.topic}</span>
       </Show>
       <div class="flex-1" />
+      <NotificationBell />
       <button
         onClick={() => store.setShowSearch(true)}
         class="p-2 rounded hover:bg-[var(--bg-input)] text-[var(--text-muted)] text-sm"

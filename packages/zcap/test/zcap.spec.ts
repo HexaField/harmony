@@ -764,4 +764,104 @@ describe('@harmony/zcap', () => {
     it.todo('MUST support AI agent ZCAPs with constrained scope')
     it.todo('SHOULD support fine-grained time windows (not just expiry)')
   })
+
+  describe('Scope Attenuation', () => {
+    it('MUST reject delegation where child scope value differs from parent', async () => {
+      const owner = await createTestIdentity()
+      const delegate = await createTestIdentity()
+      const root = await zcapService.createRoot({
+        ownerDID: owner.did,
+        ownerKeyPair: owner.kp,
+        scope: { channel: 'general' },
+        allowedAction: ['harmony:SendMessage']
+      })
+      await expect(
+        zcapService.delegate({
+          parentCapability: root,
+          delegatorKeyPair: owner.kp,
+          invokerDID: delegate.did,
+          allowedAction: ['harmony:SendMessage'],
+          scope: { channel: '*' }
+        })
+      ).rejects.toThrow('Cannot widen scope')
+    })
+
+    it('MUST allow delegation with identical scope', async () => {
+      const owner = await createTestIdentity()
+      const delegate = await createTestIdentity()
+      const root = await zcapService.createRoot({
+        ownerDID: owner.did,
+        ownerKeyPair: owner.kp,
+        scope: { channel: 'general', community: 'test' },
+        allowedAction: ['harmony:SendMessage']
+      })
+      const child = await zcapService.delegate({
+        parentCapability: root,
+        delegatorKeyPair: owner.kp,
+        invokerDID: delegate.did,
+        allowedAction: ['harmony:SendMessage'],
+        scope: { channel: 'general', community: 'test' }
+      })
+      expect(child.scope).toEqual({ channel: 'general', community: 'test' })
+    })
+
+    it('MUST allow delegation with fewer scope keys (subset of parent)', async () => {
+      const owner = await createTestIdentity()
+      const delegate = await createTestIdentity()
+      const root = await zcapService.createRoot({
+        ownerDID: owner.did,
+        ownerKeyPair: owner.kp,
+        scope: { channel: 'general', community: 'test' },
+        allowedAction: ['harmony:SendMessage']
+      })
+      const child = await zcapService.delegate({
+        parentCapability: root,
+        delegatorKeyPair: owner.kp,
+        invokerDID: delegate.did,
+        allowedAction: ['harmony:SendMessage'],
+        scope: { channel: 'general' }
+      })
+      expect(child.scope).toEqual({ channel: 'general' })
+    })
+
+    it('MUST reject delegation with extra scope keys not in parent', async () => {
+      const owner = await createTestIdentity()
+      const delegate = await createTestIdentity()
+      const root = await zcapService.createRoot({
+        ownerDID: owner.did,
+        ownerKeyPair: owner.kp,
+        scope: { channel: 'general' },
+        allowedAction: ['harmony:SendMessage']
+      })
+      await expect(
+        zcapService.delegate({
+          parentCapability: root,
+          delegatorKeyPair: owner.kp,
+          invokerDID: delegate.did,
+          allowedAction: ['harmony:SendMessage'],
+          scope: { channel: 'general', topic: 'secret' }
+        })
+      ).rejects.toThrow('Cannot widen scope')
+    })
+
+    it('MUST allow delegation with matching scope values', async () => {
+      const owner = await createTestIdentity()
+      const delegate = await createTestIdentity()
+      const root = await zcapService.createRoot({
+        ownerDID: owner.did,
+        ownerKeyPair: owner.kp,
+        scope: { channel: 'general', community: 'test' },
+        allowedAction: ['harmony:SendMessage']
+      })
+      const child = await zcapService.delegate({
+        parentCapability: root,
+        delegatorKeyPair: owner.kp,
+        invokerDID: delegate.did,
+        allowedAction: ['harmony:SendMessage'],
+        scope: { community: 'test', channel: 'general' }
+      })
+      expect(child.scope.community).toBe('test')
+      expect(child.scope.channel).toBe('general')
+    })
+  })
 })

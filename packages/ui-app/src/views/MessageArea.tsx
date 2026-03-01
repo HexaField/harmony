@@ -3,6 +3,7 @@ import { useAppStore } from '../store.tsx'
 import { MarkdownRenderer } from '../components/Shared/index.js'
 import { RelativeTime } from '../components/Shared/index.js'
 import { addToast } from '../components/Shared/index.js'
+import { showErrorToast } from '../utils/errorToast.js'
 import { t } from '../i18n/strings.js'
 import type { MessageData, AttachmentData } from '../types.js'
 import { pseudonymFromDid } from '../utils/pseudonym.js'
@@ -138,11 +139,7 @@ export const MessageArea: Component = () => {
           setPendingAttachments((prev) => [...prev, attachment])
         }
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : 'Unknown error'
-        addToast({
-          message: t('FILE_UPLOAD_FAILED', { error: errorMsg }),
-          type: 'error'
-        })
+        showErrorToast(err, 'upload')
       }
     }
 
@@ -226,7 +223,7 @@ export const MessageArea: Component = () => {
         requestAnimationFrame(() => messagesEndRef?.scrollIntoView({ behavior: 'smooth' }))
       } catch (err) {
         console.error('Failed to send message:', err)
-        addToast({ message: t('DM_SEND_FAILED'), type: 'error' })
+        showErrorToast(err)
         addLocalMessage(text, attachments)
       }
     } else {

@@ -1,6 +1,7 @@
 import { For, Show, createSignal, createEffect, on, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { MarkdownRenderer, addToast } from '../components/Shared/index.js'
+import { showErrorToast } from '../utils/errorToast.js'
 import { RelativeTime } from '../components/Shared/index.js'
 import { t } from '../i18n/strings.js'
 import { pseudonymFromDid } from '../utils/pseudonym.js'
@@ -58,7 +59,7 @@ export const DMConversationView: Component = () => {
         requestAnimationFrame(() => messagesEndRef?.scrollIntoView({ behavior: 'smooth' }))
       } catch (err) {
         console.error('Failed to send DM:', err)
-        addToast({ message: t('DM_SEND_FAILED'), type: 'error' })
+        showErrorToast(err)
         addLocalDM(text)
       }
     } else {

@@ -366,10 +366,10 @@ export class HarmonyClient {
             }
           }
         }
-        // Generate new if not restored
+        // Derive from signing key pair (deterministic from mnemonic) if not restored
         if (!this._encryptionKeyPair) {
           const crypto = createCryptoProvider()
-          this._encryptionKeyPair = await crypto.generateEncryptionKeyPair()
+          this._encryptionKeyPair = await crypto.deriveEncryptionKeyPair(this._keyPair!)
         }
       } catch {
         // Encryption key generation failed — E2EE won't be available

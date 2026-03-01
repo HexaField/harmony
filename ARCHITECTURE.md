@@ -933,78 +933,114 @@ The `OnboardingView` walks new users through: Welcome → Identity creation (gen
 ```mermaid
 graph TB
     subgraph "Client (Browser/Electron Renderer)"
-        LS["localStorage"]
+        LS["localStorage<br/>harmony:client:state"]
         Mem["In-Memory (ephemeral)"]
     end
 
     subgraph "localStorage Contents"
-        ID["harmony:identity<br/>DID + keypair + mnemonic"]
-        EK["harmony:encryptionKeyPair<br/>X25519 for MLS"]
-        SL["harmony:servers<br/>Server connection list"]
-        RP["harmony:readPositions"]
-        TH["harmony:theme"]
+        ID["did + mnemonic"]
+        EK["encryptionKeyPair<br/>X25519 (publicKey + secretKey)"]
+        SL["servers<br/>[{url, communityIds[]}]"]
     end
 
     subgraph "In-Memory (lost on refresh)"
-        MQ["MemoryQuadStore<br/>Message cache"]
-        MLS["MLS group state<br/>Epoch keys"]
-        WS["WebSocket state"]
+        MQ["Channel logs, DM channels,<br/>thread messages"]
+        MLS["mlsGroups Map<br/>Epoch keys"]
     end
 
     LS --- ID
     LS --- EK
     LS --- SL
-    LS --- RP
     Mem --- MQ
     Mem --- MLS
 
-    subgraph "Server (SQLite)"
-        DB["harmony.db<br/>All quads: messages,<br/>channels, roles, members"]
-        ATT["attachments/<br/>Media files"]
+    subgraph "Server (SQLite + filesystem)"
+        DB["harmony.db (WAL mode)<br/>Quads: messages, channels,<br/>roles, members"]
+        ATT["./media/<br/>Uploaded files"]
+        BK["backup(path)<br/>Hot backup available"]
     end
 
     subgraph "Cloud Worker (Cloudflare)"
-        DO["DO SQLite<br/>Same quad data"]
+        DO["DO SQLite<br/>Quads + members/channels/<br/>voice/keypackages tables"]
         R2["R2 Bucket<br/>Media attachments"]
     end
+
+    DB -.->|"better-sqlite3<br/>.backup()"| BK
 ```
+
+### Server Storage Detail
+
+- **SQLite config:** WAL mode, `synchronous = NORMAL`, foreign keys enabled
+- **Database path:** Configurable via `storage.database` in YAML config (default `./harmony.db`)
+- **Hot backup:** `ServerRuntime` exposes a `backup(path)` method using better-sqlite3's online backup API — but **nothing calls it on a schedule**
+- **Compaction:** `compact()` method runs VACUUM + WAL checkpoint
+- **Stats:** Size tracking available via `stats()` method
+
+### Client Persistence Detail
+
+All client state persisted under `localStorage` key `harmony:client:state` as a single `PersistedState` object:
+
+- `did` — user's DID string
+- `servers` — array of `{ url, communityIds[] }`
+- `encryptionKeyPair` — `{ publicKey: number[], secretKey: number[] }` (X25519)
+
+Everything else is **in-memory only**: channel message logs, DM channels, thread messages, MLS group state (`mlsGroups` Map). Closing the tab loses all message cache and E2EE state.
 
 ### Durability by Deployment
 
 | Deployment | Data Store | Durability | Risk |
 | --- | --- | --- | --- |
-| **Electron** | SQLite in `~/Library/Application Support/Harmony/` (macOS) or `~/.config/Harmony/` (Linux) | Survives restart | Lost on uninstall; no auto-backup |
-| **Cloud (DO)** | Cloudflare DO SQLite (replicated) + R2 | High — Cloudflare manages replication | DO eviction clears in-memory state (SQLite persists) |
-| **Self-hosted Docker** | SQLite in mounted volume (`/data`) | Depends on volume management | Operator responsible for backups |
-| **Web client** | Browser localStorage | Fragile | Cleared on browser data wipe |
+| **Electron** | SQLite in app data dir (e.g. `~/Library/Application Support/Harmony/`) | Survives restart; hot backup API available | Lost on uninstall; no auto-backup |
+| **Cloud (DO)** | Cloudflare DO SQLite (auto-replicated) + R2 | High — Cloudflare manages replication | No user-controlled export; data locked in platform |
+| **Self-hosted Docker** | SQLite in mounted volume | Depends on volume management | Operator responsible for backups; `backup()` API available |
+| **Web client** | Browser localStorage | Fragile | Cleared on browser data wipe; silent failure on quota errors |
 
 ### Identity Recovery
 
-- **Mnemonic** (12 BIP-39 words) can regenerate the Ed25519 signing keypair and DID via `recoverIdentity(mnemonic)`
-- **NOT recoverable** from mnemonic: X25519 encryption keypair (generated independently), server list, message history, MLS state, read positions
-- `exportIdentity()` / `importIdentity()` provide JSON serialization of the full identity object, but this is manual
+Three recovery paths exist:
+
+1. **Mnemonic** (12 BIP-39 words) — `createFromMnemonic(mnemonic)` deterministically recreates Ed25519 keypair and DID. Does NOT recover: X25519 encryption keypair, server list, message history, MLS state
+2. **OAuth recovery** — `createFromOAuthRecovery(provider, token)` derives deterministic keypair from OAuth token
+3. **Social recovery** — `setupRecovery()` with trusted DIDs + threshold, multi-sig approval via `initiateRecovery()` / `approveRecovery()` / `completeRecovery()`. Data-structure only — no server-side persistence of recovery configs yet
+
+Additionally, `exportSyncPayload()` encrypts identity (DID doc + credentials + capabilities) with a keypair-derived key; `importSyncPayload()` decrypts with mnemonic — designed for multi-device sync.
+
+### Migration & Import
+
+The `@harmony/migration` package provides:
+
+- **Discord server export → Harmony import:** Full transformation of channels, messages, members, roles, reactions, attachments, stickers, embeds, threads into RDF quads
+- **Encrypted export bundles** (`EncryptedExportBundle`): Quads encrypted with admin's keypair via HKDF-derived symmetric key (`harmony-export-salt-v1`)
+- **Decrypt export:** Recovery of quads from encrypted bundles
+- **Re-sign community credentials** on migration
+
+> **Note:** This is Discord→Harmony import only. There is no Harmony-native community export that dumps a running community to a portable bundle.
 
 ### What's NOT Backed Up (Gaps)
 
 | Gap | Impact | Status |
 | --- | --- | --- |
-| No community export (`.hbundle`) | Cannot migrate or back up a community | Post-launch roadmap |
+| No Harmony-native community export | Cannot migrate or back up a running community | Post-launch roadmap |
+| No automated server backup | `backup()` API exists but nothing schedules it | Operator must script |
 | No message history export | Users cannot download their messages | Not planned |
-| No automated server backup | SQLite data loss = total community loss | Operator responsibility |
-| MLS state is ephemeral | Groups rebuilt on reconnect; messages encrypted under old epoch keys become unrecoverable if client state lost | By design (forward secrecy) |
-| No multi-device identity sync | Identity lives in one browser's localStorage | Not planned for beta |
-| Encryption keypair not in mnemonic | Losing localStorage = losing MLS decryption ability | Design gap |
-| Read positions client-only | `read.update` message exists but positions only in localStorage | Server-side persistence planned |
+| Client message cache in-memory only | All messages lost on tab close/refresh | No IndexedDB/offline cache |
+| MLS state is ephemeral | Groups rebuilt on reconnect; old epoch messages unrecoverable | By design (forward secrecy) |
+| No multi-device identity sync | Identity lives in one browser's localStorage | Sync payload API exists but no automated flow |
+| Encryption keypair not in mnemonic | Losing localStorage = losing MLS decryption ability | X25519 generated independently |
+| DO data not exportable | Cloud communities locked in Cloudflare | No data portability path |
+| Social recovery not server-persisted | Recovery config exists as data structures only | Needs server-side storage |
+| Encryption keys unprotected | Private keys in localStorage with no passphrase/hardware backing | Security gap |
 
 ### Recommendations for Beta
 
 > **Note:** Beta users should be advised:
 >
-> 1. **Back up your mnemonic** — it's the only way to recover your identity (but not your messages or encryption keys)
-> 2. **Electron is the most durable client** — web browser localStorage can be wiped unexpectedly
-> 3. **Self-hosted operators must back up `harmony.db`** — there is no automated backup mechanism
-> 4. **Message history is not portable** — if a server is lost, its messages are gone
+> 1. **Back up your mnemonic** — primary identity recovery path (but does not recover encryption keys or messages)
+> 2. **Self-hosted operators: script `backup()`** — the hot backup API exists, call it on a cron schedule and ship offsite
+> 3. **Electron is the most durable client** — web browser localStorage can be wiped unexpectedly
+> 4. **Message history is server-side only** — if a server is lost without backup, its messages are gone
 > 5. **MLS encryption means old messages may become unreadable** if client state is lost — this is a trade-off of forward secrecy
+> 6. **Cloud (DO) communities have no export path** — consider self-hosted for data sovereignty requirements
 
 ---
 

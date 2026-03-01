@@ -39,7 +39,7 @@ interface MemberState {
 
 function deriveEpochKey(epochSecret: Uint8Array, epoch: number, purpose: string): Uint8Array {
   const info = new TextEncoder().encode(`harmony-mls-${purpose}-${epoch}`)
-  return hkdf(sha256, epochSecret, undefined, info, 32)
+  return hkdf(sha256, epochSecret, new TextEncoder().encode('harmony-mls-epoch-salt-v1'), info, 32)
 }
 
 function advanceEpochSecret(currentSecret: Uint8Array, commitSecret: Uint8Array): Uint8Array {
@@ -47,7 +47,7 @@ function advanceEpochSecret(currentSecret: Uint8Array, commitSecret: Uint8Array)
   const combined = new Uint8Array(currentSecret.length + commitSecret.length)
   combined.set(currentSecret)
   combined.set(commitSecret, currentSecret.length)
-  return hkdf(sha256, combined, undefined, info, 32)
+  return hkdf(sha256, combined, new TextEncoder().encode('harmony-mls-advance-salt-v1'), info, 32)
 }
 
 function serializeGroupState(state: GroupState): Uint8Array {

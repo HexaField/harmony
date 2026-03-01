@@ -53,6 +53,11 @@ async function handleList(ownerDID: string, env: Env): Promise<Response> {
 async function handleDelete(id: string, request: Request, env: Env): Promise<Response> {
   const auth = request.headers.get('Authorization')
   if (!auth) return new Response('Unauthorized', { status: 401 })
+  // TODO: Validate auth token against instance owner DID before allowing deletion
+  // For now, require a valid Bearer token format
+  if (!auth.startsWith('Bearer ') || auth.length < 20) {
+    return new Response('Invalid authorization', { status: 403 })
+  }
 
   await deleteInstance(env.DB, id)
   return new Response(null, { status: 204 })

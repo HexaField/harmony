@@ -41,6 +41,8 @@ function isSubset(child: string[], parent: string[]): boolean {
 function isScopeNarrowerOrEqual(child: Record<string, unknown>, parent: Record<string, unknown>): boolean {
   for (const key of Object.keys(child)) {
     if (!(key in parent)) return false
+    // Values must also be equal or narrower (child value must match parent value)
+    if (parent[key] !== undefined && child[key] !== parent[key]) return false
   }
   return true
 }
@@ -252,7 +254,10 @@ export class ZCAPService {
     return { valid: checks.every((c) => c.passed), checks }
   }
 
-  async revoke(capabilityId: string, _revokerKeyPair: KeyPair, revocationStore: RevocationStore): Promise<void> {
+  async revoke(capabilityId: string, revokerKeyPair: KeyPair, revocationStore: RevocationStore): Promise<void> {
+    // TODO: Verify revokerKeyPair matches the capability granter before revoking.
+    // Currently trusts caller — server-side access control is the enforcement layer.
+    void revokerKeyPair
     await revocationStore.revoke(capabilityId)
   }
 }

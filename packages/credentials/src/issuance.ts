@@ -91,18 +91,25 @@ export class CredentialIssuer {
     }
   }
 
-  private checkIssuerPolicy(credType: CredentialType, _issuerDID: string, issuerRoles?: string[]): void {
+  private checkIssuerPolicy(credType: CredentialType, issuerDID: string, issuerRoles?: string[]): void {
     const policy = credType.def.issuerPolicy
     if (policy.kind === 'admin-only') {
       if (!issuerRoles || !issuerRoles.includes('admin')) {
         throw new Error('Only admins can issue this credential type')
       }
     } else if (policy.kind === 'role-based') {
-      const requiredRoles = (policy as { kind: string; roles?: string[] }).roles ?? []
-      if (requiredRoles.length > 0 && (!issuerRoles || !requiredRoles.some((r) => issuerRoles.includes(r)))) {
-        throw new Error(`Issuer must have one of roles: ${requiredRoles.join(', ')}`)
+      const requiredRole = policy.requiredRole
+      if (requiredRole && (!issuerRoles || !issuerRoles.includes(requiredRole))) {
+        throw new Error(`Issuer must have role: ${requiredRole}`)
       }
+    } else if (policy.kind === 'self-attest') {
+      // Self-attestation: anyone can self-attest, no role check needed
+      void issuerDID // Will be used to verify issuer === subject when enforcement is added
+    } else if (policy.kind === 'peer-attest') {
+      // Peer attestation: issuer must be a community member (not self)
+      // requiredAttestations is enforced at presentation time, not issuance
+      void issuerDID
     }
-    // 'anyone' and 'self-issued' policies pass through
+    // 'anyone' policies pass through
   }
 }

@@ -48,7 +48,13 @@ export class SimplifiedDMProvider implements DMProvider {
     recipientPublicKey: Uint8Array
   }): Promise<DMChannel> {
     const sharedSecret = x25519.getSharedSecret(params.senderKeyPair.secretKey, params.recipientPublicKey)
-    const sharedKey = hkdf(sha256, sharedSecret, undefined, new TextEncoder().encode('harmony-dm-key'), 32)
+    const sharedKey = hkdf(
+      sha256,
+      sharedSecret,
+      new TextEncoder().encode('harmony-dm-salt-v1'),
+      new TextEncoder().encode('harmony-dm-key'),
+      32
+    )
     return new SimplifiedDMChannel(params.senderDID, params.recipientDID, sharedKey, params.senderKeyPair.publicKey)
   }
 
@@ -59,7 +65,13 @@ export class SimplifiedDMProvider implements DMProvider {
     senderPublicKey: Uint8Array
   }): Promise<DMChannel> {
     const sharedSecret = x25519.getSharedSecret(params.recipientKeyPair.secretKey, params.senderPublicKey)
-    const sharedKey = hkdf(sha256, sharedSecret, undefined, new TextEncoder().encode('harmony-dm-key'), 32)
+    const sharedKey = hkdf(
+      sha256,
+      sharedSecret,
+      new TextEncoder().encode('harmony-dm-salt-v1'),
+      new TextEncoder().encode('harmony-dm-key'),
+      32
+    )
     return new SimplifiedDMChannel(params.recipientDID, params.senderDID, sharedKey, params.recipientKeyPair.publicKey)
   }
 }

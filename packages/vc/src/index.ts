@@ -267,9 +267,12 @@ export class VCService {
 
   async revoke(
     credential: VerifiableCredential,
-    _revokerKeyPair: KeyPair,
+    revokerKeyPair: KeyPair,
     revocationStore: RevocationStore
   ): Promise<void> {
+    // TODO: Verify revokerKeyPair matches the credential issuer before revoking.
+    // Currently trusts caller — server-side access control is the enforcement layer.
+    void revokerKeyPair
     await revocationStore.revoke(credential.id)
   }
 

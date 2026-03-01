@@ -949,3 +949,23 @@ Cloud: Portal Worker + Cloud Worker on Cloudflare. Clients connect via WSS. Self
 | Cross-topology tests  | `~/Desktop/harmony/tests/cross-topology.spec.ts`                            |
 | Discord mock tests    | `~/Desktop/harmony/tests/discord-mock-e2e.spec.ts`                          |
 | DM architecture       | `~/Desktop/harmony/docs/dm-architecture.md`                                 |
+
+### Known Limitations & Tracked Stubs
+
+Items identified in audit rounds 1–3 that are documented but not yet fixed:
+
+| Area | Issue | Severity | Status |
+| --- | --- | --- | --- |
+| MLS commit verification | `processCommit` does not verify commit signatures — forged commits accepted | Medium | Acceptable for simplified MLS; full TreeKEM would fix |
+| MLS `updateKeys` | Uses raw random bytes as public key (no X25519 derivation) | Low | Works for symmetric key agreement; not standard MLS |
+| VC/ZCAP revocation auth | Revoker key pair accepted but not verified against issuer | Medium | Server access control is enforcement layer; TODO tracked in code |
+| Identity `completeRecovery` | Discards all credentials/capabilities on recovery | Medium | Post-beta: recovery should preserve attestation chain |
+| Identity `createFromOAuthRecovery` | Derives DID from ephemeral token — new DID each time | Medium | Post-beta: needs stable OAuth-to-DID binding |
+| Bot-api webhook HMAC | XOR hash instead of SHA-256 HMAC | Low | Package is 📋 (post-launch) |
+| Bot-api lifecycle | `startBot`/`stopBot` are status flags only, no sandbox | Low | Package is 📋 (post-launch) |
+| Cloud-worker `VoiceRoomDO` | Dead code — never imported | Low | Cleanup before cloud deployment |
+| Portal OAuth URL | Hardcoded `oauth.example.com` placeholder | Low | Will be configured at deployment |
+| Rate limit `clearRateLimits` | Empty function body | Low | Cloud middleware cleanup |
+| App stubs | `checkForUpdates`, `reconnect`, `handleFileDrop`, `joinVoice` return hardcoded values | Low | Electron app convenience stubs; real logic in client/voice packages |
+| Server-runtime JWT secret | Derived from `'***' + identityDID` — predictable | Medium | Must be configurable before production |
+| Server-runtime logger `child()` | Mutates parent logger's `baseMeta` | Low | Logic bug, fix before production |

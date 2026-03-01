@@ -34,7 +34,7 @@ export class DiscordLinkService {
 
   initiateLink(params: { userDID: string; clientId: string; redirectUri: string }): DiscordLinkRequest {
     const stateBytes = new Uint8Array(16)
-    for (let i = 0; i < 16; i++) stateBytes[i] = Math.floor(Math.random() * 256)
+    globalThis.crypto.getRandomValues(stateBytes)
     const state = Array.from(stateBytes, (b) => b.toString(16).padStart(2, '0')).join('')
 
     this.pendingStates.set(state, { userDID: params.userDID, createdAt: Date.now() })

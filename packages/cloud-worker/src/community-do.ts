@@ -297,13 +297,16 @@ export class CommunityDurableObject extends DurableObject {
     const author = this.quadStore.getValue(payload.messageId, HarmonyPredicate.author, graph)
     if (author !== meta.did) return
 
-    // Update content
-    this.quadStore.remove({
-      subject: payload.messageId,
-      predicate: `${HARMONY}content`,
-      object: '', // will need match
-      graph
-    })
+    // Remove old content quad by fetching its current value
+    const oldContent = this.quadStore.getValue(payload.messageId, `${HARMONY}content`, graph)
+    if (oldContent !== null) {
+      this.quadStore.remove({
+        subject: payload.messageId,
+        predicate: `${HARMONY}content`,
+        object: oldContent,
+        graph
+      })
+    }
     this.quadStore.add({
       subject: payload.messageId,
       predicate: `${HARMONY}content`,

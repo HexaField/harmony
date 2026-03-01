@@ -1,7 +1,7 @@
 /**
  * Client-side SFU adapter interface.
  * Abstracts WebRTC session management so VoiceClient can work with
- * different SFU backends (Cloudflare Realtime, mediasoup, etc.)
+ * different SFU backends (Cloudflare Realtime, etc.)
  */
 
 /** Signaling callback — all SFU API calls go through this so the server can proxy */

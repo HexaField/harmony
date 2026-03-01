@@ -6,7 +6,6 @@
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./adapters/mediasoup": "./src/adapters/mediasoup.ts",
     "./adapters/in-memory": "./src/adapters/in-memory.ts",
     "./adapters": "./src/adapters/index.ts"
   },
@@ -19,25 +18,13 @@
     "@harmony/protocol": "workspace:*",
     "@harmony/quads": "workspace:*",
     "@harmony/vocab": "workspace:*",
-    "@harmony/zcap": "workspace:*",
-    "jsonwebtoken": "^9.0.3",
-    "mediasoup": "^3.19.17"
+    "@harmony/zcap": "workspace:*"
   },
   "devDependencies": {
     "@harmony/did": "workspace:*",
     "@harmony/vc": "workspace:*",
     "@rollup/plugin-typescript": "^12.3.0",
-    "@types/jsonwebtoken": "^9.0.10",
-    "mediasoup-client": "^3.18.7",
     "rollup": "^4.59.0",
     "tslib": "^2.8.1"
-  },
-  "peerDependencies": {
-    "mediasoup": ">=3.0.0"
-  },
-  "peerDependenciesMeta": {
-    "mediasoup": {
-      "optional": true
-    }
   }
 }

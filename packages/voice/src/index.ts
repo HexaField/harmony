@@ -19,3 +19,7 @@ export { InMemoryAdapter as InMemoryLiveKitAdapter } from './adapters/in-memory.
 
 // Re-export adapter types
 export type { SFUAdapter as SFUAdapterInterface } from './adapters/types.js'
+
+// Client-side SFU adapters
+export type { ClientSFUAdapter, SignalingFn, TrackObject, PushTracksResult, PullTracksResult } from './sfu-adapter.js'
+export { CloudflareSFUAdapter } from './cf-sfu-adapter.js'

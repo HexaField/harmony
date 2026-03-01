@@ -46,25 +46,31 @@ export class IdentityManager {
     this.vcService = new VCService(crypto)
   }
 
-  async create(): Promise<{ identity: Identity; keyPair: KeyPair; mnemonic: string }> {
+  async create(): Promise<{ identity: Identity; keyPair: KeyPair; encryptionKeyPair: KeyPair; mnemonic: string }> {
     const mnemonic = this.crypto.generateMnemonic()
     const seed = await this.crypto.mnemonicToSeed(mnemonic)
     const keyPair = await this.crypto.seedToKeyPair(seed)
+    const encryptionKeyPair = await this.crypto.deriveEncryptionKeyPair(keyPair)
     const document = await this.didProvider.create(keyPair)
     return {
       identity: { did: document.id, document, credentials: [], capabilities: [] },
       keyPair,
+      encryptionKeyPair,
       mnemonic
     }
   }
 
-  async createFromMnemonic(mnemonic: string): Promise<{ identity: Identity; keyPair: KeyPair }> {
+  async createFromMnemonic(
+    mnemonic: string
+  ): Promise<{ identity: Identity; keyPair: KeyPair; encryptionKeyPair: KeyPair }> {
     const seed = await this.crypto.mnemonicToSeed(mnemonic)
     const keyPair = await this.crypto.seedToKeyPair(seed)
+    const encryptionKeyPair = await this.crypto.deriveEncryptionKeyPair(keyPair)
     const document = await this.didProvider.create(keyPair)
     return {
       identity: { did: document.id, document, credentials: [], capabilities: [] },
-      keyPair
+      keyPair,
+      encryptionKeyPair
     }
   }
 

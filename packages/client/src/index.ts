@@ -151,38 +151,16 @@ export interface ServerConnection {
 
 // ── Persistence ──
 
-export interface PersistenceAdapter {
-  load(): Promise<PersistedState>
-  save(state: PersistedState): Promise<void>
-}
-
-export interface PersistedState {
-  servers: Array<{ url: string; communityIds: string[] }>
-  did?: string
-  encryptionKeyPair?: { publicKey: number[]; secretKey: number[] }
-}
-
-export class LocalStoragePersistence implements PersistenceAdapter {
-  private key = 'harmony:client:state'
-
-  async load(): Promise<PersistedState> {
-    try {
-      const raw = localStorage.getItem(this.key)
-      if (raw) return JSON.parse(raw) as PersistedState
-    } catch {
-      /* ignore */
-    }
-    return { servers: [] }
-  }
-
-  async save(state: PersistedState): Promise<void> {
-    try {
-      localStorage.setItem(this.key, JSON.stringify(state))
-    } catch {
-      /* ignore */
-    }
-  }
-}
+export {
+  type PersistenceAdapter,
+  type PersistedState,
+  LocalStoragePersistence,
+  type KVPersistenceAdapter,
+  MemoryKVPersistence,
+  IndexedDBPersistence,
+  KVBackedPersistence
+} from './persistence.js'
+import type { PersistenceAdapter, PersistedState } from './persistence.js'
 
 // ── Client ──
 

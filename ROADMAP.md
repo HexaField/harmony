@@ -1,6 +1,6 @@
 # Harmony — Roadmap & Feature Status
 
-_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-01 15:00 AEDT._
+_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-01 15:20 AEDT._
 
 ---
 
@@ -652,6 +652,34 @@ Everything below is done and committed.
 - Vitest total: 2,565 (was 2,534)
 - Manual browser MLS verification: Alice+Bob same epoch, decrypt confirmed via CDP
 - Repo cleanup: `dist-electron/` removed from git + added to `.gitignore`, test scripts moved to `tests/scripts/`
+
+---
+
+## Beta Polish — Must Fix & Should Fix
+
+> Items identified from a full codebase sweep (2026-03-01). Must-fix items are things users will notice immediately as broken; should-fix items are polish that sets the tone for a quality product.
+
+### 🔴 Must Fix
+
+| # | Item | Status | Notes |
+| --- | --- | --- | --- |
+| B1 | Channel unread indicators | ⬜ | Sidebar has no unread badges or bold for channels. DM unreads exist; channels don't. |
+| B2 | Notification sounds | ⬜ | Zero audio feedback for messages, mentions, or DMs. Silent app feels broken. |
+| B3 | Markdown renderer (inline) | ⬜ | Line-level only — can't handle `**bold** and *italic*` in same line. No multi-line code blocks, blockquotes, or lists. |
+| B4 | @mention rendering in messages | ⬜ | Detected server-side for notifications but not highlighted/clickable in message view. |
+| B5 | Remove debug console.log statements | ⬜ | 16 debug logs in server (`[MLS-*]`, `[resync]`) and client (`[MLS]`, `[Voice]`, `[Migration]`). Behind debug flag or remove. |
+| B6 | Social recovery UI stubs | ⬜ | 5 `TODO: POST /recovery/*` in Settings/Onboarding — buttons do nothing. Wire up or hide. |
+
+### 🟡 Should Fix
+
+| # | Item | Status | Notes |
+| --- | --- | --- | --- |
+| B7 | Favicon badge / document title unread | ⬜ | Browser tab gives no indication of unread messages. |
+| B8 | Emoji picker for message compose | ⬜ | Reaction picker exists but no emoji picker for composing. `:emoji:` shortcodes don't resolve. |
+| B9 | Italic/spoiler/link not rendered | ⬜ | MarkdownRenderer identifies them but MessageArea only renders code-block, code, bold, heading as markup. |
+| B10 | Image lightbox on click | ⬜ | `lightboxSrc` signal + overlay exist but not wired to attachment clicks in messages. |
+| B11 | Member profile popover | ⬜ | `MemberCard`/`MemberProfile` components exist but clicking member name in messages doesn't trigger them. |
+| B12 | Channel topic in header | ⬜ | Channel topic/description not displayed in channel header area. |
 
 ---
 

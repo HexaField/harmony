@@ -49,10 +49,18 @@ describe('Mobile responsive layout', () => {
     })
   })
 
-  it('layout adapts at mobile breakpoint (CSS classes exist)', () => {
-    // Verify mobile CSS classes are defined - structural test
-    // The actual responsive behavior is CSS-based via @media queries
-    expect(true).toBe(true) // CSS media queries tested visually
+  it('layout adapts at mobile breakpoint (store supports mobile app)', () => {
+    // Verify the store exposes mobile-related APIs for responsive adaptation
+    createRoot((dispose) => {
+      const store = createAppStore()
+      expect(typeof store.mobileApp).toBe('function')
+      expect(typeof store.setMobileApp).toBe('function')
+      // Default: no mobile app
+      expect(store.mobileApp()).toBeNull()
+      // Biometric toggle exists for mobile
+      expect(typeof store.biometricEnabled).toBe('function')
+      dispose()
+    })
   })
 
   it('sidebar toggle state management', () => {

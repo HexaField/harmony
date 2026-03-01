@@ -1365,30 +1365,46 @@ export class HarmonyClient {
 
   // ── Media ──
 
-  private getMediaKey(communityId: string, channelId: string): Uint8Array {
+  private async getMediaKey(communityId: string, channelId: string): Promise<Uint8Array> {
     const groupId = `${communityId}:${channelId}`
     const group = this.mlsGroups.get(groupId)
     if (group && group.memberCount() > 1) {
       return group.deriveMediaKey()
     }
-    // Fallback: derive from channel identity (not truly E2EE but deterministic per-channel)
-    // This covers cases where MLS group isn't established yet
+    // Fallback: HKDF-derived key from channel identity (not E2EE without MLS, but
+    // cryptographically proper derivation — each channel gets a unique key)
     const encoder = new TextEncoder()
-    const seed = encoder.encode(`harmony-media-fallback-${groupId}`)
-    const key = new Uint8Array(32)
-    for (let i = 0; i < 32; i++) key[i] = seed[i % seed.length] ^ (seed[(i + 7) % seed.length] << 1)
-    return key
+    const ikm = encoder.encode(`harmony-media-fallback-${groupId}`)
+    const info = encoder.encode('harmony-media-channel-key')
+    // Use Web Crypto HKDF when available, otherwise SHA-256 based expansion
+    if (typeof globalThis.crypto?.subtle?.importKey === 'function') {
+      const keyMaterial = await globalThis.crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits'])
+      const bits = await globalThis.crypto.subtle.deriveBits(
+        { name: 'HKDF', hash: 'SHA-256', salt: encoder.encode('harmony-media-salt'), info },
+        keyMaterial,
+        256
+      )
+      return new Uint8Array(bits)
+    }
+    // Node.js fallback using crypto module
+    const { hkdf } = await import('node:crypto')
+    return new Promise<Uint8Array>((resolve, reject) => {
+      hkdf('sha256', ikm, encoder.encode('harmony-media-salt'), info, 32, (err, dk) => {
+        if (err) reject(err)
+        else resolve(new Uint8Array(dk))
+      })
+    })
   }
 
   async uploadFile(communityId: string, channelId: string, file: FileInput): Promise<MediaRef> {
     if (!this.mediaClient) throw new Error('Media client not configured')
-    const channelKey = this.getMediaKey(communityId, channelId)
+    const channelKey = await this.getMediaKey(communityId, channelId)
     return this.mediaClient.uploadFile(file, channelKey, this._did, communityId, channelId)
   }
 
   async downloadFile(ref: MediaRef, communityId?: string, channelId?: string): Promise<DecryptedFile> {
     if (!this.mediaClient) throw new Error('Media client not configured')
-    const channelKey = communityId && channelId ? this.getMediaKey(communityId, channelId) : new Uint8Array(32) // Legacy fallback for refs without community context
+    const channelKey = communityId && channelId ? await this.getMediaKey(communityId, channelId) : new Uint8Array(32) // Legacy fallback for refs without community context
     return this.mediaClient.downloadFile(ref, channelKey)
   }
 

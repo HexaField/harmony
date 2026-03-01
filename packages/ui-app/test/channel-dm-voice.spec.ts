@@ -536,11 +536,10 @@ describe('Store: Typing Indicators', () => {
   it('setTypingUser adds to typing map', () => {
     createRoot((dispose) => {
       const store = createAppStore()
+      store.setActiveChannelId('ch-1')
       store.setTypingUser('ch-1', 'did:key:bob', 'Bob')
       const users = store.activeChannelTypingUsers()
-      // Can't easily check without active channel matching ch-1
-      // But the call should not throw
-      expect(true).toBe(true)
+      expect(users).toContain('Bob')
       dispose()
     })
   })
@@ -548,10 +547,11 @@ describe('Store: Typing Indicators', () => {
   it('clearTypingUser removes from typing map', () => {
     createRoot((dispose) => {
       const store = createAppStore()
+      store.setActiveChannelId('ch-1')
       store.setTypingUser('ch-1', 'did:key:bob', 'Bob')
       store.clearTypingUser('ch-1', 'did:key:bob')
-      // No throw
-      expect(true).toBe(true)
+      const users = store.activeChannelTypingUsers()
+      expect(users).not.toContain('Bob')
       dispose()
     })
   })

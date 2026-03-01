@@ -4,7 +4,7 @@
  * In browsers with Insertable Streams API support, this creates transform
  * functions that encrypt outgoing and decrypt incoming media frames.
  *
- * For non-browser environments (tests, Node.js), provides mock fallbacks.
+ * For non-browser environments (tests, Node.js), provides graceful degradation.
  */
 
 import type { E2EEBridge } from './e2ee-bridge.js'

@@ -1,6 +1,6 @@
 # Harmony — Roadmap & Feature Status
 
-_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-01 17:35 AEDT._
+_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-01 18:55 AEDT._
 
 ---
 
@@ -10,7 +10,7 @@ _Single source of truth for all features, voice/video detail, and release planni
 | ------------------ | ---------------------------------------- |
 | Packages           | 36                                       |
 | Estimated LOC      | ~32,000+                                 |
-| Vitest passing     | 2,544                                    |
+| Vitest passing     | 2,545                                    |
 | Vitest skipped     | 10                                       |
 | Vitest todo        | 114                                      |
 | Playwright passing | 79 (31 cross-topology + 48 discord-mock) |
@@ -309,8 +309,8 @@ _Single source of truth for all features, voice/video detail, and release planni
 ### Media & Files
 
 | Feature                                                      | Lib | Server | UI  |
-| ------------------------------------------------------------ | --- | ------ | --- | ---------------------------------------------------------- |
-| Media upload (MIME validation, 10MB limit, membership check) | ✅  | ✅     | ✅  | ⚠️ E2EE uses zeroed key — needs MLS channel key derivation |
+| ------------------------------------------------------------ | --- | ------ | --- | ------------------------------------------------------------------------------ |
+| Media upload (MIME validation, 10MB limit, membership check) | ✅  | ✅     | ✅  | Uses MLS `deriveMediaKey()` when available; HKDF fallback for pre-MLS channels |
 | Media delete                                                 | ✅  | ✅     | ✅  |
 | `uploadMediaToServer()` + `sendMessageWithAttachments()`     | ✅  | ✅     | ✅  |
 | Attachment display (inline images + download)                | ➖  | ➖     | ✅  |

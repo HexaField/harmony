@@ -444,7 +444,11 @@ export class MigrationService {
     const store = new MemoryQuadStore()
     await store.addAll(quads)
     const nquads = await store.exportNQuads()
-    const key = await this.crypto.deriveKey(adminKeyPair.secretKey, new Uint8Array(16), 'harmony-export')
+    const key = await this.crypto.deriveKey(
+      adminKeyPair.secretKey,
+      new TextEncoder().encode('harmony-export-salt-v1'),
+      'harmony-export'
+    )
     const encrypted = await this.crypto.symmetricEncrypt(new TextEncoder().encode(nquads), key)
     return {
       ciphertext: encrypted.ciphertext,
@@ -454,7 +458,11 @@ export class MigrationService {
   }
 
   async decryptExport(bundle: EncryptedExportBundle, adminKeyPair: KeyPair): Promise<Quad[]> {
-    const key = await this.crypto.deriveKey(adminKeyPair.secretKey, new Uint8Array(16), 'harmony-export')
+    const key = await this.crypto.deriveKey(
+      adminKeyPair.secretKey,
+      new TextEncoder().encode('harmony-export-salt-v1'),
+      'harmony-export'
+    )
     const decrypted = await this.crypto.symmetricDecrypt({ ciphertext: bundle.ciphertext, nonce: bundle.nonce }, key)
     const nquads = new TextDecoder().decode(decrypted)
     const store = new MemoryQuadStore()
@@ -510,7 +518,7 @@ export class MigrationService {
       const vc = await this.vcService.issue({
         issuerDID: params.adminDID,
         issuerKeyPair: params.adminKeyPair,
-        subjectDID: memberURI, // placeholder URI until DID linked
+        subjectDID: memberURI, // Discord URI — replaced with real DID when member claims their account
         type: 'CommunityMembershipCredential',
         claims: {
           communityId,

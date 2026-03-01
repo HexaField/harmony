@@ -126,7 +126,7 @@ export class IdentityManager {
       capabilities: identity.capabilities
     })
     const seed = keyPair.secretKey
-    const key = await this.crypto.deriveKey(seed, new Uint8Array(16), 'harmony-sync')
+    const key = await this.crypto.deriveKey(seed, new TextEncoder().encode('harmony-sync-salt-v1'), 'harmony-sync')
     return this.crypto.symmetricEncrypt(new TextEncoder().encode(payload), key)
   }
 
@@ -136,7 +136,11 @@ export class IdentityManager {
   ): Promise<{ identity: Identity; keyPair: KeyPair }> {
     const seed = await this.crypto.mnemonicToSeed(mnemonic)
     const keyPair = await this.crypto.seedToKeyPair(seed)
-    const key = await this.crypto.deriveKey(keyPair.secretKey, new Uint8Array(16), 'harmony-sync')
+    const key = await this.crypto.deriveKey(
+      keyPair.secretKey,
+      new TextEncoder().encode('harmony-sync-salt-v1'),
+      'harmony-sync'
+    )
     const decrypted = await this.crypto.symmetricDecrypt(payload, key)
     const data = JSON.parse(new TextDecoder().decode(decrypted))
     return {

@@ -193,9 +193,11 @@ export class DIDKeyProvider implements DIDProvider {
       const multibase = did.replace('did:key:', '')
       const { prefix, key } = decodeMultibase(multibase)
       if (prefix !== ED25519_MULTICODEC) return null
+      const RESOLVE_ONLY_MARKER = new Uint8Array(32)
+      RESOLVE_ONLY_MARKER[0] = 0xff // Marker: this key pair is resolve-only, secretKey must never be used for signing
       const keyPair: KeyPair = {
         publicKey: key,
-        secretKey: new Uint8Array(32), // dummy, not used for resolution
+        secretKey: RESOLVE_ONLY_MARKER,
         type: 'Ed25519'
       }
       // We need to derive X25519 from ed25519 public key

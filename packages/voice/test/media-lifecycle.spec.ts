@@ -99,8 +99,8 @@ describe('VoiceClient construction and signaling', () => {
     const client = new VoiceClient({ mode: 'test', mediaProvider: mockMediaProvider() })
     const signaling = createMockSignaling()
     client.setSignaling(signaling)
-    // No direct way to verify but shouldn't throw
-    expect(true).toBe(true)
+    // Verify signaling was set by checking the internal property
+    expect((client as any).signaling).toBe(signaling)
   })
 })
 

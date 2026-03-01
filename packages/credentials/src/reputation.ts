@@ -107,7 +107,9 @@ export class ReputationEngine {
     }
 
     // Store as RDF
-    this.storeReputationQuads(did, rep).catch(() => {})
+    this.storeReputationQuads(did, rep).catch((err) => {
+      console.debug('[Reputation] failed to store quads:', err)
+    })
   }
 
   addCredential(did: string, cred: PortableCredential): void {

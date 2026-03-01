@@ -52,7 +52,7 @@ export class E2EEBridge {
     const keyMaterial = await crypto.subtle.importKey('raw', secret.buffer as ArrayBuffer, 'HKDF', false, ['deriveKey'])
 
     const info = new TextEncoder().encode('harmony-voice-e2ee')
-    const salt = new Uint8Array(32) // zero salt, epoch secret has enough entropy
+    const salt = new TextEncoder().encode('harmony-voice-e2ee-salt-v1')
 
     const derivedKey = await crypto.subtle.deriveKey(
       { name: 'HKDF', hash: 'SHA-256', salt, info },

@@ -3,11 +3,17 @@ import { createCryptoProvider } from '@harmony/crypto'
 import { DIDKeyProvider } from '@harmony/did'
 import type { EncryptedExportBundle } from '@harmony/migration'
 import { PortalService } from '../src/index.js'
+import { createPortalDB } from '../src/db.js'
 import { createApp } from '../src/server.js'
 import type { Server } from 'http'
 
 const crypto = createCryptoProvider()
 const didProvider = new DIDKeyProvider(crypto)
+
+/** Create an in-memory SQLite db for tests */
+function testDB() {
+  return createPortalDB(':memory:')
+}
 
 function createTestBundle(adminDID: string): EncryptedExportBundle {
   return {

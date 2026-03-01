@@ -29,7 +29,12 @@ const desktopBridge = {
         }
       })
     }),
-  getScreenSources: () => ipcRenderer.invoke('harmony:screen-sources')
+  getScreenSources: () => ipcRenderer.invoke('harmony:screen-sources'),
+  persistData: (key, value) => ipcRenderer.invoke('harmony:persist-data', key, value),
+  loadData: (key) => ipcRenderer.invoke('harmony:load-data', key),
+  removeData: (key) => ipcRenderer.invoke('harmony:remove-data', key),
+  listDataKeys: () => ipcRenderer.invoke('harmony:list-data-keys'),
+  getDataPath: () => ipcRenderer.invoke('harmony:get-data-path')
 }
 
 contextBridge.exposeInMainWorld('__HARMONY_DESKTOP__', desktopBridge)

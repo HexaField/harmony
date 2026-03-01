@@ -160,6 +160,7 @@ export {
   IndexedDBPersistence,
   KVBackedPersistence
 } from './persistence.js'
+export { ElectronPersistence } from './electron-persistence.js'
 import type { PersistenceAdapter, PersistedState } from './persistence.js'
 
 // ── Client ──

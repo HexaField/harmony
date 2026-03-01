@@ -4,8 +4,12 @@
 
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell } from 'electron'
 import { join } from 'node:path'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, readdirSync } from 'node:fs'
 import { HarmonyApp } from '../src/app.ts'
+
+function sanitizeKey(key) {
+  return key.replace(/[^a-zA-Z0-9_:-]/g, '_')
+}
 
 const harmonyApp = new HarmonyApp()
 let mainWindow = null
@@ -178,6 +182,29 @@ function registerIPC() {
       appIcon: s.appIcon?.toDataURL() || null,
       display_id: s.display_id
     }))
+  })
+
+  // Filesystem persistence
+  ipcMain.handle('harmony:get-data-path', () => app.getPath('userData'))
+  ipcMain.handle('harmony:persist-data', (_event, key, value) => {
+    const dir = join(app.getPath('userData'), 'harmony-data')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, `${sanitizeKey(key)}.json`), value)
+  })
+  ipcMain.handle('harmony:load-data', (_event, key) => {
+    const file = join(app.getPath('userData'), 'harmony-data', `${sanitizeKey(key)}.json`)
+    return existsSync(file) ? readFileSync(file, 'utf8') : null
+  })
+  ipcMain.handle('harmony:remove-data', (_event, key) => {
+    const file = join(app.getPath('userData'), 'harmony-data', `${sanitizeKey(key)}.json`)
+    if (existsSync(file)) unlinkSync(file)
+  })
+  ipcMain.handle('harmony:list-data-keys', () => {
+    const dir = join(app.getPath('userData'), 'harmony-data')
+    if (!existsSync(dir)) return []
+    return readdirSync(dir)
+      .filter((f) => f.endsWith('.json'))
+      .map((f) => f.replace('.json', ''))
   })
 }
 

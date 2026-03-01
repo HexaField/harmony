@@ -1,6 +1,6 @@
 # Harmony — Roadmap & Feature Status
 
-_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-01 15:20 AEDT._
+_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-01 15:50 AEDT._
 
 ---
 
@@ -652,6 +652,16 @@ Everything below is done and committed.
 - Vitest total: 2,565 (was 2,534)
 - Manual browser MLS verification: Alice+Bob same epoch, decrypt confirmed via CDP
 - Repo cleanup: `dist-electron/` removed from git + added to `.gitignore`, test scripts moved to `tests/scripts/`
+- Beta polish B1–B5 implemented and **visually verified via CDP browser automation**:
+  - B1: Channel unread badges (count + bold name, auto-clear on switch)
+  - B2: Notification sounds (Web Audio API 880→660Hz chime)
+  - B3: Markdown renderer rewrite (bold, italic, code, strikethrough, spoiler, links, mentions, blockquotes, lists, code blocks, headings)
+  - B4: @mention rendering with accent highlight
+  - B5: Debug logs → `console.debug` (16 statements across server/client/voice/UI)
+- TS fixes: voice transport/produce/consume message types, voice event types, `EventHandler` type, duplicate export, unused import — 0 errors across client/server/ui-app
+- `PENTEST-RESULTS.md` deleted — all 11 findings remediated, tracked in security section
+- App.tsx: silent `catch {}` blocks now log `console.error("[App] init error:")` — was hiding identity init failures
+- Superseded CDP test scripts deleted; voice + MLS scripts kept in `tests/scripts/`
 
 ---
 

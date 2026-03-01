@@ -9,6 +9,18 @@ export interface PersistedState {
   servers: Array<{ url: string; communityIds: string[] }>
   did?: string
   encryptionKeyPair?: { publicKey: number[]; secretKey: number[] }
+  // Extended state (Priority 2)
+  communityServerMap?: Record<string, string>
+  lastActiveCommunityId?: string
+  lastActiveChannelId?: string
+  mlsGroupStates?: Record<string, number[]> // groupId -> exportState() bytes
+  sessionTokens?: Record<string, string> // serverUrl -> token
+  recoveryConfig?: {
+    trustedDIDs: string[]
+    threshold: number
+    configuredBy: string
+    configuredAt: string
+  }
 }
 
 export class LocalStoragePersistence implements PersistenceAdapter {

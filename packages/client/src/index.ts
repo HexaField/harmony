@@ -216,6 +216,10 @@ export class HarmonyClient {
 
   // Persistence
   private _persistenceAdapter: PersistenceAdapter | null = null
+  private _sessionTokens: Map<string, string> = new Map()
+  private _lastActiveCommunityId: string | null = null
+  private _lastActiveChannelId: string | null = null
+  private _persistFullTimer: ReturnType<typeof setInterval> | null = null
 
   // Phase 3 integrations
   private voiceClient: VoiceClient | null = null
@@ -305,6 +309,9 @@ export class HarmonyClient {
         }
       }
     }
+    // Restore extended state (session tokens, MLS groups, active IDs, etc.)
+    await client.restoreFullState()
+    client.startPeriodicPersist()
     return client
   }
 
@@ -416,8 +423,19 @@ export class HarmonyClient {
       sc.ws = ws
 
       ws.onopen = () => {
-        // Send auth
-        if (this._vp) {
+        // Try session token auth first (faster, no VP needed)
+        const existingToken = this._sessionTokens.get(params.serverUrl)
+        if (existingToken) {
+          const tokenMsg: ProtocolMessage = {
+            id: this.nextId(),
+            type: 'auth.token.verify' as ProtocolMessage['type'],
+            timestamp: new Date().toISOString(),
+            sender: this._did,
+            payload: { token: existingToken }
+          }
+          ws.send(serialise(tokenMsg))
+        } else if (this._vp) {
+          // Send auth via VP
           const authMsg: ProtocolMessage = {
             id: this.nextId(),
             type: 'sync.state',
@@ -434,7 +452,28 @@ export class HarmonyClient {
       ws.onmessage = (event: { data: string }) => {
         try {
           const msg = deserialise<ProtocolMessage>(event.data)
+
+          // Handle token expiry — fall back to VP auth
+          if (!sc.connected && (msg.type as string) === 'auth.token.expired') {
+            this._sessionTokens.delete(params.serverUrl)
+            if (this._vp) {
+              const authMsg: ProtocolMessage = {
+                id: this.nextId(),
+                type: 'sync.state',
+                timestamp: new Date().toISOString(),
+                sender: this._did,
+                payload: this._vp
+              }
+              ws.send(serialise(authMsg))
+            }
+            return
+          }
+
           if (!sc.connected && msg.type === 'sync.response') {
+            // Persist session token if provided
+            if ((msg.payload as any)?.sessionToken) {
+              this._sessionTokens.set(params.serverUrl, (msg.payload as any).sessionToken)
+            }
             sc.connected = true
             sc.reconnectAttempts = 0
             this.emitter.emit('connected')
@@ -486,6 +525,8 @@ export class HarmonyClient {
   }
 
   async disconnect(): Promise<void> {
+    this.stopPeriodicPersist()
+    this.persistFullState()
     for (const [, sc] of this._servers) {
       if (sc.reconnectTimer) {
         clearTimeout(sc.reconnectTimer)
@@ -2652,11 +2693,122 @@ export class HarmonyClient {
             publicKey: Array.from(this._encryptionKeyPair.publicKey),
             secretKey: Array.from(this._encryptionKeyPair.secretKey)
           }
-        : undefined
+        : undefined,
+      communityServerMap: Object.fromEntries(this._communityServerMap),
+      lastActiveCommunityId: this._lastActiveCommunityId ?? undefined,
+      lastActiveChannelId: this._lastActiveChannelId ?? undefined,
+      sessionTokens: this._sessionTokens.size > 0 ? Object.fromEntries(this._sessionTokens) : undefined
     }
     this._persistenceAdapter.save(state).catch(() => {
       /* ignore */
     })
+  }
+
+  /** Save full state including MLS groups — called on disconnect and periodically */
+  persistFullState(): void {
+    if (!this._persistenceAdapter) return
+    const mlsGroupStates: Record<string, number[]> = {}
+    for (const [groupId, group] of this.mlsGroups) {
+      try {
+        mlsGroupStates[groupId] = Array.from(group.exportState())
+      } catch {
+        /* skip groups that can't export */
+      }
+    }
+    const state: PersistedState = {
+      servers: Array.from(this._servers.values()).map((sc) => ({
+        url: sc.url,
+        communityIds: Array.from(sc.communities)
+      })),
+      did: this._did || undefined,
+      encryptionKeyPair: this._encryptionKeyPair
+        ? {
+            publicKey: Array.from(this._encryptionKeyPair.publicKey),
+            secretKey: Array.from(this._encryptionKeyPair.secretKey)
+          }
+        : undefined,
+      communityServerMap: Object.fromEntries(this._communityServerMap),
+      lastActiveCommunityId: this._lastActiveCommunityId ?? undefined,
+      lastActiveChannelId: this._lastActiveChannelId ?? undefined,
+      mlsGroupStates: Object.keys(mlsGroupStates).length > 0 ? mlsGroupStates : undefined,
+      sessionTokens: this._sessionTokens.size > 0 ? Object.fromEntries(this._sessionTokens) : undefined
+    }
+    this._persistenceAdapter.save(state).catch(() => {
+      /* ignore */
+    })
+  }
+
+  /** Restore extended state from persistence — called during init/create */
+  async restoreFullState(): Promise<void> {
+    if (!this._persistenceAdapter) return
+    const state = await this._persistenceAdapter.load()
+
+    // Restore community→server map
+    if (state.communityServerMap) {
+      for (const [cid, url] of Object.entries(state.communityServerMap)) {
+        this._communityServerMap.set(cid, url)
+      }
+    }
+
+    // Restore last active IDs
+    this._lastActiveCommunityId = state.lastActiveCommunityId ?? null
+    this._lastActiveChannelId = state.lastActiveChannelId ?? null
+
+    // Restore session tokens
+    if (state.sessionTokens) {
+      for (const [url, token] of Object.entries(state.sessionTokens)) {
+        this._sessionTokens.set(url, token)
+      }
+    }
+
+    // Restore MLS group states
+    if (state.mlsGroupStates && this.mlsProvider && this._keyPair) {
+      for (const [groupId, bytes] of Object.entries(state.mlsGroupStates)) {
+        try {
+          const group = await this.mlsProvider.loadGroup(new Uint8Array(bytes), this._keyPair)
+          this.mlsGroups.set(groupId, group)
+        } catch {
+          /* skip groups that can't be restored */
+        }
+      }
+    }
+  }
+
+  /** Start periodic full state persistence (every 30s) */
+  startPeriodicPersist(): void {
+    this.stopPeriodicPersist()
+    this._persistFullTimer = setInterval(() => this.persistFullState(), 30_000)
+  }
+
+  /** Stop periodic full state persistence */
+  stopPeriodicPersist(): void {
+    if (this._persistFullTimer) {
+      clearInterval(this._persistFullTimer)
+      this._persistFullTimer = null
+    }
+  }
+
+  /** Set the last active community/channel for restoration */
+  setActiveCommunity(communityId: string | null): void {
+    this._lastActiveCommunityId = communityId
+    this.persistState()
+  }
+
+  setActiveChannel(channelId: string | null): void {
+    this._lastActiveChannelId = channelId
+    this.persistState()
+  }
+
+  get lastActiveCommunityId(): string | null {
+    return this._lastActiveCommunityId
+  }
+
+  get lastActiveChannelId(): string | null {
+    return this._lastActiveChannelId
+  }
+
+  get sessionTokens(): Map<string, string> {
+    return this._sessionTokens
   }
 
   private createMessage(type: string, payload: unknown, id?: string): ProtocolMessage {

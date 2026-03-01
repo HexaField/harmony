@@ -39,7 +39,7 @@ export const App: Component = () => {
           }
           return
         }
-      } catch {
+      } catch (err) {
         // Config load failed — fall through to onboarding
       }
     }
@@ -59,7 +59,8 @@ export const App: Component = () => {
           store.setDisplayName(savedIdentity.displayName)
         }
         await store.initClient(result.identity, result.keyPair)
-      } catch {
+      } catch (err) {
+        console.error('[App] init error:', err)
         store.setDid('')
         store.setMnemonic('')
       }
@@ -76,7 +77,8 @@ export const App: Component = () => {
         store.setIdentity(result.identity)
         store.setKeyPair(result.keyPair)
         await store.initClient(result.identity, result.keyPair)
-      } catch {
+      } catch (err) {
+        console.error('[App] init error:', err)
         store.setDid('')
         store.setMnemonic('')
       }

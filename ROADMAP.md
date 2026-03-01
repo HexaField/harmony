@@ -1,6 +1,6 @@
 # Harmony — Roadmap & Feature Status
 
-_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-01 10:30 AEDT._
+_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-01 15:00 AEDT._
 
 ---
 
@@ -10,7 +10,7 @@ _Single source of truth for all features, voice/video detail, and release planni
 | ------------------ | ---------------------------------------- |
 | Packages           | 36                                       |
 | Estimated LOC      | ~32,000+                                 |
-| Vitest passing     | 2,534                                    |
+| Vitest passing     | 2,565                                    |
 | Vitest skipped     | 10                                       |
 | Vitest todo        | 114                                      |
 | Playwright passing | 79 (31 cross-topology + 48 discord-mock) |
@@ -635,6 +635,24 @@ Everything below is done and committed.
 - Vitest count: 2,534 passing (was 2,433). Playwright count: 79 passing + 7 skipped (was 13)
 - All commits pushed to origin/main
 
+### 2026-03-01
+
+- MLS key exchange fully operational: creator adds members via Welcome, epoch sync verified
+- MLS dedup fix: `_pendingMemberDIDs` Map on client prevents duplicate `addMember` when multiple `mls.member.joined` notifications arrive before async add completes
+- Server MLS logging: `[MLS-KP-UPLOAD]`, `[MLS-COMM-JOIN]`, `[MLS-GROUP-SETUP]`, `[MLS-NOTIFY]`, `[MLS-DEDUP]`
+- Client MLS logging: `[MLS-DECRYPT-FAIL]` with epoch/senderIndex/ctLen
+- Encryption key pair persistence in `PersistedState` — survives reconnects
+- `joinFromWelcome` signature fix: separate encryption (X25519) and signing (Ed25519) key pairs
+- `processCommit` epoch guard: `commit.epoch <= current` → skip (prevents Welcome+Commit double-apply)
+- Pending MLS message queue: messages before Welcome stored in `_pendingMlsMessages`, replayed after
+- Sequential member addition queue: `_pendingMemberAdds` prevents racing on keypackage.response
+- `handleChannelMessage` rewritten: epoch 0 = plaintext, epoch >0 = MLS decrypt, regex validation for printable text
+- 34 new MLS key exchange tests (`packages/e2ee/test/mls-key-exchange.spec.ts`) — all passing
+- 88/88 e2ee tests passing (was 54)
+- Vitest total: 2,565 (was 2,534)
+- Manual browser MLS verification: Alice+Bob same epoch, decrypt confirmed via CDP
+- Repo cleanup: `dist-electron/` removed from git + added to `.gitignore`, test scripts moved to `tests/scripts/`
+
 ---
 
 ## Road to Beta
@@ -832,8 +850,9 @@ Cloud: Portal Worker + Cloud Worker on Cloudflare. Clients connect via WSS. Self
 | CI workflow           | `~/Desktop/harmony/.github/workflows/ci.yml`                                |
 | Deploy workflow       | `~/Desktop/harmony/.github/workflows/deploy.yml`                            |
 | Release workflow      | `~/Desktop/harmony/.github/workflows/release.yml`                           |
-| Voice E2E tests       | `~/Desktop/harmony/harmony-e2e-voice.cjs`                                   |
-| Cross-device E2E      | `~/Desktop/harmony/harmony-flows.cjs`                                       |
+| Voice E2E tests       | `~/Desktop/harmony/tests/scripts/harmony-e2e-voice.cjs`                     |
+| MLS browser test      | `~/Desktop/harmony/tests/scripts/mls-browser-test.cjs`                      |
+| MLS cross-device      | `~/Desktop/harmony/tests/scripts/verify-mls.cjs`                            |
 | Cross-topology tests  | `~/Desktop/harmony/tests/cross-topology.spec.ts`                            |
 | Discord mock tests    | `~/Desktop/harmony/tests/discord-mock-e2e.spec.ts`                          |
 | DM architecture       | `~/Desktop/harmony/docs/dm-architecture.md`                                 |

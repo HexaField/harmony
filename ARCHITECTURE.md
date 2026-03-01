@@ -871,11 +871,13 @@ graph TB
 
 ### Connection Flow
 
-1. **Electron embedded** — `ServerRuntime` starts with `port: 0` (OS-assigned). Once bound, the actual port is sent to the renderer via IPC (`__HARMONY_DESKTOP__.getEmbeddedServer()`). The store auto-connects to `ws://localhost:{port}` on startup, skipping the "join a community" step.
+1. **Electron embedded** — `ServerRuntime` starts in-process on port 4515 (host `0.0.0.0`). After the window loads, `harmony:server-started` IPC sends the server URL. The renderer calls `window.__HARMONY_DESKTOP__.waitForServer()` then `store.addServer(serverUrl)` to auto-connect. Identity is restored from disk-persisted config.
 
-2. **Manual URL entry** — The onboarding view offers an "Advanced" option where users type a server address. The store calls `client.connect(url)` directly.
+2. **Persisted server reconnect** — `LocalStoragePersistence` saves `{ servers: [{ url, communityIds[] }], did, encryptionKeyPair }`. On `HarmonyClient.create()`, the client auto-reconnects to all previously-saved servers. This is the primary reconnection path for web clients across sessions.
 
-3. **Invite code resolution** — The primary social discovery path:
+3. **Manual URL entry** — `store.addServer(url)` / `client.addServer(url)` connects to any server URL. Used by the migration wizard and available as a manual option post-onboarding (not in the onboarding flow itself).
+
+4. **Invite code resolution** — The primary social discovery path:
 
 ```mermaid
 sequenceDiagram
@@ -897,32 +899,46 @@ sequenceDiagram
     S-->>UI: Community state (channels, members, roles)
 ```
 
-4. **Community directory** — Portal Worker serves `GET /communities` with public listings (name, description, member count, server URL). The onboarding view renders these as browsable cards. Servers self-register via `POST /communities/register` with a VP proving ownership.
+4. **Community directory** — Portal Worker `directory.list()` returns communities with endpoints (name, description, member count, server URL). Servers self-register via `directory.register()` with `{ communityId, name, endpoint, memberCount, inviteCode, ownerDID }`. Backend fully implemented; UI browse integration not yet visible in onboarding.
 
-5. **Relay fallback** — For clients behind restrictive NATs, `GET /relay/:communityId` upgrades to WebSocket on `RelayDO`, which proxies bidirectionally to the target server.
+5. **Relay fallback** — `RelayDurableObject` provides bidirectional WebSocket proxy for NAT traversal. Node connects first, then clients connect and messages are proxied. Currently **scaffolded but not production-enabled** (`relay: { enabled: false }` in server config).
 
-### Invite Registration (Server → Portal)
+### Multi-Server Architecture
 
-When a server creates an invite with `portal: true`, it calls `POST /invites/register` on Portal Worker to map the short code to its URL + community ID. This is how invite codes become globally resolvable.
+`HarmonyClient` supports simultaneous connections to multiple servers via `_servers: Map<string, ServerConnection>`. A `_communityServerMap` tracks which community lives on which server. The `connect()` method takes `{ serverUrl, identity, keyPair, vp? }` — if no VP is provided, one is auto-created from the identity/keyPair.
+
+### Invite Code Detail
+
+When a server creates an invite with `portal: true`, the portal-worker's `invite-resolver` stores the mapping: short code → `{ communityId, endpoint, preview: { name, description, memberCount } }`. Invite codes support expiry, max uses, revocation, and use counting.
 
 ### First Launch (Onboarding)
 
-The `OnboardingView` walks new users through: Welcome → Identity creation (generates DID + shows mnemonic for backup) → Display name → Join a community (invite code / browse directory / manual URL). Electron skips the join step since the embedded server is pre-connected.
+The `OnboardingView` offers four paths:
+
+1. **Create Identity** → generates mnemonic → backup quiz → setup (display name + optional Discord link via portal OAuth)
+2. **Recover Identity** → enter 12-word mnemonic OR social recovery (initiation works; completion not yet connected to backend)
+3. **Import from Discord** → create identity first, then MigrationWizard
+4. **Sign in via Portal** → portal URL input, Discord OAuth, identity creation + linking
+
+Server connection happens **separately** from onboarding — via embedded auto-connect (desktop), persisted reconnect, or manual `addServer()`.
 
 ### Implementation Status
 
-| Path                                | Status                            |
-| ----------------------------------- | --------------------------------- |
-| Electron embedded auto-connect      | ✅ Implemented                    |
-| Manual server URL entry             | ✅ Implemented                    |
-| Invite code resolution              | ✅ Implemented                    |
-| Community directory                 | ✅ Implemented                    |
-| Relay proxy (NAT traversal)         | ✅ Implemented                    |
-| Deep links (`harmony://invite/...`) | ⚠️ Electron only — mobile not yet |
-| QR code sharing                     | ❌ Planned                        |
-| Local network discovery (mDNS)      | ❌ Not implemented                |
+| Path                           | Status                                                |
+| ------------------------------ | ----------------------------------------------------- |
+| Electron embedded auto-connect | ✅ Implemented                                        |
+| Persisted server reconnect     | ✅ Implemented                                        |
+| Manual server URL              | ✅ Implemented                                        |
+| Invite code resolution         | ✅ Implemented                                        |
+| Community directory            | ✅ Backend implemented; UI browse partial             |
+| Portal OAuth sign-in           | ✅ Implemented                                        |
+| Relay proxy (NAT traversal)    | 🟡 Scaffolded (`enabled: false`)                      |
+| Federation                     | 🟡 Scaffolded (`enabled: false`)                      |
+| Deep links (`harmony://`)      | ⚠️ Electron only (handles OAuth + generic deep links) |
+| QR code sharing                | ❌ Planned                                            |
+| Local network discovery (mDNS) | ❌ Not implemented                                    |
 
-> **Note:** Auto-reconnect is built into `HarmonyClient` (default on, 3s interval with exponential backoff). The persisted server list in localStorage allows the web client to reconnect to known servers across sessions.
+> **Note:** Auto-reconnect uses max 5 attempts. The `LocalStoragePersistence` adapter ensures web clients reconnect to all saved servers across sessions.
 
 ---
 

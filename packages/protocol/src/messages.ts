@@ -107,6 +107,17 @@ export type MessageType =
   | 'voice.get-producers.response'
   | 'voice.new-producer'
   | 'voice.producer-closed'
+  // Voice — CF SFU signaling
+  | 'voice.session.create'
+  | 'voice.session.created'
+  | 'voice.tracks.push'
+  | 'voice.tracks.pushed'
+  | 'voice.tracks.pull'
+  | 'voice.tracks.pulled'
+  | 'voice.renegotiate'
+  | 'voice.renegotiated'
+  | 'voice.track.published'
+  | 'voice.track.removed'
   // Files
   | 'media.upload.request'
   | 'media.upload.complete'
@@ -263,7 +274,12 @@ export const CLIENT_TO_SERVER_TYPES: MessageType[] = [
   'notification.count',
   // Moderation
   'moderation.config.update',
-  'moderation.config.get'
+  'moderation.config.get',
+  // Voice — CF SFU
+  'voice.session.create',
+  'voice.tracks.push',
+  'voice.tracks.pull',
+  'voice.renegotiate'
 ]
 
 export const SERVER_TO_CLIENT_TYPES: MessageType[] = [
@@ -321,7 +337,14 @@ export const SERVER_TO_CLIENT_TYPES: MessageType[] = [
   'notification.new',
   // Moderation
   'moderation.config.response',
-  'moderation.raid-detected'
+  'moderation.raid-detected',
+  // Voice — CF SFU
+  'voice.session.created',
+  'voice.tracks.pushed',
+  'voice.tracks.pulled',
+  'voice.renegotiated',
+  'voice.track.published',
+  'voice.track.removed'
 ]
 
 export const FEDERATION_TYPES: MessageType[] = ['federation.relay', 'federation.sync', 'federation.presence']

@@ -705,11 +705,11 @@ export class HarmonyServer {
     }
     const notified = this.e2eeNotified.get(groupMeta.groupId)!
     if (notified.has(memberDID)) {
-      console.log('[MLS-DEDUP] skipping duplicate notification for', memberDID, 'in', groupMeta.groupId)
+      console.debug('[MLS-DEDUP] skipping duplicate notification for', memberDID, 'in', groupMeta.groupId)
       return
     }
     notified.add(memberDID)
-    console.log('[MLS-NOTIFY]', memberDID, 'in', groupMeta.groupId, 'to creator', creatorConn.did)
+    console.debug('[MLS-NOTIFY]', memberDID, 'in', groupMeta.groupId, 'to creator', creatorConn.did)
 
     this.sendToConnection(creatorConn, {
       id: `mls-mj-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -1688,7 +1688,7 @@ export class HarmonyServer {
     )
 
     // Notify MLS group creators that a new member with key packages is available
-    console.log('[MLS-COMM-JOIN]', conn.did, 'has KP:', this.keyPackages.has(conn.did), 'groups:', [
+    console.debug('[MLS-COMM-JOIN]', conn.did, 'has KP:', this.keyPackages.has(conn.did), 'groups:', [
       ...this.e2eeGroups.keys()
     ])
     if (this.keyPackages.has(conn.did)) {
@@ -2433,14 +2433,14 @@ export class HarmonyServer {
     this.keyPackages.get(conn.did)!.push(serialized)
 
     // Notify E2EE group creators that this member has a key package ready
-    console.log('[MLS-KP-UPLOAD] from', conn.did, 'communities:', conn.communities, 'groups:', [
+    console.debug('[MLS-KP-UPLOAD] from', conn.did, 'communities:', conn.communities, 'groups:', [
       ...this.e2eeGroups.keys()
     ])
     for (const [, groupMeta] of this.e2eeGroups) {
       if (groupMeta.creatorDID === conn.did) continue
       const memberCommunities = conn.communities ?? []
       if (!memberCommunities.includes(groupMeta.communityId)) continue
-      console.log('[MLS-KP-UPLOAD] -> notifying creator for', groupMeta.groupId)
+      console.debug('[MLS-KP-UPLOAD] -> notifying creator for', groupMeta.groupId)
       for (const [, otherConn] of this._connections) {
         if (otherConn.did === groupMeta.creatorDID) {
           this.notifyMlsMemberJoined(otherConn, groupMeta, conn.did)
@@ -2512,7 +2512,7 @@ export class HarmonyServer {
         })
 
         // Notify the group creator about any existing community members who have key packages
-        console.log('[MLS-GROUP-SETUP]', payload.groupId, 'by', conn.did, 'checking members...')
+        console.debug('[MLS-GROUP-SETUP]', payload.groupId, 'by', conn.did, 'checking members...')
         for (const [, memberConn] of this._connections) {
           if (memberConn.did === conn.did) continue // skip creator
           const memberCommunities = memberConn.communities ?? []
@@ -2749,14 +2749,14 @@ export class HarmonyServer {
         object: HarmonyType.Community
       })
       const communityIds = communityQuads.map((q) => q.subject)
-      console.log(`[resync] Found ${communityIds.length} communities in store for ${conn.did?.substring(0, 30)}`)
+      console.debug(`[resync] Found ${communityIds.length} communities in store for ${conn.did?.substring(0, 30)}`)
 
       for (const communityId of communityIds) {
         try {
           const members = await this.communityManager.getMembers(communityId)
           const isMember = members.some((m) => m.did === conn.did)
           if (isMember && !conn.communities.includes(communityId)) {
-            console.log(`[resync] ${conn.did?.substring(0, 30)} is member of ${communityId.substring(0, 40)}`)
+            console.debug(`[resync] ${conn.did?.substring(0, 30)} is member of ${communityId.substring(0, 40)}`)
             conn.communities.push(communityId)
             if (!this.communitySubscriptions.has(communityId)) {
               this.communitySubscriptions.set(communityId, new Set())

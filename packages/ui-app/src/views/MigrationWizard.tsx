@@ -232,7 +232,7 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
           clearInterval(pollTimer!)
           pollTimer = undefined
           setExportProgress(100)
-          console.log('[Migration] Export complete', {
+          console.debug('[Migration] Export complete', {
             hasBundle: !!status.bundle,
             hasKeyPair: !!status.adminKeyPair,
             bundleMeta: status.bundle?.metadata
@@ -261,7 +261,7 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
       return
     }
 
-    console.log('[Migration] Import starting', {
+    console.debug('[Migration] Import starting', {
       url,
       hasBundle: !!bundle,
       hasKeyPair: !!adminKeyPair,
@@ -277,7 +277,7 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
         adminKeyPair
       })
       const communityName = bundle?.metadata?.sourceServerName || 'Imported Community'
-      console.log('[Migration] Import result', {
+      console.debug('[Migration] Import result', {
         communityId: result.communityId,
         channels: result.channels?.length,
         members: result.members?.length,

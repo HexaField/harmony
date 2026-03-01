@@ -78,6 +78,10 @@ export interface AppStore {
   addChannelMessage: (channelId: string, m: MessageData) => void
   setChannelMessages: (channelId: string, msgs: MessageData[]) => void
 
+  // Channel unreads
+  channelUnreadCount: (channelId: string) => number
+  markChannelRead: (channelId: string) => void
+
   // Members
   members: () => MemberData[]
   setMembers: (m: MemberData[]) => void
@@ -369,6 +373,7 @@ export function createAppStore(): AppStore {
   function setActiveChannelId(id: string) {
     _setActiveChannelId(id)
     persistUI('activeChannelId', id)
+    markChannelRead(id)
   }
   const [messages, setMessages] = createSignal<MessageData[]>([])
   const [members, _setMembers] = createSignal<MemberData[]>([])
@@ -425,6 +430,10 @@ export function createAppStore(): AppStore {
         },
         ...convos
       ])
+    }
+    // Play notification sound for incoming DMs
+    if (m.authorDid !== did()) {
+      playNotificationSound()
     }
   }
 
@@ -772,6 +781,26 @@ export function createAppStore(): AppStore {
     setMessages((prev) => [...prev, m])
   }
 
+  // Notification sound (Web Audio API — no external files)
+  let audioCtx: AudioContext | null = null
+  function playNotificationSound() {
+    try {
+      if (!audioCtx) audioCtx = new AudioContext()
+      const osc = audioCtx.createOscillator()
+      const gain = audioCtx.createGain()
+      osc.connect(gain)
+      gain.connect(audioCtx.destination)
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime)
+      osc.frequency.setValueAtTime(660, audioCtx.currentTime + 0.08)
+      gain.gain.setValueAtTime(0.15, audioCtx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2)
+      osc.start(audioCtx.currentTime)
+      osc.stop(audioCtx.currentTime + 0.2)
+    } catch {
+      /* audio not available */
+    }
+  }
+
   // Per-channel message cache
   const channelMessageCache = new Map<string, MessageData[]>()
   const [channelMsgVersion, setChannelMsgVersion] = createSignal(0)
@@ -781,11 +810,34 @@ export function createAppStore(): AppStore {
     return channelMessageCache.get(channelId) ?? []
   }
 
+  // Channel unreads
+  const channelUnreadMap = new Map<string, number>()
+  const [channelUnreadVersion, setChannelUnreadVersion] = createSignal(0)
+
+  const channelUnreadCount = (channelId: string): number => {
+    channelUnreadVersion() // track reactivity
+    return channelUnreadMap.get(channelId) ?? 0
+  }
+
+  const markChannelRead = (channelId: string) => {
+    if (channelUnreadMap.has(channelId)) {
+      channelUnreadMap.set(channelId, 0)
+      setChannelUnreadVersion((v) => v + 1)
+    }
+  }
+
   const addChannelMessage = (channelId: string, m: MessageData) => {
     const existing = channelMessageCache.get(channelId) ?? []
     if (existing.some((e) => e.id === m.id)) return
     channelMessageCache.set(channelId, [...existing, m])
     setChannelMsgVersion((v) => v + 1)
+    // Track unreads: increment if not the active channel and not from self
+    if (channelId !== activeChannelId() && m.authorDid !== did()) {
+      channelUnreadMap.set(channelId, (channelUnreadMap.get(channelId) ?? 0) + 1)
+      setChannelUnreadVersion((v) => v + 1)
+      // Play notification sound
+      playNotificationSound()
+    }
   }
 
   const setChannelMessages = (channelId: string, msgs: MessageData[]) => {
@@ -1731,6 +1783,8 @@ export function createAppStore(): AppStore {
     channelMessages,
     addChannelMessage,
     setChannelMessages,
+    channelUnreadCount,
+    markChannelRead,
     members,
     setMembers,
     dmConversations,

@@ -99,31 +99,142 @@ export function ImageViewer(props: ImageViewerProps) {
   return { src: props.src, alt: props.alt ?? '', onClose: props.onClose }
 }
 
-// Markdown renderer — parses basic markdown to structured output
-export function MarkdownRenderer(props: MarkdownRendererProps) {
-  function parse(content: string): Array<{ type: string; content: string }> {
-    const segments: Array<{ type: string; content: string }> = []
-    // Simple markdown parsing
-    const lines = content.split('\n')
-    for (const line of lines) {
-      if (line.startsWith('```')) {
-        segments.push({ type: 'code-block', content: line.slice(3) })
-      } else if (line.startsWith('# ')) {
-        segments.push({ type: 'heading', content: line.slice(2) })
-      } else if (line.match(/\*\*(.+?)\*\*/)) {
-        segments.push({ type: 'bold', content: line })
-      } else if (line.match(/_(.+?)_/) || line.match(/\*(.+?)\*/)) {
-        segments.push({ type: 'italic', content: line })
-      } else if (line.match(/`(.+?)`/)) {
-        segments.push({ type: 'code', content: line })
-      } else if (line.match(/\|\|(.+?)\|\|/)) {
-        segments.push({ type: 'spoiler', content: line })
-      } else if (line.match(/https?:\/\/\S+/)) {
-        segments.push({ type: 'link', content: line })
-      } else {
-        segments.push({ type: 'text', content: line })
-      }
+// Markdown renderer — parses markdown to inline segments
+// Supports: **bold**, *italic*, _italic_, `code`, ||spoiler||, ~~strikethrough~~,
+// ```code blocks```, # headings, > blockquotes, - lists, [text](url), bare URLs, @mentions
+export type MarkdownSegment =
+  | { type: 'text'; content: string }
+  | { type: 'bold'; content: string }
+  | { type: 'italic'; content: string }
+  | { type: 'code'; content: string }
+  | { type: 'code-block'; content: string; language?: string }
+  | { type: 'spoiler'; content: string }
+  | { type: 'strikethrough'; content: string }
+  | { type: 'link'; content: string; href: string }
+  | { type: 'mention'; content: string; did?: string }
+  | { type: 'heading'; content: string; level: number }
+  | { type: 'blockquote'; content: string }
+  | { type: 'list-item'; content: string }
+  | { type: 'newline' }
+
+function parseInline(text: string): MarkdownSegment[] {
+  const segments: MarkdownSegment[] = []
+  // Regex matches inline patterns in priority order
+  const pattern =
+    /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(_[^_]+_)|(~~[^~]+~~)|(\|\|[^|]+\|\|)|(\[([^\]]+)\]\(([^)]+)\))|(https?:\/\/[^\s<>]+)|(@[\w.:-]+)/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = pattern.exec(text)) !== null) {
+    // Text before this match
+    if (match.index > lastIndex) {
+      segments.push({ type: 'text', content: text.slice(lastIndex, match.index) })
     }
+    const m = match[0]
+    if (match[1]) {
+      // `inline code`
+      segments.push({ type: 'code', content: m.slice(1, -1) })
+    } else if (match[2]) {
+      // **bold**
+      segments.push({ type: 'bold', content: m.slice(2, -2) })
+    } else if (match[3]) {
+      // *italic*
+      segments.push({ type: 'italic', content: m.slice(1, -1) })
+    } else if (match[4]) {
+      // _italic_
+      segments.push({ type: 'italic', content: m.slice(1, -1) })
+    } else if (match[5]) {
+      // ~~strikethrough~~
+      segments.push({ type: 'strikethrough', content: m.slice(2, -2) })
+    } else if (match[6]) {
+      // ||spoiler||
+      segments.push({ type: 'spoiler', content: m.slice(2, -2) })
+    } else if (match[7]) {
+      // [text](url)
+      segments.push({ type: 'link', content: match[8], href: match[9] })
+    } else if (match[10]) {
+      // bare URL
+      segments.push({ type: 'link', content: m, href: m })
+    } else if (match[11]) {
+      // @mention
+      const mentionText = m.slice(1)
+      segments.push({
+        type: 'mention',
+        content: mentionText,
+        did: mentionText.startsWith('did:') ? mentionText : undefined
+      })
+    }
+    lastIndex = match.index + m.length
+  }
+
+  if (lastIndex < text.length) {
+    segments.push({ type: 'text', content: text.slice(lastIndex) })
+  }
+
+  return segments
+}
+
+export function MarkdownRenderer(props: MarkdownRendererProps) {
+  function parse(content: string): MarkdownSegment[] {
+    const segments: MarkdownSegment[] = []
+    const lines = content.split('\n')
+    let inCodeBlock = false
+    let codeBlockContent: string[] = []
+    let codeBlockLang = ''
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+
+      // Multi-line code blocks
+      if (line.startsWith('```')) {
+        if (!inCodeBlock) {
+          inCodeBlock = true
+          codeBlockLang = line.slice(3).trim()
+          codeBlockContent = []
+        } else {
+          segments.push({ type: 'code-block', content: codeBlockContent.join('\n'), language: codeBlockLang })
+          inCodeBlock = false
+        }
+        continue
+      }
+      if (inCodeBlock) {
+        codeBlockContent.push(line)
+        continue
+      }
+
+      // Add newline between lines (not before first)
+      if (i > 0 && segments.length > 0) {
+        segments.push({ type: 'newline' })
+      }
+
+      // Headings
+      const headingMatch = line.match(/^(#{1,3})\s+(.+)/)
+      if (headingMatch) {
+        segments.push({ type: 'heading', content: headingMatch[2], level: headingMatch[1].length })
+        continue
+      }
+
+      // Blockquotes
+      if (line.startsWith('> ')) {
+        segments.push({ type: 'blockquote', content: line.slice(2) })
+        continue
+      }
+
+      // List items
+      if (line.match(/^[-*]\s+/)) {
+        segments.push({ type: 'list-item', content: line.replace(/^[-*]\s+/, '') })
+        continue
+      }
+
+      // Inline parsing for regular lines
+      segments.push(...parseInline(line))
+    }
+
+    // Unclosed code block
+    if (inCodeBlock) {
+      segments.push({ type: 'code-block', content: codeBlockContent.join('\n'), language: codeBlockLang })
+    }
+
     return segments
   }
 

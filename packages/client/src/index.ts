@@ -2395,7 +2395,7 @@ export class HarmonyClient {
     // Deduplicate: check both existing members AND pending additions
     const existingMembers = group.members()
     if (existingMembers.some((m) => m.did === payload.memberDID)) {
-      console.log('[MLS] member already in group:', payload.memberDID)
+      console.debug('[MLS] member already in group:', payload.memberDID)
       return
     }
     if (!this._pendingMemberDIDs.has(groupId)) {
@@ -2403,7 +2403,7 @@ export class HarmonyClient {
     }
     const pending = this._pendingMemberDIDs.get(groupId)!
     if (pending.has(payload.memberDID)) {
-      console.log('[MLS] member already pending:', payload.memberDID)
+      console.debug('[MLS] member already pending:', payload.memberDID)
       return
     }
     pending.add(payload.memberDID)

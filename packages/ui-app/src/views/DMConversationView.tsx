@@ -233,8 +233,47 @@ export const DMConversationView: Component = () => {
                               )
                             if (seg.type === 'code')
                               return <code class="bg-[var(--bg-input)] px-1 py-0.5 rounded text-xs">{seg.content}</code>
-                            if (seg.type === 'bold') return <strong>{seg.content.replace(/\*\*/g, '')}</strong>
+                            if (seg.type === 'bold') return <strong>{seg.content}</strong>
+                            if (seg.type === 'italic') return <em>{seg.content}</em>
+                            if (seg.type === 'strikethrough') return <span class="line-through">{seg.content}</span>
+                            if (seg.type === 'spoiler')
+                              return (
+                                <span class="bg-[var(--text-muted)] text-transparent hover:text-[var(--text-primary)] hover:bg-transparent rounded px-0.5 cursor-pointer transition-colors">
+                                  {seg.content}
+                                </span>
+                              )
+                            if (seg.type === 'link')
+                              return (
+                                <a
+                                  href={(seg as any).href ?? seg.content}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  class="text-[var(--accent)] hover:underline"
+                                >
+                                  {seg.content}
+                                </a>
+                              )
+                            if (seg.type === 'mention')
+                              return (
+                                <span class="bg-[var(--accent)]/20 text-[var(--accent)] rounded px-0.5 font-medium">
+                                  @{seg.content}
+                                </span>
+                              )
                             if (seg.type === 'heading') return <strong class="text-base">{seg.content}</strong>
+                            if (seg.type === 'blockquote')
+                              return (
+                                <div class="border-l-2 border-[var(--text-muted)] pl-2 ml-1 text-[var(--text-muted)] italic">
+                                  {seg.content}
+                                </div>
+                              )
+                            if (seg.type === 'list-item')
+                              return (
+                                <div class="flex gap-1">
+                                  <span class="text-[var(--text-muted)]">•</span>
+                                  <span>{seg.content}</span>
+                                </div>
+                              )
+                            if (seg.type === 'newline') return <br />
                             return <span>{seg.content}</span>
                           }}
                         </For>

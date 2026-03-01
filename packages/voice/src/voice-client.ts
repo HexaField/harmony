@@ -374,7 +374,7 @@ class VoiceConnectionImpl implements VoiceConnection {
         }
       }
 
-      console.log('[Voice] Mediasoup connection established')
+      console.debug('[Voice] Mediasoup connection established')
     } catch (err) {
       console.error('[Voice] Mediasoup init failed:', err)
       throw err

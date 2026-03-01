@@ -108,7 +108,20 @@ export const ChannelSidebarView: Component = () => {
                   style={{ width: 'calc(100% - 16px)' }}
                 >
                   <span class="mr-1.5 text-[var(--text-muted)]">#</span>
-                  <span class="truncate">{channel.name}</span>
+                  <span
+                    class="truncate"
+                    classList={{
+                      'font-semibold text-[var(--text-primary)]':
+                        !isActive() && store.channelUnreadCount(channel.id) > 0
+                    }}
+                  >
+                    {channel.name}
+                  </span>
+                  <Show when={!isActive() && store.channelUnreadCount(channel.id) > 0}>
+                    <span class="ml-auto mr-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-[var(--accent)] text-white text-[10px] font-bold px-1">
+                      {store.channelUnreadCount(channel.id)}
+                    </span>
+                  </Show>
                   <Show when={canManageChannels()}>
                     <button
                       onClick={(e) => {

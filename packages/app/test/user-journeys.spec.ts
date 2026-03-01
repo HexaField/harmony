@@ -485,12 +485,8 @@ describe('Journey 4: Moderation', () => {
     // The ban is sent through the protocol
     await adminClient.banMember(community.id, userAuth.identity.did, 'Spam')
 
-    // Note: Server-side ban enforcement is not yet wired (server accepts any valid VP).
-    // Verifying the ban was sent is the extent of current testability.
-    // In a full implementation, the banned user's sendMessage would throw.
-
-    // Admin unbans by removing the ban (protocol-level action)
-    // Currently no unban method — would need server-side ban list
+    // Ban enforcement is tested in integration.spec.ts (banned user is disconnected and cannot rejoin).
+    // This journey test verifies the client-side ban call.
   })
 })
 

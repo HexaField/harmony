@@ -180,24 +180,26 @@ describe('Full E2E: Fresh Start → Community → Messages → Restart', () => {
     // Small delay for server to process
     await new Promise((r) => setTimeout(r, 500))
 
-    // Sync channel and collect messages
-    const _messages = await new Promise<any[]>((resolve) => {
-      const msgs: any[] = []
-      const unsub = client.on('message', (...args: unknown[]) => {
-        const msg = args[0] as any
-        msgs.push(msg)
+    // Sync channel and verify the sent message appears
+    const syncResult = await new Promise<any>((resolve) => {
+      const unsub = client.on('sync', (...args: unknown[]) => {
+        const data = args[0] as any
+        if (data.channelId === generalId) {
+          unsub()
+          resolve(data)
+        }
       })
       client.syncChannel(communityId, generalId)
       setTimeout(() => {
         unsub()
-        resolve(msgs)
-      }, 1000)
+        resolve({ messages: [] })
+      }, 3000)
     })
 
-    // TODO: sync.response message parsing may need work —
-    // messages may come as sync.response payload rather than individual 'message' events
-    // For now, verify no error occurred during send
-    expect(true).toBe(true)
+    expect(syncResult.messages.length).toBeGreaterThanOrEqual(1)
+    const found = syncResult.messages.find((m: any) => m.content === 'Hello from E2E test!')
+    expect(found).toBeDefined()
+    expect(found.sender).toBe(client.did)
   }, 10000)
 
   // ── Step 9: Simulate restart — verify disk persistence ──

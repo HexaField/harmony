@@ -1784,7 +1784,7 @@ export class HarmonyServer {
 
   // ── Ban Management ──
 
-  private isUserBanned(communityId: string, did: string): boolean {
+  isUserBanned(communityId: string, did: string): boolean {
     return this.bannedUsers.get(communityId)?.has(did) ?? false
   }
 

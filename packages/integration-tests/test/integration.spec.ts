@@ -845,4 +845,52 @@ describe('10. ZCAP Authorization Chain', () => {
     const revokedCheck = revokedResult.checks.find((c) => c.name.includes('chainRevocation') && !c.passed)
     expect(revokedCheck).toBeTruthy()
   })
+
+  it('banned user is disconnected and cannot rejoin', async () => {
+    const { server, port } = await createServerOnRandomPort()
+    servers.push(server)
+
+    // Admin creates community
+    const admin = await connectClient(port)
+    clients.push(admin)
+    const community = await admin.createCommunity({ name: 'Ban Test' })
+
+    // User joins
+    const userAuth = await createIdentityAndVP()
+    const user = await connectClient(port, userAuth.identity, userAuth.keyPair, userAuth.vp)
+    clients.push(user)
+    await user.joinCommunity(community.id)
+    await new Promise((r) => setTimeout(r, 200))
+
+    // Admin bans user
+    await admin.banMember(community.id, userAuth.identity.did, 'Spam')
+    await new Promise((r) => setTimeout(r, 500))
+
+    // Verify ban is recorded server-side
+    expect(server.isUserBanned(community.id, userAuth.identity.did)).toBe(true)
+
+    // Banned user tries to reconnect and rejoin — should get error event
+    const user2 = new HarmonyClient({
+      wsFactory: (url: string) => new WebSocket(url) as any
+    })
+    clients.push(user2)
+    await user2.connect({
+      serverUrl: `ws://127.0.0.1:${port}`,
+      identity: userAuth.identity,
+      keyPair: userAuth.keyPair,
+      vp: userAuth.vp
+    })
+
+    // Listen for error when trying to rejoin
+    const errorReceived = new Promise<boolean>((resolve) => {
+      user2.on('error', () => resolve(true))
+      // Also resolve on disconnect
+      user2.on('disconnected', () => resolve(true))
+      setTimeout(() => resolve(false), 3000)
+    })
+
+    user2.joinCommunity(community.id).catch(() => {})
+    const gotError = await errorReceived
+    expect(gotError).toBe(true)
+  }, 15000)
 })

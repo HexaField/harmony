@@ -1,27 +1,27 @@
 # Harmony — Roadmap & Feature Status
 
-_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-01 18:55 AEDT._
+_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-01 22:10 AEDT._
 
 ---
 
 ## Codebase Snapshot
 
-| Metric             | Value                                    |
-| ------------------ | ---------------------------------------- |
-| Packages           | 36                                       |
-| Estimated LOC      | ~32,000+                                 |
-| Vitest passing     | 2,545                                    |
-| Vitest skipped     | 10                                       |
-| Vitest todo        | 114                                      |
-| Playwright passing | 79 (31 cross-topology + 48 discord-mock) |
-| Playwright skipped | 7 (voice — needs test voice server)      |
-| Test matrix        | 128 ✅ / 0 ❌ / 3 ⚠️ / 16 ⊘              |
-| TypeScript errors  | 0                                        |
-| Oxlint warnings    | 7 (SolidJS `let ref` false positives)    |
-| Vulnerabilities    | 0                                        |
-| UI bundle size     | 349 KB                                   |
-| Docker image       | 739 MB                                   |
-| Android APK        | 3.7 MB (unsigned)                        |
+| Metric             | Value                                                             |
+| ------------------ | ----------------------------------------------------------------- |
+| Packages           | 36                                                                |
+| Estimated LOC      | ~32,000+                                                          |
+| Vitest passing     | 2,545                                                             |
+| Vitest skipped     | 10                                                                |
+| Vitest todo        | 114                                                               |
+| Playwright passing | 99 (38 cross-topology + 13 discord-integration + 48 discord-mock) |
+| Playwright skipped | 7 (voice — needs test voice server)                               |
+| Test matrix        | 128 ✅ / 0 ❌ / 3 ⚠️ / 16 ⊘                                       |
+| TypeScript errors  | 0                                                                 |
+| Oxlint warnings    | 7 (SolidJS `let ref` false positives)                             |
+| Vulnerabilities    | 0                                                                 |
+| UI bundle size     | 349 KB                                                            |
+| Docker image       | 739 MB                                                            |
+| Android APK        | 3.7 MB (unsigned)                                                 |
 
 ---
 
@@ -308,18 +308,18 @@ _Single source of truth for all features, voice/video detail, and release planni
 
 ### Media & Files
 
-| Feature                                                      | Lib | Server | UI  |
-| ------------------------------------------------------------ | --- | ------ | --- | ------------------------------------------------------------------------------ |
-| Media upload (MIME validation, 10MB limit, membership check) | ✅  | ✅     | ✅  | Uses MLS `deriveMediaKey()` when available; HKDF fallback for pre-MLS channels |
-| Media delete                                                 | ✅  | ✅     | ✅  |
-| `uploadMediaToServer()` + `sendMessageWithAttachments()`     | ✅  | ✅     | ✅  |
-| Attachment display (inline images + download)                | ➖  | ➖     | ✅  |
-| File upload UI (preview chips)                               | ➖  | ➖     | ✅  |
-| Image gallery                                                | ➖  | ➖     | ✅  |
-| Link preview (OpenGraph)                                     | 📋  | 📋     | 📋  |
-| Thumbnail generation                                         | 📋  | 📋     | 📋  |
-| File checksum verification                                   | ✅  | ✅     | 📋  |
-| Media storage (file-based / R2)                              | ✅  | ✅     | ➖  |
+| Feature | Lib | Server | UI | Notes |
+| --- | --- | --- | --- | --- |
+| Media upload (MIME validation, 10MB limit, membership check) | ✅ | ✅ | ✅ | Uses MLS `deriveMediaKey()` when available; HKDF fallback for pre-MLS channels |
+| Media delete | ✅ | ✅ | ✅ |
+| `uploadMediaToServer()` + `sendMessageWithAttachments()` | ✅ | ✅ | ✅ |
+| Attachment display (inline images + download) | ➖ | ➖ | ✅ |
+| File upload UI (preview chips) | ➖ | ➖ | ✅ |
+| Image gallery | ➖ | ➖ | ✅ |
+| Link preview (OpenGraph) | 📋 | 📋 | 📋 |
+| Thumbnail generation | 📋 | 📋 | 📋 |
+| File checksum verification | ✅ | ✅ | 📋 |
+| Media storage (file-based / R2) | ✅ | ✅ | ➖ |
 
 ### Search
 
@@ -714,8 +714,8 @@ Everything below is done and committed.
 | 6 | Stripe API keys | ⬜ | Josh | Test + live keys |
 | 7 | Billing integration | ⬜ | Agent | Wire Stripe into cloud worker per billing plan — needs Stripe keys first |
 | 8 | Voice E2E test | ✅ | Agent | Mac ↔ Linux, 22/23 E2E tests passing (mediasoup SFU) |
-| 9 | Cross-topology E2E | ✅ | Agent | 31 Playwright tests across 4 topologies (single, two-client, self-hosted, mixed) |
-| 10 | Discord mock E2E | ✅ | Agent | 48 Playwright tests: Bot API, OAuth, migration export, identity linking |
+| 9 | Cross-topology E2E | ✅ | Agent | 38 Playwright tests across 7 topology suites |
+| 10 | Discord mock E2E | 🔧 | Agent | Test file written (~48 tests) but API mismatches unresolved — `MigrationBot` constructor, `exportServer` signature, metadata keys differ from implementation |
 | 11 | Electron build pipeline | ⬜ | Josh + Agent | macOS notarization, Windows signing, auto-update |
 | 12 | Capacitor build pipeline | ⬜ | Josh + Agent | APK signing, iOS provisioning |
 | 13 | Secrets management | ⬜ | Josh | `wrangler secret put` for OAuth, Stripe, etc. |
@@ -737,7 +737,7 @@ Everything below is done and committed.
 | --- | --- | --- | --- |
 | 1 | Full onboarding flow | ⬜ | Real browser |
 | 2 | Voice with real media | ✅ | Two Electron clients (Mac+Linux), mute/unmute/leave verified |
-| 3 | Multi-user real-time | ✅ | 51 CDP E2E tests + 31 Playwright cross-topology tests |
+| 3 | Multi-user real-time | ✅ | 51 CDP E2E tests + 38 Playwright cross-topology tests |
 | 4 | Mobile | ⬜ | Capacitor APK on real Android device |
 | 5 | Self-hosted Docker | ⬜ | `docker compose up` → Electron → create community → restart → verify persistence |
 | 6 | Migration flow | ⬜ | Real Discord server → import → verify |
@@ -811,36 +811,67 @@ Everything below is done and committed.
 
 ## Skipped & Todo Tests
 
-### Summary: 10 skip, 114 todo
+### Summary: 18 skip, 113 todo
 
-**Skipped (10)** — all require real credentials or running infrastructure:
+**Skipped (18)** — require real credentials, running infrastructure, or hardware:
 
-- Discord OAuth vitest (4) — Playwright covers these
-- Migration E2E (4) — needs bot token + OAuth env
-- Federation (1) — needs real peer
-- Server import edge case (1)
+| Package | Count | Reason |
+| --- | --- | --- |
+| voice | 9 | Real SFU/PiP, getUserMedia |
+| integration-tests/flow-verification | 8 | better-sqlite3 Node version mismatch (compiled for Node 22, running Node 24) |
+| e2ee | 3 | MLS re-keying |
+| federation | 4 | Real peer server |
+| portal | 4 | OAuth credentials |
+| migration-e2e | 4 | Discord bot token + OAuth env |
+| cloud | 2 | Cloudflare environment |
+| vc | 5 | Advanced VC features |
+| zcap | 4 | Advanced ZCAP delegation |
+| ui-app/wire-up | 6 | SolidJS rendering context |
+| media | 8 | Real file I/O |
+| credentials | 4 | Complex policy enforcement |
+| bot-api | 8 | Bot runtime |
+| protocol | 4 | Future message types |
+| governance | 2 | Execution engine |
+| cli | 3 | CLI bundle distribution |
+| search | 4 | UI integration |
+| did | 3 | DID method expansion |
+| integration/import | 1 | Server import edge case |
 
-**Todo by category:**
+**Failed (39, pre-existing)** — all `better-sqlite3` native module mismatch (Node 22 → 24):
+
+| File                                               | Tests | Root Cause                            |
+| -------------------------------------------------- | ----- | ------------------------------------- |
+| `server-runtime/test/server-runtime.spec.ts`       | 12    | `better-sqlite3` dlopen               |
+| `server-runtime/test/sqlite-quad-store.spec.ts`    | 9     | `better-sqlite3` dlopen               |
+| `app/test/app.spec.ts`                             | 6     | `better-sqlite3` (via server-runtime) |
+| `app/test/config-persistence.spec.ts`              | 2     | `better-sqlite3` (via server-runtime) |
+| `integration-tests/test/full-e2e.spec.ts`          | 6     | `better-sqlite3` (via server-runtime) |
+| `integration-tests/test/flow-verification.spec.ts` | 1     | `better-sqlite3` (via server-runtime) |
+| `integration-tests/test/live-server-join.spec.ts`  | 1     | Requires running Mac server           |
+| `integration-tests/test/voice.spec.ts`             | 2     | No real audio device                  |
+
+**Todo (113) by category:**
 
 | Category | Count | What |
 | --- | --- | --- |
-| Post-launch | 29 | Federation (4), bot-api (8), ZCAP advanced (4), VC admission (5), DID methods (3), CLI bundles (3), governance (2) |
+| Post-launch packages | 29 | Federation (4), bot-api (8), ZCAP advanced (4), VC admission (5), DID methods (3), CLI bundles (3), governance (2) |
 | Needs real environment | 12 | Voice SFU/PiP (9), E2EE re-keying (3) |
-| Search | 4 | UI integration (SolidJS context) |
-| UI stubs | ~20 | Wire-up (6), DM (5), media (8), credentials (5), channel-perms (3), roles (3), voice (6) |
+| UI wire-up | ~26 | Wire-up (6), DM (5), media (8), credentials (5), channel-perms (3), roles (3), voice (6) |
 | Cloud Worker | 4 | DO integration (miniflare) |
 | Protocol | 4 | Future message types |
 | Docker | 3 | Container-specific tests |
 | Migration | 3 | GDPR: opt-out, privacy, portable export |
-| Feature coverage meta-test | 14 skip | Entire file skipped |
+| Search | 4 | UI integration (SolidJS context) |
+| Feature coverage meta-test | 14 | Entire `feature-coverage.spec.ts` file skipped |
+| Other | ~14 | Scattered across packages |
 
-### 3 ⚠️ Items (need real hardware)
+### ⚠️ Items (need real hardware/environment)
 
-- 11.1 — Voice join (real microphone)
-- 11.2–11.3 — Voice features (real media)
-- 14.1 — Ctrl+K keybinding (real browser)
+- Voice join/features (real microphone, getUserMedia)
+- Ctrl+K keybinding (real browser, not JSDOM)
+- Live server join (requires running Mac server on port 4515)
 
-### 16 ⊘ Items (blocked on unbuilt infrastructure)
+### ⊘ Items (blocked on unbuilt infrastructure)
 
 Federation, governance, bot API, custom credentials, community export/import, GDPR.
 

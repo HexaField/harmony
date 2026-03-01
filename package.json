@@ -1,6 +1,9 @@
 {
   "name": "harmony",
+  "version": "0.1.0",
   "private": true,
+  "description": "Harmony — real-time communication platform with E2EE",
+  "author": "Josh Field",
   "type": "module",
   "scripts": {
     "dev": "pnpm -r --if-present dev",

@@ -1813,8 +1813,18 @@ export class HarmonyClient {
         decrypted.content = { text: new TextDecoder().decode(plaintext) }
         addAndEmit()
       })
-      .catch(() => {
+      .catch((err) => {
         // MLS decryption failed — emit as [encrypted]
+        console.error(
+          '[MLS-DECRYPT-FAIL]',
+          err?.message,
+          'epoch:',
+          ct.epoch,
+          'senderIndex:',
+          ct.senderIndex,
+          'ctLen:',
+          ciphertextBytes?.length
+        )
         addAndEmit()
       })
   }
@@ -2373,15 +2383,31 @@ export class HarmonyClient {
     }
   }
 
+  private _pendingMemberDIDs = new Map<string, Set<string>>()
+
   private handleMLSMemberJoined(msg: ProtocolMessage): void {
     const payload = msg.payload as { communityId: string; channelId: string; groupId: string; memberDID: string }
     if (!this.mlsProvider || !this._keyPair) return
     const groupId = payload.groupId
     const group = this.mlsGroups.get(groupId)
     if (!group) return
-    // Skip if member is already in the group
+
+    // Deduplicate: check both existing members AND pending additions
     const existingMembers = group.members()
-    if (existingMembers.some((m) => m.did === payload.memberDID)) return
+    if (existingMembers.some((m) => m.did === payload.memberDID)) {
+      console.log('[MLS] member already in group:', payload.memberDID)
+      return
+    }
+    if (!this._pendingMemberDIDs.has(groupId)) {
+      this._pendingMemberDIDs.set(groupId, new Set())
+    }
+    const pending = this._pendingMemberDIDs.get(groupId)!
+    if (pending.has(payload.memberDID)) {
+      console.log('[MLS] member already pending:', payload.memberDID)
+      return
+    }
+    pending.add(payload.memberDID)
+
     // Queue member additions to avoid racing on keypackage.response
     this._pendingMemberAdds = this._pendingMemberAdds || Promise.resolve()
     this._pendingMemberAdds = this._pendingMemberAdds.then(() =>

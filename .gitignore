@@ -1,5 +1,6 @@
 node_modules
 dist
+dist-electron
 .transcripts
 .DS_Store
 package-lock.json
@@ -18,3 +19,6 @@ test-results
 *.db-wal
 harmony.dbtest-ws.mjs
 tests/.server-*.mts
+*-browser-test.cjs
+verify-mls.cjs
+gen-identity.*

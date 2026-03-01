@@ -663,11 +663,11 @@ Everything below is done and committed.
 
 | # | Item | Status | Notes |
 | --- | --- | --- | --- |
-| B1 | Channel unread indicators | ⬜ | Sidebar has no unread badges or bold for channels. DM unreads exist; channels don't. |
-| B2 | Notification sounds | ⬜ | Zero audio feedback for messages, mentions, or DMs. Silent app feels broken. |
-| B3 | Markdown renderer (inline) | ⬜ | Line-level only — can't handle `**bold** and *italic*` in same line. No multi-line code blocks, blockquotes, or lists. |
-| B4 | @mention rendering in messages | ⬜ | Detected server-side for notifications but not highlighted/clickable in message view. |
-| B5 | Remove debug console.log statements | ⬜ | 16 debug logs in server (`[MLS-*]`, `[resync]`) and client (`[MLS]`, `[Voice]`, `[Migration]`). Behind debug flag or remove. |
+| B1 | Channel unread indicators | ✅ | Sidebar has no unread badges or bold for channels. DM unreads exist; channels don't. |
+| B2 | Notification sounds | ✅ | Zero audio feedback for messages, mentions, or DMs. Silent app feels broken. |
+| B3 | Markdown renderer (inline) | ✅ | Line-level only — can't handle `**bold** and *italic*` in same line. No multi-line code blocks, blockquotes, or lists. |
+| B4 | @mention rendering in messages | ✅ | Detected server-side for notifications but not highlighted/clickable in message view. |
+| B5 | Remove debug console.log statements | ✅ | 16 debug logs in server (`[MLS-*]`, `[resync]`) and client (`[MLS]`, `[Voice]`, `[Migration]`). Behind debug flag or remove. |
 | B6 | Social recovery UI stubs | ⬜ | 5 `TODO: POST /recovery/*` in Settings/Onboarding — buttons do nothing. Wire up or hide. |
 
 ### 🟡 Should Fix

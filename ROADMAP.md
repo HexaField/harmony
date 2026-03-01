@@ -846,6 +846,54 @@ Federation, governance, bot API, custom credentials, community export/import, GD
 
 ---
 
+## Post-Beta: Future Work
+
+### Social Recovery Server Relay
+
+B6 wired the client-side setup and initiation flows, but three operations require a server relay that doesn't exist yet:
+
+1. **Approve** — Trustees need to receive recovery requests from the server, review them, and sign approvals. Requires:
+   - Server endpoint: `POST /recovery/approve` — receives signed approval from trustee
+   - Server endpoint: `GET /recovery/:requestId/status` — returns approval count vs threshold
+   - Push notification to trustees when a recovery request is created for their DID
+   - Protocol message types: `recovery.request`, `recovery.approve`, `recovery.status`
+
+2. **Status Check** — Recoverer needs to poll (or subscribe to) approval progress. Requires:
+   - Server aggregates approvals per request ID
+   - WebSocket event: `recovery.status.updated` when new approval arrives
+
+3. **Complete** — Once threshold is met, server verifies all approval signatures and issues new credentials. Requires:
+   - Server endpoint: `POST /recovery/complete` — verifies approval signatures against trusted DID list
+   - Re-key identity: generate new key pair, update DID document
+   - Migrate community memberships to new DID
+   - Invalidate old key packages, upload new ones
+
+**Current state:** Setup persists to localStorage, initiation creates a local request ID. UI shows honest "coming in a future update" for server-dependent features.
+
+### MLS Encryption
+
+- **New channel MLS setup:** When channels are created after initial community join, the MLS group needs to be initialised for that channel. Currently only works for channels that exist at community join time.
+- **Epoch history tracking:** Store past epoch secrets so old messages in sync history remain decryptable. Currently, messages encrypted under a previous epoch are unreadable after key rotation.
+- **Re-keying on member removal:** When a member is removed/banned, rotate the MLS group key so they can't decrypt future messages. The `processCommit` epoch guard handles forward security but the removal flow isn't wired.
+
+### Voice/Video
+
+- Replace DID strings with display names in VideoGrid participant labels
+- Add call state UI (connecting/disconnected/reconnecting indicators)
+- Replace emoji icons with SVG icons in voice/video controls
+- Mac VideoGrid `readyState:0` timing — verify `onunmute` fix with real media tracks
+- Picture-in-Picture mode for voice calls
+
+### Infrastructure (Release Gates)
+
+- Cloudflare Workers + Durable Objects deployment
+- Domain registration + DNS
+- Stripe API keys for billing
+- macOS/Windows code signing certificates for Electron distribution
+- Auto-update (electron-updater) configuration
+
+---
+
 ## Deployment Architecture
 
 ```

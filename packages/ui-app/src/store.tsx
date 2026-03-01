@@ -1,4 +1,5 @@
 import { createSignal, createContext, useContext, createEffect, on } from 'solid-js'
+import { loadRecoveryConfig } from './services/recovery.js'
 import { pseudonymFromDid } from './utils/pseudonym.js'
 import type { KeyPair } from '@harmony/crypto'
 import type { Identity } from '@harmony/identity'
@@ -693,11 +694,16 @@ export function createAppStore(): AppStore {
   }
 
   // Recovery state
+  const savedRecovery = loadRecoveryConfig()
   const [recoveryStatus, setRecoveryStatus] = createSignal<{
     configured: boolean
     trustedDIDs?: string[]
     threshold?: number
-  } | null>(null)
+  } | null>(
+    savedRecovery
+      ? { configured: true, trustedDIDs: savedRecovery.trustedDIDs, threshold: savedRecovery.threshold }
+      : null
+  )
   const [pendingRecoveryRequests, setPendingRecoveryRequests] = createSignal<
     Array<{
       requestId: string

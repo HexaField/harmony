@@ -1,6 +1,8 @@
 import { createSignal, Show, For, type Component } from 'solid-js'
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
+import { setupRecovery, RECOVERY_FEATURES } from '../services/recovery.js'
+import { addToast } from '../components/Shared/index.js'
 
 type SettingsSection = 'identity' | 'servers' | 'friends' | 'appearance' | 'recovery' | 'about'
 
@@ -368,15 +370,36 @@ export const SettingsView: Component = () => {
                           if (dids.length === 0) return
                           setRecoveryLoading(true)
                           try {
-                            // TODO: Call POST /recovery/setup when cloud URL is available
+                            const identity = store.identity()
+                            if (!identity) {
+                              addToast({ message: 'No identity available', type: 'error' })
+                              return
+                            }
+                            const kp = store.keyPair()
+                            if (!kp) throw new Error('No key pair available')
+                            const result = await setupRecovery({
+                              identity,
+                              trustedDIDs: dids,
+                              threshold: threshold(),
+                              keyPair: kp
+                            })
+                            if (!result.ok) {
+                              addToast({ message: result.error!, type: 'error' })
+                              return
+                            }
                             store.setRecoveryStatus({
                               configured: true,
-                              trustedDIDs: dids,
-                              threshold: threshold()
+                              trustedDIDs: result.data!.trustedDIDs,
+                              threshold: result.data!.threshold
                             })
                             setRecoverySetupMode(false)
+                            addToast({ message: 'Recovery configured successfully', type: 'success' })
                           } catch (err) {
                             console.error('Recovery setup failed:', err)
+                            addToast({
+                              message: `Recovery setup failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+                              type: 'error'
+                            })
                           } finally {
                             setRecoveryLoading(false)
                           }
@@ -450,26 +473,34 @@ export const SettingsView: Component = () => {
                         when={!req.alreadyApproved}
                         fallback={<p class="text-xs text-green-400 mt-2">✓ {t('RECOVERY_APPROVED')}</p>}
                       >
-                        <button
-                          onClick={async () => {
-                            try {
-                              // TODO: Call POST /recovery/approve when cloud URL available
-                              const updated = store
-                                .pendingRecoveryRequests()
-                                .map((r) =>
-                                  r.requestId === req.requestId
-                                    ? { ...r, alreadyApproved: true, approvalsCount: r.approvalsCount + 1 }
-                                    : r
-                                )
-                              store.setPendingRecoveryRequests(updated)
-                            } catch (err) {
-                              console.error('Approval failed:', err)
-                            }
-                          }}
-                          class="mt-2 py-1 px-3 rounded bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-xs font-semibold transition-colors"
+                        <Show
+                          when={RECOVERY_FEATURES.approve}
+                          fallback={
+                            <p class="text-xs text-[var(--text-muted)] mt-2 italic">
+                              Approval requires server relay — coming in a future update
+                            </p>
+                          }
                         >
-                          {t('RECOVERY_APPROVE')}
-                        </button>
+                          <button
+                            onClick={async () => {
+                              try {
+                                const updated = store
+                                  .pendingRecoveryRequests()
+                                  .map((r) =>
+                                    r.requestId === req.requestId
+                                      ? { ...r, alreadyApproved: true, approvalsCount: r.approvalsCount + 1 }
+                                      : r
+                                  )
+                                store.setPendingRecoveryRequests(updated)
+                              } catch (err) {
+                                console.error('Approval failed:', err)
+                              }
+                            }}
+                            class="mt-2 py-1 px-3 rounded bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-xs font-semibold transition-colors"
+                          >
+                            {t('RECOVERY_APPROVE')}
+                          </button>
+                        </Show>
                       </Show>
                     </div>
                   )}

@@ -1,6 +1,6 @@
 # Harmony — Roadmap & Feature Status
 
-_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-01 16:35 AEDT._
+_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-01 17:00 AEDT._
 
 ---
 
@@ -10,7 +10,7 @@ _Single source of truth for all features, voice/video detail, and release planni
 | ------------------ | ---------------------------------------- |
 | Packages           | 36                                       |
 | Estimated LOC      | ~32,000+                                 |
-| Vitest passing     | 2,533                                    |
+| Vitest passing     | 2,543                                    |
 | Vitest skipped     | 10                                       |
 | Vitest todo        | 114                                      |
 | Playwright passing | 79 (31 cross-topology + 48 discord-mock) |
@@ -685,18 +685,18 @@ Everything below is done and committed.
 | B3 | Markdown renderer (inline) | ✅ | Line-level only — can't handle `**bold** and *italic*` in same line. No multi-line code blocks, blockquotes, or lists. |
 | B4 | @mention rendering in messages | ✅ | Detected server-side for notifications but not highlighted/clickable in message view. |
 | B5 | Remove debug console.log statements | ✅ | 16 debug logs in server (`[MLS-*]`, `[resync]`) and client (`[MLS]`, `[Voice]`, `[Migration]`). Behind debug flag or remove. |
-| B6 | Social recovery UI stubs | ⬜ | 5 `TODO: POST /recovery/*` in Settings/Onboarding — buttons do nothing. Wire up or hide. |
+| B6 | Social recovery UI stubs | ✅ | Setup wired to `IdentityManager.setupRecovery()` with validation + localStorage persistence. Approve/status/complete show "coming in a future update" (requires server relay). |
 
 ### 🟡 Should Fix
 
 | # | Item | Status | Notes |
-| --- | --- | --- | --- | --- |
+| --- | --- | --- | --- |
 | B7 | Favicon badge / document title unread | ✅ | `(count) Harmony` in document title + canvas-drawn favicon badge with red circle + count. |
 | B8 | Emoji picker for message compose | ✅ | Full categorized picker (7 categories, 350+ emoji), search, shortcode resolution (`:fire:` → 🔥). |
 | B9 | Italic/spoiler/link not rendered | ✅ | Already implemented in B3 MarkdownRenderer rewrite — all inline types render in MessageArea. |
 | B10 | Image lightbox on click | ✅ | Already wired — `setLightboxSrc(attachment.url)` on image click, full-screen overlay with dismiss. |
 | B11 | Member profile popover | ✅ | Click author name → popover with avatar, DID, status, role badges. Dismiss on click-outside. |
-| B12 | Channel topic in header | ✅ | Already implemented in MainLayout — shows ` | topic` next to channel name when present. |
+| B12 | Channel topic in header | ✅ | Already implemented in MainLayout — shows `  topic` next to channel name when present. |
 
 ---
 

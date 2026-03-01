@@ -3,6 +3,7 @@ import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 import { createCryptoProvider } from '@harmony/crypto'
 import { IdentityManager } from '@harmony/identity'
+import { initiateRecovery, RECOVERY_FEATURES } from '../services/recovery.js'
 import { openExternal } from '../utils/open-external.js'
 import { MigrationWizard } from './MigrationWizard.tsx'
 // HarmonyClient is now managed by the store
@@ -580,36 +581,59 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
                       </p>
                     </Show>
                     <Show when={socialRecoveryStatus()?.thresholdMet}>
-                      <button
-                        onClick={async () => {
-                          // TODO: POST /recovery/complete
-                          setLoading(true)
-                          try {
-                            // Complete recovery when cloud API available
-                            setError('Social recovery completion not yet connected to backend')
-                          } finally {
-                            setLoading(false)
-                          }
-                        }}
-                        class="w-full py-3 px-6 rounded-lg bg-green-600 hover:bg-green-500 text-white font-semibold transition-colors"
+                      <Show
+                        when={RECOVERY_FEATURES.complete}
+                        fallback={
+                          <div class="w-full py-3 px-6 rounded-lg bg-[var(--bg-input)] text-center">
+                            <p class="text-sm text-[var(--text-muted)]">
+                              Recovery completion requires server coordination — coming in a future update.
+                            </p>
+                          </div>
+                        }
                       >
-                        {t('RECOVERY_COMPLETE')}
-                      </button>
+                        <button
+                          onClick={async () => {
+                            setLoading(true)
+                            try {
+                              setError('Social recovery completion not yet connected to backend')
+                            } finally {
+                              setLoading(false)
+                            }
+                          }}
+                          class="w-full py-3 px-6 rounded-lg bg-green-600 hover:bg-green-500 text-white font-semibold transition-colors"
+                        >
+                          {t('RECOVERY_COMPLETE')}
+                        </button>
+                      </Show>
                     </Show>
                     <Show when={!socialRecoveryStatus()?.thresholdMet}>
-                      <button
-                        onClick={async () => {
-                          // TODO: GET /recovery/:requestId/status
-                          setSocialRecoveryStatus({
-                            approvalsCount: 0,
-                            threshold: 2,
-                            thresholdMet: false
-                          })
-                        }}
-                        class="w-full py-3 px-6 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)] font-semibold transition-colors"
+                      <Show
+                        when={RECOVERY_FEATURES.statusCheck}
+                        fallback={
+                          <div class="w-full py-3 px-6 rounded-lg bg-[var(--bg-input)] text-center">
+                            <p class="text-sm text-[var(--text-muted)]">
+                              Status checking requires server relay — coming in a future update.
+                            </p>
+                            <p class="text-xs text-[var(--text-muted)] mt-1">
+                              Share your request ID with your trusted contacts:{' '}
+                              <span class="font-mono text-[var(--accent)]">{socialRecoveryRequestId()}</span>
+                            </p>
+                          </div>
+                        }
                       >
-                        {t('RECOVERY_CHECK_STATUS')}
-                      </button>
+                        <button
+                          onClick={async () => {
+                            setSocialRecoveryStatus({
+                              approvalsCount: 0,
+                              threshold: 2,
+                              thresholdMet: false
+                            })
+                          }}
+                          class="w-full py-3 px-6 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--border)] text-[var(--text-primary)] font-semibold transition-colors"
+                        >
+                          {t('RECOVERY_CHECK_STATUS')}
+                        </button>
+                      </Show>
                     </Show>
                     <button
                       onClick={() => {
@@ -654,9 +678,15 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
                         setLoading(true)
                         setError('')
                         try {
-                          // TODO: POST /recovery/initiate
-                          const requestId = `recovery-${Date.now()}`
-                          setSocialRecoveryRequestId(requestId)
+                          const result = await initiateRecovery({
+                            claimedDID: socialRecoveryDid().trim(),
+                            recovererDID: 'did:key:z' + Date.now().toString(36) // temp DID for unauthed user
+                          })
+                          if (!result.ok) {
+                            setError(result.error!)
+                            return
+                          }
+                          setSocialRecoveryRequestId(result.data!.requestId)
                         } catch (err) {
                           setError(String(err))
                         } finally {

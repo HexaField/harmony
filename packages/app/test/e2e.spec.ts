@@ -739,7 +739,8 @@ describe('Custom Credentials Flow', () => {
       adminDID,
       adminKP,
       aliceDID,
-      communityId
+      communityId,
+      ['admin']
     )
 
     expect(vc.credentialSubject.id).toBe(aliceDID)
@@ -768,7 +769,7 @@ describe('Custom Credentials Flow', () => {
       adminDID
     )
 
-    const vc = await issuer.issueCredential(credType.id, {}, adminDID, adminKP, aliceDID, communityId)
+    const vc = await issuer.issueCredential(credType.id, {}, adminDID, adminKP, aliceDID, communityId, ['admin'])
 
     expect(crossCommunity.isTransferable(vc)).toBe(true)
 
@@ -815,9 +816,9 @@ describe('Custom Credentials Flow', () => {
     )
 
     // Missing required field
-    await expect(issuer.issueCredential(credType.id, {}, adminDID, adminKP, aliceDID, communityId)).rejects.toThrow(
-      'Missing required field'
-    )
+    await expect(
+      issuer.issueCredential(credType.id, {}, adminDID, adminKP, aliceDID, communityId, ['admin'])
+    ).rejects.toThrow('Missing required field')
 
     // Wrong type
     await expect(
@@ -1169,7 +1170,8 @@ describe('Migration → Full Platform', () => {
       'did:admin',
       kp,
       'did:member-1',
-      communityId
+      communityId,
+      ['admin']
     )
 
     expect(vc.credentialSubject.id).toBe('did:member-1')

@@ -2076,7 +2076,7 @@ export class HarmonyServer {
             action: (config.action as 'lockdown' | 'alert') ?? 'lockdown',
             lockdownDurationSeconds: (config.lockdownDurationSeconds as number) ?? 300
           })
-          // Wire up raid alert broadcasting
+          // Raid alert broadcasting to community members
           this.moderationPlugin.onRaidAlert(payload.communityId, (cId, rule) => {
             this.broadcastToAdmins(cId, {
               id: `raid-${Date.now()}`,

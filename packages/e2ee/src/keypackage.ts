@@ -72,6 +72,7 @@ export interface MLSGroup {
 
   members(): GroupMember[]
   memberCount(): number
+  deriveMediaKey(): Uint8Array
   exportState(): Uint8Array
 }
 

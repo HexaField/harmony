@@ -18,7 +18,8 @@ export class CredentialIssuer {
     issuerDID: string,
     issuerKeyPair: KeyPair,
     subjectDID: string,
-    communityId: string
+    communityId: string,
+    issuerRoles?: string[]
   ): Promise<VerifiableCredential> {
     const credType = await this.registry.getType(typeId)
     if (!credType) throw new Error('Credential type not found')
@@ -28,7 +29,7 @@ export class CredentialIssuer {
     this.validateFields(fields, credType)
 
     // Check issuer policy
-    this.checkIssuerPolicy(credType, issuerDID)
+    this.checkIssuerPolicy(credType, issuerDID, issuerRoles)
 
     const vc = await this.vcService.issue({
       issuerDID,
@@ -90,12 +91,18 @@ export class CredentialIssuer {
     }
   }
 
-  private checkIssuerPolicy(credType: CredentialType, _issuerDID: string): void {
-    // In production, verify issuer has the appropriate role/capability
-    // For now, we trust the caller to provide proper authorization
+  private checkIssuerPolicy(credType: CredentialType, _issuerDID: string, issuerRoles?: string[]): void {
     const policy = credType.def.issuerPolicy
-    if (policy.kind === 'admin-only' || policy.kind === 'role-based') {
-      // Caller must have verified admin/role ZCAP before calling
+    if (policy.kind === 'admin-only') {
+      if (!issuerRoles || !issuerRoles.includes('admin')) {
+        throw new Error('Only admins can issue this credential type')
+      }
+    } else if (policy.kind === 'role-based') {
+      const requiredRoles = (policy as { kind: string; roles?: string[] }).roles ?? []
+      if (requiredRoles.length > 0 && (!issuerRoles || !requiredRoles.some((r) => issuerRoles.includes(r)))) {
+        throw new Error(`Issuer must have one of roles: ${requiredRoles.join(', ')}`)
+      }
     }
+    // 'anyone' and 'self-issued' policies pass through
   }
 }

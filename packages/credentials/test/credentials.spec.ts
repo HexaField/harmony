@@ -131,7 +131,17 @@ describe('@harmony/credentials', () => {
 
     it.todo('MUST reject registration without admin ZCAP (ZCAP verification not yet enforced on registration)')
 
-    it.todo('MUST reject issuance from unauthorized issuer (checkIssuerPolicy is a no-op stub)')
+    it('MUST reject issuance from unauthorized issuer', async () => {
+      const credType = await registry.registerType('comm1', makeTypeDef(), aliceDID)
+      // No roles passed — should fail because issuerPolicy is admin-only
+      await expect(
+        issuer.issueCredential(credType.id, { artForm: 'Painting' }, aliceDID, aliceKP, bobDID, 'comm1')
+      ).rejects.toThrow('Only admins can issue this credential type')
+      // Wrong role — should also fail
+      await expect(
+        issuer.issueCredential(credType.id, { artForm: 'Painting' }, aliceDID, aliceKP, bobDID, 'comm1', ['member'])
+      ).rejects.toThrow('Only admins can issue this credential type')
+    })
 
     it('MUST support peer attestation threshold', async () => {
       const peerType = await registry.registerType(
@@ -155,7 +165,8 @@ describe('@harmony/credentials', () => {
         aliceDID,
         aliceKP,
         bobDID,
-        'comm1'
+        'comm1',
+        ['admin']
       )
       expect(vc.id).toBeTruthy()
       expect(vc.credentialSubject.artForm).toBe('Digital Painting')
@@ -177,7 +188,9 @@ describe('@harmony/credentials', () => {
 
     it('MUST sign credential with issuer DID', async () => {
       const credType = await registry.registerType('comm1', makeTypeDef(), aliceDID)
-      const vc = await issuer.issueCredential(credType.id, { artForm: 'Music' }, aliceDID, aliceKP, bobDID, 'comm1')
+      const vc = await issuer.issueCredential(credType.id, { artForm: 'Music' }, aliceDID, aliceKP, bobDID, 'comm1', [
+        'admin'
+      ])
       expect(vc.issuer).toBe(aliceDID)
       expect(vc.proof).toBeTruthy()
     })
@@ -190,14 +203,17 @@ describe('@harmony/credentials', () => {
         aliceDID,
         aliceKP,
         bobDID,
-        'comm1'
+        'comm1',
+        ['admin']
       )
       expect(vc.credentialSubject.communityId).toBe('comm1')
     })
 
     it('MUST set transferable flag based on type definition', async () => {
       const credType = await registry.registerType('comm1', makeTypeDef({ transferable: false }), aliceDID)
-      const vc = await issuer.issueCredential(credType.id, { artForm: 'Dance' }, aliceDID, aliceKP, bobDID, 'comm1')
+      const vc = await issuer.issueCredential(credType.id, { artForm: 'Dance' }, aliceDID, aliceKP, bobDID, 'comm1', [
+        'admin'
+      ])
       expect(vc.credentialSubject.transferable).toBe(false)
     })
   })
@@ -361,7 +377,15 @@ describe('@harmony/credentials', () => {
 
     it('MUST list all held credentials for a DID', async () => {
       const credType = await registry.registerType('comm1', makeTypeDef(), aliceDID)
-      const vc = await issuer.issueCredential(credType.id, { artForm: 'Painting' }, aliceDID, aliceKP, bobDID, 'comm1')
+      const vc = await issuer.issueCredential(
+        credType.id,
+        { artForm: 'Painting' },
+        aliceDID,
+        aliceKP,
+        bobDID,
+        'comm1',
+        ['admin']
+      )
       await portfolio.importCredential(vc)
       const creds = await portfolio.listCredentials(bobDID)
       expect(creds).toHaveLength(1)
@@ -369,7 +393,15 @@ describe('@harmony/credentials', () => {
 
     it('MUST create verifiable presentation from selected credentials', async () => {
       const credType = await registry.registerType('comm1', makeTypeDef(), aliceDID)
-      const vc = await issuer.issueCredential(credType.id, { artForm: 'Sculpture' }, aliceDID, aliceKP, bobDID, 'comm1')
+      const vc = await issuer.issueCredential(
+        credType.id,
+        { artForm: 'Sculpture' },
+        aliceDID,
+        aliceKP,
+        bobDID,
+        'comm1',
+        ['admin']
+      )
       await portfolio.importCredential(vc)
       const vp = await portfolio.presentCredentials([vc.id], bobDID, bobKP)
       expect(vp.type).toContain('VerifiablePresentation')
@@ -378,7 +410,9 @@ describe('@harmony/credentials', () => {
 
     it('MUST import external verifiable credentials', async () => {
       const credType = await registry.registerType('comm1', makeTypeDef(), aliceDID)
-      const vc = await issuer.issueCredential(credType.id, { artForm: 'Film' }, aliceDID, aliceKP, bobDID, 'comm1')
+      const vc = await issuer.issueCredential(credType.id, { artForm: 'Film' }, aliceDID, aliceKP, bobDID, 'comm1', [
+        'admin'
+      ])
       await portfolio.importCredential(vc)
       const creds = await portfolio.listCredentials(bobDID)
       expect(creds).toHaveLength(1)
@@ -387,7 +421,9 @@ describe('@harmony/credentials', () => {
 
     it('MUST export portfolio as JSON-LD', async () => {
       const credType = await registry.registerType('comm1', makeTypeDef(), aliceDID)
-      const vc = await issuer.issueCredential(credType.id, { artForm: 'Music' }, aliceDID, aliceKP, bobDID, 'comm1')
+      const vc = await issuer.issueCredential(credType.id, { artForm: 'Music' }, aliceDID, aliceKP, bobDID, 'comm1', [
+        'admin'
+      ])
       await portfolio.importCredential(vc)
       const exported = await portfolio.exportPortfolio(bobDID, 'json-ld')
       const parsed = JSON.parse(exported)
@@ -397,7 +433,9 @@ describe('@harmony/credentials', () => {
 
     it('MUST export portfolio as N-Quads', async () => {
       const credType = await registry.registerType('comm1', makeTypeDef(), aliceDID)
-      const vc = await issuer.issueCredential(credType.id, { artForm: 'Dance' }, aliceDID, aliceKP, bobDID, 'comm1')
+      const vc = await issuer.issueCredential(credType.id, { artForm: 'Dance' }, aliceDID, aliceKP, bobDID, 'comm1', [
+        'admin'
+      ])
       await portfolio.importCredential(vc)
       const nquads = await portfolio.exportPortfolio(bobDID, 'n-quads')
       expect(nquads).toContain('VerifiableCredential')
@@ -411,7 +449,8 @@ describe('@harmony/credentials', () => {
         aliceDID,
         aliceKP,
         bobDID,
-        'comm1'
+        'comm1',
+        ['admin']
       )
       // Manually set expiration in the past
       vc.expirationDate = '2020-01-01T00:00:00Z'
@@ -422,7 +461,9 @@ describe('@harmony/credentials', () => {
 
     it('MUST mark revoked credentials', async () => {
       const credType = await registry.registerType('comm1', makeTypeDef(), aliceDID)
-      const vc = await issuer.issueCredential(credType.id, { artForm: 'Theater' }, aliceDID, aliceKP, bobDID, 'comm1')
+      const vc = await issuer.issueCredential(credType.id, { artForm: 'Theater' }, aliceDID, aliceKP, bobDID, 'comm1', [
+        'admin'
+      ])
       await portfolio.importCredential(vc)
       await portfolio.revokeCredential(vc.id)
       const creds = await portfolio.listCredentials(bobDID)
@@ -431,8 +472,12 @@ describe('@harmony/credentials', () => {
 
     it('MUST filter credentials by status', async () => {
       const credType = await registry.registerType('comm1', makeTypeDef(), aliceDID)
-      const vc1 = await issuer.issueCredential(credType.id, { artForm: 'A' }, aliceDID, aliceKP, bobDID, 'comm1')
-      const vc2 = await issuer.issueCredential(credType.id, { artForm: 'B' }, aliceDID, aliceKP, bobDID, 'comm1')
+      const vc1 = await issuer.issueCredential(credType.id, { artForm: 'A' }, aliceDID, aliceKP, bobDID, 'comm1', [
+        'admin'
+      ])
+      const vc2 = await issuer.issueCredential(credType.id, { artForm: 'B' }, aliceDID, aliceKP, bobDID, 'comm1', [
+        'admin'
+      ])
       await portfolio.importCredential(vc1)
       await portfolio.importCredential(vc2)
       await portfolio.revokeCredential(vc1.id)
@@ -446,14 +491,24 @@ describe('@harmony/credentials', () => {
   describe('Cross-Community', () => {
     it('MUST present transferable credentials to other communities', async () => {
       const credType = await registry.registerType('comm1', makeTypeDef({ transferable: true }), aliceDID)
-      const vc = await issuer.issueCredential(credType.id, { artForm: 'Painting' }, aliceDID, aliceKP, bobDID, 'comm1')
+      const vc = await issuer.issueCredential(
+        credType.id,
+        { artForm: 'Painting' },
+        aliceDID,
+        aliceKP,
+        bobDID,
+        'comm1',
+        ['admin']
+      )
       const crossComm = new CrossCommunityService(crypto)
       expect(crossComm.isTransferable(vc)).toBe(true)
     })
 
     it('MUST verify transferred credential signature', async () => {
       const credType = await registry.registerType('comm1', makeTypeDef(), aliceDID)
-      const vc = await issuer.issueCredential(credType.id, { artForm: 'Digital' }, aliceDID, aliceKP, bobDID, 'comm1')
+      const vc = await issuer.issueCredential(credType.id, { artForm: 'Digital' }, aliceDID, aliceKP, bobDID, 'comm1', [
+        'admin'
+      ])
       const crossComm = new CrossCommunityService(crypto)
       const resolver = async (did: string) => {
         if (did === aliceDID) return aliceDoc
@@ -466,7 +521,15 @@ describe('@harmony/credentials', () => {
     it('MUST aggregate reputation across communities with transferable credentials', async () => {
       const crossComm = new CrossCommunityService(crypto)
       const credType = await registry.registerType('comm1', makeTypeDef({ transferable: true }), aliceDID)
-      const vc = await issuer.issueCredential(credType.id, { artForm: 'Painting' }, aliceDID, aliceKP, bobDID, 'comm1')
+      const vc = await issuer.issueCredential(
+        credType.id,
+        { artForm: 'Painting' },
+        aliceDID,
+        aliceKP,
+        bobDID,
+        'comm1',
+        ['admin']
+      )
       const transferable = crossComm.filterTransferable([vc])
       expect(transferable).toHaveLength(1)
       // Transferable credentials should contribute to cross-community reputation
@@ -487,7 +550,9 @@ describe('@harmony/credentials', () => {
 
     it('MUST handle credential from unknown community (verify signature, flag as unrecognized)', async () => {
       const credType = await registry.registerType('comm1', makeTypeDef(), aliceDID)
-      const vc = await issuer.issueCredential(credType.id, { artForm: 'Mystery' }, aliceDID, aliceKP, bobDID, 'comm1')
+      const vc = await issuer.issueCredential(credType.id, { artForm: 'Mystery' }, aliceDID, aliceKP, bobDID, 'comm1', [
+        'admin'
+      ])
       const crossComm = new CrossCommunityService(crypto)
       // Resolver that doesn't know the community but can resolve the DID
       const resolver = async (did: string) => {
@@ -509,7 +574,8 @@ describe('@harmony/credentials', () => {
         aliceDID,
         aliceKP,
         bobDID,
-        'comm1'
+        'comm1',
+        ['admin']
       )
       const crossComm = new CrossCommunityService(crypto)
       expect(crossComm.isTransferable(vc)).toBe(false)

@@ -1,6 +1,6 @@
 # Harmony — Roadmap & Feature Status
 
-_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-01 17:00 AEDT._
+_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-01 17:35 AEDT._
 
 ---
 
@@ -10,7 +10,7 @@ _Single source of truth for all features, voice/video detail, and release planni
 | ------------------ | ---------------------------------------- |
 | Packages           | 36                                       |
 | Estimated LOC      | ~32,000+                                 |
-| Vitest passing     | 2,543                                    |
+| Vitest passing     | 2,544                                    |
 | Vitest skipped     | 10                                       |
 | Vitest todo        | 114                                      |
 | Playwright passing | 79 (31 cross-topology + 48 discord-mock) |
@@ -61,7 +61,7 @@ _Single source of truth for all features, voice/video detail, and release planni
 | Identity persistence (config file — Electron/server) | ✅  | ✅     | ➖  | ➖     | ➖    | ➖              |
 | Identity persistence (localStorage — browser/mobile) | ➖  | ➖     | ✅  | ➖     | ➖    | ✅              |
 | Mnemonic backup (BIP-39) + recovery                  | ✅  | ✅     | ✅  | ➖     | ➖    | ✅              |
-| Social recovery (guardian setup + flow)              | 🔧  | ➖     | ✅  | ➖     | ✅    | ✅              |
+| Social recovery (guardian setup + flow)              | 🔧  | ➖     | ✅  | ➖     | ✅    | 🔧              |
 | VP-based authentication (handshake)                  | ✅  | ✅     | ✅  | ➖     | ✅    | ✅              |
 | Biometric lock                                       | ➖  | ➖     | ➖  | ➖     | ➖    | ✅              |
 | Discord OAuth linking                                | ➖  | ➖     | ✅  | ✅     | ✅    | 🔧              |
@@ -72,7 +72,7 @@ _Single source of truth for all features, voice/video detail, and release planni
 
 | Feature | Lib | Server | UI | Notes |
 | --- | --- | --- | --- | --- |
-| VC issuance (membership credentials) | ✅ | ✅ | ➖ | `VCService.issue()` — 62 tests |
+| VC issuance (membership credentials) | ✅ | ✅ | ➖ | `VCService.issue()` — 62 tests. `checkIssuerPolicy()` enforces admin-only + role-based policies. |
 | VC verification (signature check) | ✅ | ✅ | ➖ | `VCService.verify()` |
 | VC revocation (revocation store) | ✅ | 🔧 | ➖ | `MemoryRevocationStore` works; needs persistent store (SQLite/DO) |
 | Credential type registry | 📋 | ➖ | 📋 | `CredentialTypeRegistry` class (145 LOC) — not wired to server |
@@ -309,8 +309,8 @@ _Single source of truth for all features, voice/video detail, and release planni
 ### Media & Files
 
 | Feature                                                      | Lib | Server | UI  |
-| ------------------------------------------------------------ | --- | ------ | --- |
-| Media upload (MIME validation, 10MB limit, membership check) | ✅  | ✅     | ✅  |
+| ------------------------------------------------------------ | --- | ------ | --- | ---------------------------------------------------------- |
+| Media upload (MIME validation, 10MB limit, membership check) | ✅  | ✅     | ✅  | ⚠️ E2EE uses zeroed key — needs MLS channel key derivation |
 | Media delete                                                 | ✅  | ✅     | ✅  |
 | `uploadMediaToServer()` + `sendMessageWithAttachments()`     | ✅  | ✅     | ✅  |
 | Attachment display (inline images + download)                | ➖  | ➖     | ✅  |
@@ -318,7 +318,7 @@ _Single source of truth for all features, voice/video detail, and release planni
 | Image gallery                                                | ➖  | ➖     | ✅  |
 | Link preview (OpenGraph)                                     | 📋  | 📋     | 📋  |
 | Thumbnail generation                                         | 📋  | 📋     | 📋  |
-| File checksum verification                                   | 📋  | 📋     | 📋  |
+| File checksum verification                                   | ✅  | ✅     | 📋  |
 | Media storage (file-based / R2)                              | ✅  | ✅     | ➖  |
 
 ### Search

@@ -232,7 +232,7 @@ describe('@harmony/client Phase 3 Extensions', () => {
         size: 3
       }
       const ref = await client.uploadFile('c1', 'ch1', file)
-      const downloaded = await client.downloadFile(ref)
+      const downloaded = await client.downloadFile(ref, 'c1', 'ch1')
       expect(downloaded.filename).toBe('data.bin')
       expect(downloaded.data).toEqual(new Uint8Array([10, 20, 30]))
       await client.disconnect()

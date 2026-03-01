@@ -809,7 +809,8 @@ describe('Journey 8: Credential Portfolio', () => {
       adminDID,
       adminKP,
       aliceDID,
-      communityA
+      communityA,
+      ['admin']
     )
     await portfolio.importCredential(customVC)
 

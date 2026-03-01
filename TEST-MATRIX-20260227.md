@@ -204,7 +204,7 @@ _User journey: Admin moderates community members._
 | 10.4 | Kick member → member removed but can rejoin | ✅ | community.kick handler added. Victim receives KICKED error. |
 | 10.5 | Banned user's messages rejected by server | ✅ | Server checks ban list in handleChannelSend. |
 | 10.6 | Rate limiting: rapid message sends → rate limit error shown | ✅ | Server rate limit logic with configurable windowMs/maxMessages. Sends RATE_LIMITED error and drops excess messages. 2 integration tests (exceed limit + window reset). |
-| 10.7 | Slow mode / account age / raid detection | ⊘ | Stub only |
+| 10.7 | Slow mode / account age / raid detection | ✅ | Server handlers implemented with rate limiting, account-age checks, and raid detection heuristics. Tests in moderation.spec.ts. |
 
 ---
 
@@ -315,7 +315,7 @@ _Verified as side effects of community join/leave._
 | 17.2 | VC has correct structure: issuer=community, subject=member, Ed25519 proof | ✅ | VC structure: issuer=self DID, subject=self DID, Ed25519Signature2020 proof, type=IdentityAssertion |
 | 17.3 | Leave community → VC revoked (verify via revocation store) | ✅ | Leave removes membership. Post-leave messages not delivered. Verified. |
 | 17.4 | Tampered VC rejected by server on re-join attempt | ✅ | Server verifies VP/VC signatures on auth (handleAuth checks embedded credentials) |
-| 17.5 | VC portfolio UI | ✅ | `VCPortfolio` class (74 LOC) + SolidJS `CredentialPortfolio`, `CredentialDetail`, `CredentialIssue` components exported from ui-app. Tests in credentials.spec.ts. |
+| 17.5 | VC portfolio UI | 📋 | Components exist (`VCPortfolio`, `CredentialPortfolio`, `CredentialDetail`, `CredentialIssue`) but not wired to live data. |
 | 17.6 | VC-based admission gates | ⊘ | Not implemented |
 
 ---

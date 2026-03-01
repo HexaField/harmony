@@ -164,8 +164,8 @@ class SimplifiedMLSGroup implements MLSGroup {
       members: [...this.state.members, newMember],
       epochSecret: newEpochSecret,
       myLeafIndex: newLeafIndex,
-      mySigningKey: new Uint8Array(0), // placeholder — joiner fills in own keys
-      myEncryptionKey: new Uint8Array(0),
+      mySigningKey: new Uint8Array(0), // Joiner's private keys — filled in by joinFromWelcome()
+      myEncryptionKey: new Uint8Array(0), // Joiner's private keys — filled in by joinFromWelcome()
       mySigningPublicKey: memberKeyPackage.leafNode.signatureKey,
       myEncryptionPublicKey: memberKeyPackage.leafNode.encryptionKey
     }
@@ -334,6 +334,10 @@ class SimplifiedMLSGroup implements MLSGroup {
 
   memberCount(): number {
     return this.state.members.length
+  }
+
+  deriveMediaKey(): Uint8Array {
+    return deriveEpochKey(this.state.epochSecret, this.state.epoch, 'media')
   }
 
   exportState(): Uint8Array {

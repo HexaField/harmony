@@ -727,7 +727,7 @@ export class HarmonyClient {
     const msg = this.createMessage('community.join', {
       communityId,
       membershipVC: {} as VerifiableCredential,
-      encryptionPublicKey: new Uint8Array(32)
+      encryptionPublicKey: this._encryptionKeyPair?.publicKey ?? new Uint8Array(32)
     })
 
     // If serverUrl specified, pre-map so send() routes correctly
@@ -1365,16 +1365,30 @@ export class HarmonyClient {
 
   // ── Media ──
 
+  private getMediaKey(communityId: string, channelId: string): Uint8Array {
+    const groupId = `${communityId}:${channelId}`
+    const group = this.mlsGroups.get(groupId)
+    if (group && group.memberCount() > 1) {
+      return group.deriveMediaKey()
+    }
+    // Fallback: derive from channel identity (not truly E2EE but deterministic per-channel)
+    // This covers cases where MLS group isn't established yet
+    const encoder = new TextEncoder()
+    const seed = encoder.encode(`harmony-media-fallback-${groupId}`)
+    const key = new Uint8Array(32)
+    for (let i = 0; i < 32; i++) key[i] = seed[i % seed.length] ^ (seed[(i + 7) % seed.length] << 1)
+    return key
+  }
+
   async uploadFile(communityId: string, channelId: string, file: FileInput): Promise<MediaRef> {
     if (!this.mediaClient) throw new Error('Media client not configured')
-    // Use a dummy channel key (in real impl, would use MLS group key)
-    const channelKey = new Uint8Array(32)
+    const channelKey = this.getMediaKey(communityId, channelId)
     return this.mediaClient.uploadFile(file, channelKey, this._did, communityId, channelId)
   }
 
-  async downloadFile(ref: MediaRef): Promise<DecryptedFile> {
+  async downloadFile(ref: MediaRef, communityId?: string, channelId?: string): Promise<DecryptedFile> {
     if (!this.mediaClient) throw new Error('Media client not configured')
-    const channelKey = new Uint8Array(32)
+    const channelKey = communityId && channelId ? this.getMediaKey(communityId, channelId) : new Uint8Array(32) // Legacy fallback for refs without community context
     return this.mediaClient.downloadFile(ref, channelKey)
   }
 

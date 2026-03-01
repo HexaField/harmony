@@ -273,7 +273,8 @@ class VoiceConnectionImpl implements VoiceConnection {
         iceParameters: this.sfuParams.iceParameters as any,
         iceCandidates: this.sfuParams.iceCandidates as any,
         dtlsParameters: this.sfuParams.dtlsParameters as any,
-        iceServers: []
+        iceServers: [],
+        additionalSettings: { encodedInsertableStreams: true }
       })
 
       this.sendTransport.on(
@@ -323,7 +324,8 @@ class VoiceConnectionImpl implements VoiceConnection {
           iceParameters: recvParams.iceParameters as any,
           iceCandidates: recvParams.iceCandidates as any,
           dtlsParameters: recvParams.dtlsParameters as any,
-          iceServers: []
+          iceServers: [],
+          additionalSettings: { encodedInsertableStreams: true }
         })
 
         this.recvTransport.on(
@@ -525,11 +527,13 @@ class VoiceConnectionImpl implements VoiceConnection {
       const sender: RTCRtpSender | undefined = producer.rtpSender
       if (!sender) return
 
-      // Encoded Transforms API (Chrome 86+)
       if ('createEncodedStreams' in sender) {
+        // Insertable Streams API (Chrome with encodedInsertableStreams: true)
         const { readable, writable } = (sender as any).createEncodedStreams()
         const transform = createEncryptTransform(this.e2eeBridge, kind)
         readable.pipeThrough(transform).pipeTo(writable)
+      } else {
+        console.debug('[Voice] Insertable Streams not available on sender — no E2EE for this track')
       }
     } catch (err) {
       console.warn('[Voice] Failed to attach sender E2EE transform (graceful degradation):', err)
@@ -551,6 +555,8 @@ class VoiceConnectionImpl implements VoiceConnection {
         const { readable, writable } = (receiver as any).createEncodedStreams()
         const transform = createDecryptTransform(this.e2eeBridge, kind)
         readable.pipeThrough(transform).pipeTo(writable)
+      } else {
+        console.debug('[Voice] Insertable Streams not available on receiver — no E2EE for this track')
       }
     } catch (err) {
       console.warn('[Voice] Failed to attach receiver E2EE transform (graceful degradation):', err)

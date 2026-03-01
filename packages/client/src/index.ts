@@ -220,6 +220,7 @@ export class HarmonyClient {
 
   // Dependencies (injected or created)
   private mlsGroups: Map<string, MLSGroup> = new Map()
+  private _activeVoiceChannelId: string | null = null
   private dmEncChannels: Map<string, DMChannel> = new Map()
   private mlsProvider: MLSProvider | null = null
   private _dmProvider: DMProvider | null = null
@@ -1317,6 +1318,23 @@ export class HarmonyClient {
     this.send(this.createMessage('voice.join', { channelId, communityId }))
 
     const connection = await this.voiceClient.joinRoom(tokenResponse.token)
+    this._activeVoiceChannelId = channelId
+
+    // Inject MLS-derived E2EE key into voice if group exists
+    if (communityId) {
+      const groupId = `${communityId}:${channelId}`
+      const group = this.mlsGroups.get(groupId)
+      if (group) {
+        try {
+          this.voiceClient.setEncryptionKey(group.deriveMediaKey(), group.epoch)
+        } catch (err) {
+          console.debug('[Voice] E2EE key injection failed (proceeding unencrypted):', err)
+        }
+      } else {
+        console.debug('[Voice] No MLS group for channel, proceeding without E2EE')
+      }
+    }
+
     this.emitter.emit('voice.joined', { channelId, mode: tokenResponse.mode })
     return connection
   }
@@ -1327,6 +1345,7 @@ export class HarmonyClient {
     if (!activeRoom) return
     const roomId = activeRoom.roomId
     await this.voiceClient.leaveRoom()
+    this._activeVoiceChannelId = null
     this.send(this.createMessage('voice.leave', { channelId: roomId }))
     this.emitter.emit('voice.left', { channelId: roomId })
   }
@@ -1337,6 +1356,24 @@ export class HarmonyClient {
 
   getVoiceClient(): VoiceClient | null {
     return this.voiceClient
+  }
+
+  /**
+   * Update the voice E2EE key after an MLS epoch change (member add/remove/welcome).
+   * Only acts if voice is active for a channel within this community.
+   */
+  private _updateVoiceE2EEKey(communityId: string, channelId: string): void {
+    if (!this.voiceClient || !this._activeVoiceChannelId) return
+    if (this._activeVoiceChannelId !== channelId) return
+    const groupId = `${communityId}:${channelId}`
+    const group = this.mlsGroups.get(groupId)
+    if (!group) return
+    try {
+      this.voiceClient.setEncryptionKey(group.deriveMediaKey(), group.epoch)
+      console.debug('[Voice] E2EE key rotated to epoch', group.epoch)
+    } catch (err) {
+      console.warn('[Voice] E2EE key rotation failed:', err)
+    }
   }
 
   // ── Media ──
@@ -2371,6 +2408,9 @@ export class HarmonyClient {
       this.mlsGroups.set(payload.groupId, group)
       this.emitter.emit('mls.welcome', payload)
 
+      // Update voice E2EE key if voice is active for this channel
+      this._updateVoiceE2EEKey(payload.communityId, payload.channelId)
+
       // Process any messages that arrived before the Welcome
       const pending = this._pendingMlsMessages.get(payload.groupId)
       if (pending && pending.length > 0) {
@@ -2394,6 +2434,11 @@ export class HarmonyClient {
       const commit = payload.commit as import('@harmony/e2ee').Commit
       await group.processCommit(commit)
       this.emitter.emit('mls.commit', payload)
+
+      // Update voice E2EE key after epoch change
+      const commitCommunityId = payload.communityId ?? groupId.split(':')[0]
+      const commitChannelId = payload.channelId ?? groupId.slice(commitCommunityId.length + 1)
+      this._updateVoiceE2EEKey(commitCommunityId, commitChannelId)
     } catch {
       // Commit processing failed
     }
@@ -2473,6 +2518,9 @@ export class HarmonyClient {
               commit
             })
           )
+
+          // Update voice E2EE key after adding member (epoch changed)
+          this._updateVoiceE2EEKey(communityId, channelId)
         } catch {
           // Add member failed
         }

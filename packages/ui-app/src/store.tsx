@@ -5,7 +5,7 @@ import type { KeyPair } from '@harmony/crypto'
 import type { Identity } from '@harmony/identity'
 import { HarmonyClient, LocalStoragePersistence } from '@harmony/client'
 import { ClientSearchIndex } from '@harmony/search'
-import { VoiceClient } from '@harmony/voice'
+import { VoiceClient, E2EEBridge } from '@harmony/voice'
 import type { ServerConnection } from '@harmony/client'
 import type {
   CommunityInfo,
@@ -1729,7 +1729,7 @@ export function createAppStore(): AppStore {
       wsFactory: (url: string) => new WebSocket(url) as any,
       identity: id,
       keyPair: kp,
-      voiceClient: new VoiceClient({ mode: 'mediasoup' }),
+      voiceClient: new VoiceClient({ mode: 'mediasoup', e2eeBridge: new E2EEBridge() }),
       searchIndex
     })
 

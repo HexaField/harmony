@@ -130,7 +130,6 @@ export class HarmonyApp {
     const mediaPath = join(this.dataDir, 'media')
 
     const serverHost = process.env.HARMONY_HOST ?? '0.0.0.0'
-    const announcedIp = process.env.HARMONY_ANNOUNCED_IP ?? '192.168.1.111'
 
     const config: RuntimeConfig = {
       server: { host: serverHost, port: this.state.serverPort },
@@ -139,7 +138,7 @@ export class HarmonyApp {
       federation: { enabled: false },
       relay: { enabled: false },
       moderation: {},
-      voice: { enabled: true, mediasoup: { listenIp: '0.0.0.0', announcedIp, numWorkers: 1 } },
+      voice: { enabled: true },
       portal: { enabled: false },
       logging: { level: 'info', format: 'json' },
       limits: {

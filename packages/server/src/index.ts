@@ -3096,7 +3096,7 @@ export class HarmonyServer {
 
   private async handleVoiceConsumerResume(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
     const payload = msg.payload as { consumerId: string }
-    // Acknowledge — consumer resume is handled client-side in mediasoup-client
+    // Acknowledge — consumer resume acknowledged
     this.sendToConnection(conn, {
       id: `vcr-${Date.now()}`,
       type: 'voice.consumer.resume.response',

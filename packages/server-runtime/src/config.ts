@@ -49,19 +49,6 @@ export interface ModerationSection {
 
 export interface VoiceSection {
   enabled: boolean
-  /** @deprecated Use mediasoup instead */
-  livekit?: {
-    host: string
-    apiKey: string
-    apiSecret: string
-  }
-  mediasoup?: {
-    listenIp?: string
-    announcedIp?: string
-    numWorkers?: number
-    rtcMinPort?: number
-    rtcMaxPort?: number
-  }
 }
 
 export interface LoggingSection {
@@ -191,24 +178,6 @@ function mergeWithDefaults(raw: Record<string, unknown>): RuntimeConfig {
   if (raw.voice && typeof raw.voice === 'object') {
     const s = raw.voice as Record<string, unknown>
     if (typeof s.enabled === 'boolean') config.voice.enabled = s.enabled
-    if (s.livekit && typeof s.livekit === 'object') {
-      const lk = s.livekit as Record<string, unknown>
-      config.voice.livekit = {
-        host: String(lk.host ?? ''),
-        apiKey: String(lk.apiKey ?? ''),
-        apiSecret: String(lk.apiSecret ?? '')
-      }
-    }
-    if (s.mediasoup && typeof s.mediasoup === 'object') {
-      const ms = s.mediasoup as Record<string, unknown>
-      config.voice.mediasoup = {
-        listenIp: typeof ms.listenIp === 'string' ? ms.listenIp : undefined,
-        announcedIp: typeof ms.announcedIp === 'string' ? ms.announcedIp : undefined,
-        numWorkers: typeof ms.numWorkers === 'number' ? ms.numWorkers : undefined,
-        rtcMinPort: typeof ms.rtcMinPort === 'number' ? ms.rtcMinPort : undefined,
-        rtcMaxPort: typeof ms.rtcMaxPort === 'number' ? ms.rtcMaxPort : undefined
-      }
-    }
   }
 
   if (raw.logging && typeof raw.logging === 'object') {

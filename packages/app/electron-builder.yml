@@ -26,7 +26,6 @@ nodeGypRebuild: false
 npmRebuild: true
 
 asarUnpack:
-  - "node_modules/mediasoup/**/*"
   - "node_modules/better-sqlite3/**/*"
 
 mac:

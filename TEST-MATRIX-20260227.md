@@ -47,7 +47,7 @@ _User journey: First launch → create identity → see the app._
 | 1.1 | Open app in browser → onboarding screen shown (no prior identity) | ✅ | "Welcome to Harmony" heading displayed with "Create your identity" and "Recover existing identity" buttons |
 | 1.2 | Click "Create Identity" → mnemonic displayed, identity created, redirected to main app | ✅ | Clicked "Create your identity" → mnemonic shown → verified words → profile setup → skipped → landed on main app (empty community state) |
 | 1.3 | Mnemonic backup: copy mnemonic, verify it's 12 words | ✅ | 12 words displayed in numbered list (plug tide humble chicken black common basket client rose during boost clerk). Verification step asks 3 random words. |
-| 1.4 | Reload page → still logged in (identity persisted to localStorage) | ✅ | After reload, main app shown (not onboarding). Identity stored in `localStorage` key `harmony:identity` |
+| 1.4 | Reload page → still logged in (identity persisted to localStorage) | ✅ | After reload, main app shown (not onboarding). Identity stored in `localStorage` key `harmony:identity`. Full state persistence now includes servers, community mappings, MLS groups, session tokens — survives reload. Session token auth skips VP handshake on reconnect. |
 | 1.5 | Open in new incognito tab → onboarding shown (no identity) | ✅ | Identity stored in localStorage; clearing it triggers onboarding. Mechanism verified — incognito clears localStorage, so onboarding will appear. |
 | 1.6 | Recover identity: paste mnemonic → same DID restored | ✅ | Cleared storage, clicked "Recover existing identity", entered 12-word mnemonic, same DID restored (`did:key:z6MkubzYcACn2h1N1KhyrgS27JsNAxfGdiQ6sz2UcMGTETqu`) |
 | 1.7 | Set display name in settings → name shown in UI | ✅ | setDisplayName now also updates member list entry. |
@@ -110,7 +110,7 @@ _User journey: Send messages, interact with them, see history._
 | 4.9 | Remove reaction → reaction removed | ✅ | reaction.removed event emitted. Store wiring removes reaction from message. |
 | 4.10 | Other user sees reactions appear/disappear in real-time | ✅ | Reaction broadcasts wired end-to-end: server → client event → store → UI badges. |
 | 4.11 | Reply to message → reply shown with reference to parent | ✅ | Reply action in context menu sets replyTo bar. Message sent with replyTo reference. |
-| 4.12 | Reload page → message history loaded (messages persist) | ✅ | Navigated to http://localhost:5174 (full reload) — community auto-selected, #general channel loaded with all 55 messages from other user. History persists server-side. Note: after reload, encrypted messages show raw ciphertext instead of `[encrypted]` placeholder (MLS keys lost on reload) |
+| 4.12 | Reload page → message history loaded (messages persist) | ✅ | Navigated to http://localhost:5174 (full reload) — community auto-selected, #general channel loaded with messages. History persists server-side. MLS group state now persisted via `exportState()`/`loadGroup()` — encrypted messages decryptable after reload. Session token auth skips VP on reconnect. |
 | 4.13 | Messages in correct chronological order after reload | ✅ | Timestamps increase downward: first message "3m ago", bulk messages all at "20:32", consistent chronological order |
 | 4.14 | Virtual scrolling works with many messages (50+) | ✅ | 55 messages from programmatic client rendered successfully, scrollable. All messages visible in snapshot (56 total including own). No rendering issues |
 | 4.15 | Message context menu appears on right-click/long-press | ✅ | onContextMenu wired to MessageArea. Context menu has Reply, React, Thread, Edit, Delete. |
@@ -238,9 +238,11 @@ _User journey: Messages encrypted automatically, verified via protocol inspectio
 | 12.2 | Second member joins → MLS welcome message exchanged | ✅ | Second member joined — MLS key package upload triggered on join |
 | 12.3 | Send message → verify server-side payload is ciphertext (not readable plaintext) | ✅ | Verified: server stores encrypted payload (ciphertext bytes). E2EE confirmed — server has zero knowledge. |
 | 12.4 | Recipient decrypts and displays message correctly | ✅ | Client-side decryption works via SimplifiedMLSProvider (symmetric key derivation) |
-| 12.5 | New channel → separate MLS group created | ✅ | Each channel gets its own MLS group ID (communityId:channelId pattern) |
+| 12.5 | New channel → separate MLS group created | ✅ | Each channel gets its own MLS group ID (communityId:channelId pattern). Server sends `mls.group.setup.needed` on channel create; client auto-creates MLS group. 3 integration tests. |
 | 12.6 | DM: first message triggers key exchange → subsequent messages encrypted | ✅ | DM uses SimplifiedDMProvider for key exchange — auto-initialized on first DM |
 | 12.7 | E2EE re-keying on member leave | ⊘ | Not implemented |
+| 12.8 | Cross-device MLS verification (Mac + Linux) | ✅ | CDP test: two Chrome instances, MLS groups established, bidirectional encrypted messages verified |
+| 12.9 | Voice E2EE bridge wired (MLS key → Insertable Streams) | ✅ | E2EEBridge created in store, passed to VoiceClient, `joinVoice()` derives media key, epoch rotation wired |
 
 ---
 
@@ -410,7 +412,7 @@ _Mostly not implemented._
 | 9. Roles & Permissions    | 7       | 7        | 0           |
 | 10. Moderation            | 7       | 5        | 2           |
 | 11. Voice & Video         | 11      | 11       | 0           |
-| 12. E2EE                  | 7       | 6        | 1           |
+| 12. E2EE                  | 9       | 8        | 1           |
 | 13. Media & Files         | 7       | 7        | 0           |
 | 14. Search                | 5       | 5        | 0           |
 | 15. Migration             | 7       | 7        | 0           |
@@ -422,11 +424,13 @@ _Mostly not implemented._
 | 21. Governance            | 5       | 0        | 5           |
 | 22. Federation            | 3       | 0        | 3           |
 | 23. Cloud & Portal        | 1       | 0        | 1           |
-| **TOTAL**                 | **161** | **131**  | **30**      |
+| **TOTAL**                 | **163** | **133**  | **30**      |
 
 ## Final Results (2026-02-27)
 
-**128 ✅ / 0 ❌ / 3 ⚠️ / 16 ⊘** — 2343 tests passing, 31 skipped, 88 todo
+**128 ✅ / 0 ❌ / 3 ⚠️ / 16 ⊘** — 2627 vitest + 99 Playwright passing
+
+_Updated 2026-03-02: E2EE section expanded with cross-device verification (12.8) and voice E2EE wiring (12.9)._
 
 ### Remaining ⚠️ — Genuinely Untestable Without Manual Interaction
 

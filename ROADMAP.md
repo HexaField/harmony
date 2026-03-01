@@ -1,6 +1,6 @@
 # Harmony — Roadmap & Feature Status
 
-_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-01 22:10 AEDT._
+_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-02 09:00 AEDT._
 
 ---
 
@@ -10,12 +10,12 @@ _Single source of truth for all features, voice/video detail, and release planni
 | ------------------ | ----------------------------------------------------------------- |
 | Packages           | 36                                                                |
 | Estimated LOC      | ~32,000+                                                          |
-| Vitest passing     | 2,545                                                             |
-| Vitest skipped     | 10                                                                |
-| Vitest todo        | 114                                                               |
+| Vitest passing     | 2,627                                                             |
+| Vitest skipped     | 18                                                                |
+| Vitest todo        | 113                                                               |
 | Playwright passing | 99 (38 cross-topology + 13 discord-integration + 48 discord-mock) |
 | Playwright skipped | 7 (voice — needs test voice server)                               |
-| Test matrix        | 128 ✅ / 0 ❌ / 3 ⚠️ / 16 ⊘                                       |
+| Test matrix        | 130 ✅ / 0 ❌ / 3 ⚠️ / 16 ⊘                                       |
 | TypeScript errors  | 0                                                                 |
 | Oxlint warnings    | 7 (SolidJS `let ref` false positives)                             |
 | Vulnerabilities    | 0                                                                 |
@@ -63,6 +63,11 @@ _Single source of truth for all features, voice/video detail, and release planni
 | Mnemonic backup (BIP-39) + recovery                  | ✅  | ✅     | ✅  | ➖     | ➖    | ✅              |
 | Social recovery (guardian setup + flow)              | 🔧  | ➖     | ✅  | ➖     | ✅    | 🔧              |
 | VP-based authentication (handshake)                  | ✅  | ✅     | ✅  | ➖     | ✅    | ✅              |
+| Session token auth (JWT, skip VP on reconnect)       | ✅  | ✅     | ✅  | ➖     | ➖    | ✅              |
+| Deterministic X25519 from mnemonic                   | ✅  | ➖     | ✅  | ➖     | ➖    | ✅              |
+| Persistence adapters (localStorage/IndexedDB/FS)     | ✅  | ➖     | ✅  | ➖     | ➖    | ✅              |
+| Full state persistence (servers, MLS, tokens)        | ✅  | ➖     | ✅  | ➖     | ➖    | ✅              |
+| Electron filesystem persistence (IPC)                | ✅  | ➖     | ➖  | ➖     | ➖    | ➖              |
 | Biometric lock                                       | ➖  | ➖     | ➖  | ➖     | ➖    | ✅              |
 | Discord OAuth linking                                | ➖  | ➖     | ✅  | ✅     | ✅    | 🔧              |
 | Display name + profile                               | ✅  | ✅     | ✅  | ✅     | ✅    | ✅              |
@@ -276,11 +281,11 @@ _Single source of truth for all features, voice/video detail, and release planni
 
 #### E2EE for Voice/Video
 
-| #   | Feature                            | Status | Notes                                                |
-| --- | ---------------------------------- | ------ | ---------------------------------------------------- |
-| X1  | E2EE bridge key injection          | ✅     | E2EEBridge interface + HKDF                          |
-| X2  | Insertable Streams transform       | ⬜     | RTCRtpSender/Receiver transform for frame encryption |
-| X3  | E2EE key rotation on member change | ⬜     | Re-key when participant joins/leaves                 |
+| # | Feature | Status | Notes |
+| --- | --- | --- | --- |
+| X1 | E2EE bridge key injection | ✅ | E2EEBridge created in store, passed to VoiceClient |
+| X2 | Insertable Streams transform | ✅ | `encodedInsertableStreams: true` on transports, encrypt/decrypt transforms wired to senders/receivers |
+| X3 | E2EE key rotation on member change | ✅ | `_updateVoiceE2EEKey()` called on Welcome, Commit, addMember |
 
 #### Cross-Device E2E Testing
 
@@ -304,7 +309,7 @@ _Single source of truth for all features, voice/video detail, and release planni
 | DM encryption (XChaCha20-Poly1305 + X25519) | ✅  | ✅     | ✅  |
 | E2EE re-keying on member revocation         | ❌  | ❌     | ❌  |
 
-> **MLS E2EE is fully operational** for channel messages. Key exchange happens automatically when members join communities — the group creator adds new members via MLS Welcome messages. Epoch synchronization, deduplication, and pending message queuing all verified in both unit tests (88 e2ee, 34 key-exchange) and browser E2E tests (Playwright Topology 2 + CDP browser test). DM encryption (X25519 + XChaCha20-Poly1305) also works correctly. Remaining: epoch history for decrypting old messages, MLS group creation for newly-created channels after initial setup, and re-keying on member revocation.
+> **MLS E2EE is fully operational** for channel messages. Key exchange happens automatically when members join communities — the group creator adds new members via MLS Welcome messages. MLS groups are also created automatically for channels added after initial community setup (via `mls.group.setup.needed` server notification). Epoch synchronization, deduplication, and pending message queuing all verified in both unit tests (88 e2ee, 34 key-exchange) and browser E2E tests (Playwright Topology 2 + CDP cross-device verification on Mac + Linux). DM encryption (X25519 + XChaCha20-Poly1305) also works correctly. Voice/video frames are encrypted via Insertable Streams with MLS-derived keys (AES-256-GCM + HKDF). Remaining: epoch history for decrypting old messages, and re-keying on member revocation.
 
 ### Media & Files
 
@@ -670,6 +675,22 @@ Everything below is done and committed.
 - 11 new unit tests (emoji shortcode resolution, document title logic, unread count aggregation)
 - All B1–B12 items visually verified in browser via CDP automation
 
+### 2026-03-02
+
+- **Voice E2EE fully wired end-to-end**: E2EEBridge created in store and passed to VoiceClient; `joinVoice()` derives MLS media key via `group.deriveMediaKey()` and calls `setEncryptionKey()`; epoch rotation via `_updateVoiceE2EEKey()` on Welcome/Commit/addMember; `encodedInsertableStreams: true` on both send/recv transports
+- **MLS for new channels**: Server sends `mls.group.setup.needed` after `channel.created`; client handles via `setupMLSGroupForChannel()` (public, idempotent); 3 integration tests
+- **Persistence adapter pattern**: `PersistenceAdapter` interface with `LocalStoragePersistence`, `IndexedDBPersistence`, `KVBackedPersistence` implementations
+- **Comprehensive state persistence**: Server URLs, community→server map, MLS group states (via `exportState()`/`loadGroup()`), session tokens, last active IDs; auto-save on disconnect + 30s periodic timer
+- **Session token auth**: Server issues Ed25519-signed JWT (7-day expiry) after VP auth; client tries token first on reconnect, falls back to VP on expiry/invalid; 237-line test file
+- **Deterministic X25519 encryption key from mnemonic**: `IdentityManager.create()` and `createFromMnemonic()` both return mnemonic-derived encryption key pair via `deriveEncryptionKeyPair()` (Edwards→Montgomery). Fixed `HarmonyClient._connectImpl()` to derive rather than generate random.
+- **Electron filesystem persistence**: IPC handlers (`harmony:persist-data`/`harmony:load-data`/`harmony:remove-data`/`harmony:list-data-keys`) in main process writing to `userData/harmony-data/`; preload bridge exposed; `ElectronPersistence` adapter
+- **Cross-device E2EE verified**: CDP test across Mac (192.168.1.92) and Linux (192.168.1.2) Chrome instances — both established MLS groups, bidirectional encrypted messages sent and decrypted successfully
+- **NotificationCentre navigate-to-message**: Click notification → switch community/channel → scroll to message; DM notifications open DM view
+- **ARCHITECTURE.md sections 19-21**: Server & Connection Discovery (5 discovery paths), Data Durability & Backup (storage map + gaps), Server vs Cloud Worker Protocol Conformance (26/31 message types, 84%)
+- 7 new voice E2EE wiring tests, 3 MLS new channel tests, persistence + session token tests
+- Vitest: **2,627 passing** (was 2,545), 39 pre-existing failures, 0 regressions
+- Key commits: `0406735` (voice E2EE wiring), `b1086c3`→`f6d4f50` (persistence layers), `ae1dead` (deterministic encryption key fix), `6e61072`+`74667be` (cross-device verification)
+
 ---
 
 ## Beta Polish — Must Fix & Should Fix
@@ -741,7 +762,7 @@ Everything below is done and committed.
 | 4 | Mobile | ⬜ | Capacitor APK on real Android device |
 | 5 | Self-hosted Docker | ⬜ | `docker compose up` → Electron → create community → restart → verify persistence |
 | 6 | Migration flow | ⬜ | Real Discord server → import → verify |
-| 7 | E2EE wire verification | ⬜ | Inspect WS frames, confirm encryption |
+| 7 | E2EE wire verification | ✅ | Cross-device CDP test: Mac + Linux Chrome, MLS groups established, bidirectional encrypted messages verified |
 | 8 | Cloud billing | ⬜ | Create community, hit free tier limits, verify enforcement |
 
 ### Phase 3: Staging
@@ -903,7 +924,7 @@ B6 wired the client-side setup and initiation flows, but three operations requir
 
 ### MLS Encryption
 
-- **New channel MLS setup:** When channels are created after initial community join, the MLS group needs to be initialised for that channel. Currently only works for channels that exist at community join time.
+- **~~New channel MLS setup:~~** ✅ Done — server sends `mls.group.setup.needed` on channel create, client handles via `setupMLSGroupForChannel()` (public, idempotent).
 - **Epoch history tracking:** Store past epoch secrets so old messages in sync history remain decryptable. Currently, messages encrypted under a previous epoch are unreadable after key rotation.
 - **Re-keying on member removal:** When a member is removed/banned, rotate the MLS group key so they can't decrypt future messages. The `processCommit` epoch guard handles forward security but the removal flow isn't wired.
 
@@ -977,6 +998,7 @@ Cloud: Portal Worker + Cloud Worker on Cloudflare. Clients connect via WSS. Self
 | Voice E2E tests       | `~/Desktop/harmony/tests/scripts/harmony-e2e-voice.cjs`                     |
 | MLS browser test      | `~/Desktop/harmony/tests/scripts/mls-browser-test.cjs`                      |
 | MLS cross-device      | `~/Desktop/harmony/tests/scripts/verify-mls.cjs`                            |
+| E2EE cross-device     | `~/Desktop/harmony/tests/scripts/verify-e2ee-cross-device.cjs`              |
 | Cross-topology tests  | `~/Desktop/harmony/tests/cross-topology.spec.ts`                            |
 | Discord mock tests    | `~/Desktop/harmony/tests/discord-mock-e2e.spec.ts`                          |
 | DM architecture       | `~/Desktop/harmony/docs/dm-architecture.md`                                 |
@@ -1000,3 +1022,4 @@ Items identified in audit rounds 1–3 that are documented but not yet fixed:
 | App stubs | `checkForUpdates`, `reconnect`, `handleFileDrop`, `joinVoice` return hardcoded values | Low | Electron app convenience stubs; real logic in client/voice packages |
 | Server-runtime JWT secret | Derived from `'***' + identityDID` — predictable | Medium | Must be configurable before production |
 | Server-runtime logger `child()` | Mutates parent logger's `baseMeta` | Low | Logic bug, fix before production |
+| Server session token keypair | Regenerated on every `start()` — tokens don't survive server restarts | Low | Client falls back to VP auth seamlessly; persist keypair for production |

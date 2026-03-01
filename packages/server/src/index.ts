@@ -689,7 +689,37 @@ export class HarmonyServer {
   private communitySubscriptions: Map<string, Set<string>> = new Map() // communityId → connection IDs
   private keyPackages: Map<string, Uint8Array[]> = new Map() // DID → key packages (serialized)
   private e2eeGroups: Map<string, { creatorDID: string; communityId: string; channelId: string; groupId: string }> =
-    new Map() // groupId → metadata
+    new Map()
+  /** Track which members have been notified to group creators (groupId → Set<memberDID>) */
+  private e2eeNotified: Map<string, Set<string>> = new Map()
+
+  /** Send mls.member.joined to group creator, deduplicating */
+  private notifyMlsMemberJoined(
+    creatorConn: ServerConnection,
+    groupMeta: { communityId: string; channelId: string; groupId: string },
+    memberDID: string
+  ): void {
+    // Deduplicate — don't notify twice for same group+member
+    if (!this.e2eeNotified.has(groupMeta.groupId)) {
+      this.e2eeNotified.set(groupMeta.groupId, new Set())
+    }
+    const notified = this.e2eeNotified.get(groupMeta.groupId)!
+    if (notified.has(memberDID)) return
+    notified.add(memberDID)
+
+    this.sendToConnection(creatorConn, {
+      id: `mls-mj-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      type: 'mls.member.joined' as ProtocolMessage['type'],
+      timestamp: new Date().toISOString(),
+      sender: memberDID,
+      payload: {
+        communityId: groupMeta.communityId,
+        channelId: groupMeta.channelId,
+        groupId: groupMeta.groupId,
+        memberDID
+      }
+    })
+  } // groupId → metadata
   private _threads: Map<string, ThreadState> = new Map()
   private voiceChannelParticipants: Map<string, Set<string>> = new Map() // channelId → Set<connId>
   private voiceParticipantState: Map<
@@ -1652,6 +1682,19 @@ export class HarmonyServer {
       },
       conn.id
     )
+
+    // Notify MLS group creators that a new member with key packages is available
+    if (this.keyPackages.has(conn.did)) {
+      for (const [, groupMeta] of this.e2eeGroups) {
+        if (groupMeta.communityId !== payload.communityId) continue
+        if (groupMeta.creatorDID === conn.did) continue
+        for (const [, creatorConn] of this._connections) {
+          if (creatorConn.did === groupMeta.creatorDID) {
+            this.notifyMlsMemberJoined(creatorConn, groupMeta, conn.did)
+          }
+        }
+      }
+    }
   }
 
   private async handleCommunityUpdate(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
@@ -2394,18 +2437,7 @@ export class HarmonyServer {
       // Send mls.member.joined to the group creator
       for (const [, otherConn] of this._connections) {
         if (otherConn.did === groupMeta.creatorDID) {
-          this.sendToConnection(otherConn, {
-            id: `mls-mj-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            type: 'mls.member.joined' as ProtocolMessage['type'],
-            timestamp: new Date().toISOString(),
-            sender: conn.did,
-            payload: {
-              communityId: groupMeta.communityId,
-              channelId: groupMeta.channelId,
-              groupId: groupMeta.groupId,
-              memberDID: conn.did
-            }
-          })
+          this.notifyMlsMemberJoined(otherConn, groupMeta, conn.did)
         }
       }
     }
@@ -2472,6 +2504,20 @@ export class HarmonyServer {
           channelId: payload.channelId ?? '',
           groupId: payload.groupId
         })
+
+        // Notify the group creator about any existing community members who have key packages
+        // (handles the case where members joined before the group was created)
+        for (const [, memberConn] of this._connections) {
+          if (memberConn.did === conn.did) continue // skip creator
+          const memberCommunities = memberConn.communities ?? []
+          if (!memberCommunities.includes(payload.communityId)) continue
+          if (!this.keyPackages.has(memberConn.did)) continue
+          this.notifyMlsMemberJoined(
+            conn,
+            { communityId: payload.communityId, channelId: payload.channelId ?? '', groupId: payload.groupId },
+            memberConn.did
+          )
+        }
       }
       this.broadcastToCommunity(
         payload.communityId,

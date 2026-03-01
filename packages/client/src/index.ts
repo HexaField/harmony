@@ -2379,6 +2379,9 @@ export class HarmonyClient {
     const groupId = payload.groupId
     const group = this.mlsGroups.get(groupId)
     if (!group) return
+    // Skip if member is already in the group
+    const existingMembers = group.members()
+    if (existingMembers.some((m) => m.did === payload.memberDID)) return
     // Queue member additions to avoid racing on keypackage.response
     this._pendingMemberAdds = this._pendingMemberAdds || Promise.resolve()
     this._pendingMemberAdds = this._pendingMemberAdds.then(() =>

@@ -252,6 +252,9 @@ class SimplifiedMLSGroup implements MLSGroup {
   }
 
   async processCommit(commit: Commit): Promise<void> {
+    // Skip if already at or past this epoch (e.g., received Welcome already set us to this epoch)
+    if (commit.epoch <= this.state.epoch) return
+
     for (const proposal of commit.proposals) {
       if (proposal.type === 'add') {
         const kp = proposal.keyPackage

@@ -86,6 +86,7 @@ process.on('SIGTERM', async () => { await runtime.stop(); process.exit(0) })
 
   const child = fork(scriptPath, [], {
     cwd: ROOT,
+    execPath: NODE22,
     execArgv: ['--import', 'tsx'],
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     env: { ...process.env, NODE_OPTIONS: '' }
@@ -494,7 +495,7 @@ test.describe('Topology 2: Two clients on same server', () => {
     await bob.waitForFunction(
       (chId: string) => {
         const msgs = (window as any).__HARMONY_STORE__?.channelMessages(chId)
-        return msgs?.some((m: any) => m.content === 'Hello Bob!')
+        return msgs?.some((m: any) => m.content?.text === 'Hello Bob!' || m.content === 'Hello Bob!')
       },
       generalId,
       { timeout: 10000 }

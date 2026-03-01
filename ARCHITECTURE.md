@@ -443,15 +443,19 @@ graph TB
     PM["ProtocolMessage"]
     PM --> id["id: string (UUID)"]
     PM --> type["type: message.send | edit | delete | reaction | typing | sync"]
-    PM --> ts["timestamp: LamportClock { counter, authorDID }"]
+    PM --> ts["timestamp: string (ISO 8601)"]
     PM --> sender["sender: DID string"]
     PM --> payload["payload"]
 
     payload --> plain["plaintext content"]
     payload --> enc["EncryptedContent { ciphertext, epoch, senderIndex }"]
+
+    subgraph CRDT Layer
+        LC["LamportClock { counter, authorDID }"]
+    end
 ```
 
-> Note: Lamport clocks provide causal ordering across distributed nodes. The CRDT layer ensures convergent state even with out-of-order delivery.
+> Note: The ProtocolMessage timestamp is an ISO 8601 string. Lamport clocks operate in the CRDT layer for causal ordering of state mutations, separate from message timestamps. The CRDT layer ensures convergent state even with out-of-order delivery.
 
 ---
 
@@ -829,6 +833,285 @@ flowchart LR
 
     Note["nodeIntegration: false<br/>contextIsolation: true"]
 ```
+
+---
+
+## 19. Server & Connection Discovery
+
+Clients don't discover servers autonomously — the `HarmonyClient.connect(url, options?)` method requires a WebSocket URL. Discovery happens at the UI/application layer through five distinct paths.
+
+### Discovery Paths
+
+```mermaid
+graph TB
+    User([User])
+
+    subgraph "Discovery Paths"
+        Embedded["🖥️ Electron Embedded<br/>auto-start ServerRuntime<br/>→ ws://localhost:{port}"]
+        Manual["⌨️ Manual URL Entry<br/>Advanced option in UI"]
+        Invite["🔗 Invite Code<br/>Short code → Portal lookup"]
+        Directory["📋 Community Directory<br/>Browse public communities"]
+        Relay["🔀 Relay Proxy<br/>NAT traversal via Portal"]
+    end
+
+    subgraph "Portal Worker (Cloudflare)"
+        InviteReg["InviteRegistryDO"]
+        CommunityReg["CommunityRegistryDO"]
+        RelayDO["RelayDO<br/>WebSocket proxy"]
+    end
+
+    Server["Harmony Server"]
+
+    User --> Embedded --> Server
+    User --> Manual --> Server
+    User --> Invite --> InviteReg --> Server
+    User --> Directory --> CommunityReg --> Server
+    User --> Relay --> RelayDO --> Server
+```
+
+### Connection Flow
+
+1. **Electron embedded** — `ServerRuntime` starts with `port: 0` (OS-assigned). Once bound, the actual port is sent to the renderer via IPC (`__HARMONY_DESKTOP__.getEmbeddedServer()`). The store auto-connects to `ws://localhost:{port}` on startup, skipping the "join a community" step.
+
+2. **Manual URL entry** — The onboarding view offers an "Advanced" option where users type a server address. The store calls `client.connect(url)` directly.
+
+3. **Invite code resolution** — The primary social discovery path:
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant UI as UI App
+    participant PC as PortalClient
+    participant PW as Portal Worker
+    participant IR as InviteRegistryDO
+    participant S as Harmony Server
+
+    U->>UI: Enter invite code "abc123"
+    UI->>PC: resolveInvite("abc123")
+    PC->>PW: GET /invite/abc123
+    PW->>IR: lookup(code)
+    IR-->>PW: {serverUrl, communityId, communityName}
+    PW-->>PC: InviteResolution
+    PC-->>UI: {serverUrl, inviteCode}
+    UI->>S: WebSocket connect + community.join with VP & inviteCode
+    S-->>UI: Community state (channels, members, roles)
+```
+
+4. **Community directory** — Portal Worker serves `GET /communities` with public listings (name, description, member count, server URL). The onboarding view renders these as browsable cards. Servers self-register via `POST /communities/register` with a VP proving ownership.
+
+5. **Relay fallback** — For clients behind restrictive NATs, `GET /relay/:communityId` upgrades to WebSocket on `RelayDO`, which proxies bidirectionally to the target server.
+
+### Invite Registration (Server → Portal)
+
+When a server creates an invite with `portal: true`, it calls `POST /invites/register` on Portal Worker to map the short code to its URL + community ID. This is how invite codes become globally resolvable.
+
+### First Launch (Onboarding)
+
+The `OnboardingView` walks new users through: Welcome → Identity creation (generates DID + shows mnemonic for backup) → Display name → Join a community (invite code / browse directory / manual URL). Electron skips the join step since the embedded server is pre-connected.
+
+### Implementation Status
+
+| Path                                | Status                            |
+| ----------------------------------- | --------------------------------- |
+| Electron embedded auto-connect      | ✅ Implemented                    |
+| Manual server URL entry             | ✅ Implemented                    |
+| Invite code resolution              | ✅ Implemented                    |
+| Community directory                 | ✅ Implemented                    |
+| Relay proxy (NAT traversal)         | ✅ Implemented                    |
+| Deep links (`harmony://invite/...`) | ⚠️ Electron only — mobile not yet |
+| QR code sharing                     | ❌ Planned                        |
+| Local network discovery (mDNS)      | ❌ Not implemented                |
+
+> **Note:** Auto-reconnect is built into `HarmonyClient` (default on, 3s interval with exponential backoff). The persisted server list in localStorage allows the web client to reconnect to known servers across sessions.
+
+---
+
+## 20. Data Durability & Backup
+
+### Data Locations
+
+```mermaid
+graph TB
+    subgraph "Client (Browser/Electron Renderer)"
+        LS["localStorage"]
+        Mem["In-Memory (ephemeral)"]
+    end
+
+    subgraph "localStorage Contents"
+        ID["harmony:identity<br/>DID + keypair + mnemonic"]
+        EK["harmony:encryptionKeyPair<br/>X25519 for MLS"]
+        SL["harmony:servers<br/>Server connection list"]
+        RP["harmony:readPositions"]
+        TH["harmony:theme"]
+    end
+
+    subgraph "In-Memory (lost on refresh)"
+        MQ["MemoryQuadStore<br/>Message cache"]
+        MLS["MLS group state<br/>Epoch keys"]
+        WS["WebSocket state"]
+    end
+
+    LS --- ID
+    LS --- EK
+    LS --- SL
+    LS --- RP
+    Mem --- MQ
+    Mem --- MLS
+
+    subgraph "Server (SQLite)"
+        DB["harmony.db<br/>All quads: messages,<br/>channels, roles, members"]
+        ATT["attachments/<br/>Media files"]
+    end
+
+    subgraph "Cloud Worker (Cloudflare)"
+        DO["DO SQLite<br/>Same quad data"]
+        R2["R2 Bucket<br/>Media attachments"]
+    end
+```
+
+### Durability by Deployment
+
+| Deployment | Data Store | Durability | Risk |
+| --- | --- | --- | --- |
+| **Electron** | SQLite in `~/Library/Application Support/Harmony/` (macOS) or `~/.config/Harmony/` (Linux) | Survives restart | Lost on uninstall; no auto-backup |
+| **Cloud (DO)** | Cloudflare DO SQLite (replicated) + R2 | High — Cloudflare manages replication | DO eviction clears in-memory state (SQLite persists) |
+| **Self-hosted Docker** | SQLite in mounted volume (`/data`) | Depends on volume management | Operator responsible for backups |
+| **Web client** | Browser localStorage | Fragile | Cleared on browser data wipe |
+
+### Identity Recovery
+
+- **Mnemonic** (12 BIP-39 words) can regenerate the Ed25519 signing keypair and DID via `recoverIdentity(mnemonic)`
+- **NOT recoverable** from mnemonic: X25519 encryption keypair (generated independently), server list, message history, MLS state, read positions
+- `exportIdentity()` / `importIdentity()` provide JSON serialization of the full identity object, but this is manual
+
+### What's NOT Backed Up (Gaps)
+
+| Gap | Impact | Status |
+| --- | --- | --- |
+| No community export (`.hbundle`) | Cannot migrate or back up a community | Post-launch roadmap |
+| No message history export | Users cannot download their messages | Not planned |
+| No automated server backup | SQLite data loss = total community loss | Operator responsibility |
+| MLS state is ephemeral | Groups rebuilt on reconnect; messages encrypted under old epoch keys become unrecoverable if client state lost | By design (forward secrecy) |
+| No multi-device identity sync | Identity lives in one browser's localStorage | Not planned for beta |
+| Encryption keypair not in mnemonic | Losing localStorage = losing MLS decryption ability | Design gap |
+| Read positions client-only | `read.update` message exists but positions only in localStorage | Server-side persistence planned |
+
+### Recommendations for Beta
+
+> **Note:** Beta users should be advised:
+>
+> 1. **Back up your mnemonic** — it's the only way to recover your identity (but not your messages or encryption keys)
+> 2. **Electron is the most durable client** — web browser localStorage can be wiped unexpectedly
+> 3. **Self-hosted operators must back up `harmony.db`** — there is no automated backup mechanism
+> 4. **Message history is not portable** — if a server is lost, its messages are gone
+> 5. **MLS encryption means old messages may become unreadable** if client state is lost — this is a trade-off of forward secrecy
+
+---
+
+## 21. Server vs Cloud Worker Protocol Conformance
+
+Both `@harmony/server` (used by `server-runtime` and Electron) and `cloud-worker` (`CommunityDurableObject` on Cloudflare) implement the same WebSocket protocol. However, **cloud-worker is a full reimplementation** — it does not import `@harmony/server`.
+
+### Shared vs Separate Code
+
+```mermaid
+graph LR
+    subgraph "Shared Packages"
+        Types["@harmony/types<br/>Message definitions"]
+        Identity["@harmony/identity<br/>VP verification, DIDs"]
+        QS["@harmony/quad-store<br/>QuadStore interface"]
+        MLSPkg["@harmony/mls<br/>MLS types"]
+    end
+
+    subgraph "Server Package"
+        Server["@harmony/server<br/>HarmonyServer class<br/>SqliteQuadStore<br/>VP auth in message flow"]
+    end
+
+    subgraph "Cloud Worker"
+        CW["cloud-worker<br/>CommunityDurableObject<br/>DOQuadStore<br/>VP auth at HTTP upgrade"]
+    end
+
+    Types --> Server
+    Types --> CW
+    Identity --> Server
+    Identity --> CW
+    QS --> Server
+    QS --> CW
+    MLSPkg --> Server
+    MLSPkg --> CW
+```
+
+### Auth Divergence
+
+| Aspect                   | Server                       | Cloud Worker               |
+| ------------------------ | ---------------------------- | -------------------------- |
+| VP verification timing   | Post-connect (first message) | Pre-connect (HTTP upgrade) |
+| VP library               | `@harmony/identity`          | `@harmony/identity` (same) |
+| Session identity storage | In-memory map                | `ws.serializeAttachment()` |
+| Permission checks        | Shared handler middleware    | Reimplemented in `auth.ts` |
+
+### Protocol Message Conformance
+
+| Message Type        | Server          | Cloud Worker | Notes                              |
+| ------------------- | --------------- | ------------ | ---------------------------------- |
+| `community.join`    | ✅              | ✅           |                                    |
+| `community.update`  | ✅              | ✅           |                                    |
+| `community.delete`  | ✅              | ❌           | Not implemented in cloud           |
+| `channel.create`    | ✅              | ✅           |                                    |
+| `channel.update`    | ✅              | ✅           |                                    |
+| `channel.delete`    | ✅              | ✅           |                                    |
+| `channel.messages`  | ✅              | ✅           |                                    |
+| `message.send`      | ✅              | ✅           |                                    |
+| `message.update`    | ✅              | ✅           |                                    |
+| `message.delete`    | ✅              | ✅           |                                    |
+| `member.update`     | ✅              | ✅           |                                    |
+| `member.kick`       | ✅              | ✅           |                                    |
+| `member.ban`        | ✅              | ❌           | Not implemented in cloud           |
+| `role.create`       | ✅              | ✅           |                                    |
+| `role.update`       | ✅              | ✅           |                                    |
+| `role.delete`       | ✅              | ✅           |                                    |
+| `invite.create`     | ✅              | ✅           |                                    |
+| `invite.list`       | ✅              | ✅           |                                    |
+| `invite.delete`     | ✅              | ✅           |                                    |
+| `mls.keyPackage`    | ✅              | ✅           |                                    |
+| `mls.welcome`       | ✅              | ✅           |                                    |
+| `mls.commit`        | ✅              | ✅           |                                    |
+| `mls.proposal`      | ✅              | ❌           | Not implemented in cloud           |
+| `mls.groupInfo`     | ✅              | ✅           |                                    |
+| `voice.join`        | ✅              | ❌           | Requires SFU — not available in DO |
+| `voice.leave`       | ✅              | ❌           |                                    |
+| `voice.signal`      | ✅              | ❌           |                                    |
+| `attachment.upload` | ✅ (filesystem) | ✅ (R2)      | Different storage backends         |
+| `typing.start`      | ✅              | ✅           |                                    |
+| `typing.stop`       | ✅              | ✅           |                                    |
+| `reaction.add`      | ✅              | ✅           |                                    |
+| `reaction.remove`   | ✅              | ✅           |                                    |
+| `thread.create`     | ✅              | ❌           | Not implemented in cloud           |
+| `read.update`       | ✅              | ✅           |                                    |
+
+**Score:** Cloud worker supports **26/31** message types (84%). Missing: `community.delete`, `member.ban`, `mls.proposal`, `voice.*` (3 types), `thread.create`.
+
+### Broadcast Divergence
+
+- **Server:** Room-based broadcast optimization — only sends to clients subscribed to the relevant channel
+- **Cloud Worker:** Broadcasts to all connected WebSockets via `getWebSockets()`; filtering happens client-side (less efficient at scale)
+
+### Testing Gap
+
+- **Playwright E2E tests** (99 tests) run exclusively against `server-runtime`
+- **No E2E tests target cloud-worker**
+- Cloud-worker unit tests are minimal (mostly auth verification)
+- **No conformance test suite** exists to verify both backends behave identically
+
+### Recommendations for Beta
+
+> **Note:**
+>
+> 1. **Voice is cloud-incompatible** — communities needing voice must use self-hosted or Electron server
+> 2. **A conformance test suite is strongly recommended** — extract protocol tests into a backend-agnostic harness that runs against both server and cloud-worker
+> 3. **Permission logic is duplicated** — divergence risk is high; consider extracting into a shared `@harmony/permissions` package
+> 4. **Cloud-worker gaps should be documented** for users choosing deployment targets
+> 5. **Broadcast efficiency** in cloud-worker may need attention before communities scale past ~100 concurrent members
 
 ---
 

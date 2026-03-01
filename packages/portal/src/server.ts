@@ -5,6 +5,8 @@ loadEnv({ path: resolve(import.meta.dirname, '..', '..', '..', '.env') })
 import express, { type Application, type Request, type Response } from 'express'
 import { createCryptoProvider } from '@harmony/crypto'
 import { PortalService } from './index.js'
+import { createPortalDB } from './db.js'
+import { requireAuth } from './middleware/auth.js'
 import { identityRoutes } from './routes/identity.js'
 import { oauthRoutes } from './routes/oauth.js'
 import { storageRoutes } from './routes/storage.js'
@@ -12,12 +14,16 @@ import { friendsRoutes } from './routes/friends.js'
 
 export async function createApp(portal?: PortalService): Promise<Application> {
   const app = express()
-  app.use(express.json({ limit: '50mb' }))
+  app.use(express.json({ limit: '100mb' }))
 
-  // CORS — allow UI dev server and desktop app
+  // CORS — configurable allowed origins
+  const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS ?? 'http://localhost:3000,http://localhost:5173').split(',')
+
   app.use((_req, res, next) => {
     const origin = _req.headers.origin
-    if (origin) res.setHeader('Access-Control-Allow-Origin', origin)
+    if (origin && ALLOWED_ORIGINS.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin)
+    }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
     if (_req.method === 'OPTIONS') {
@@ -29,16 +35,21 @@ export async function createApp(portal?: PortalService): Promise<Application> {
 
   if (!portal) {
     const crypto = createCryptoProvider()
-    portal = new PortalService(crypto)
+    const db = createPortalDB()
+    portal = new PortalService(crypto, db)
   }
   await portal.initialize()
+
+  // Health check (no auth)
+  app.get('/health', (_req: Request, res: Response) => res.json({ status: 'ok' }))
+
+  // Auth middleware on all /api routes
+  app.use('/api', requireAuth())
 
   app.use('/api', identityRoutes(portal))
   app.use('/api', oauthRoutes(portal))
   app.use('/api', storageRoutes(portal))
   app.use('/api', friendsRoutes(portal))
-
-  app.get('/health', (_req: Request, res: Response) => res.json({ status: 'ok' }))
 
   return app
 }

@@ -21,6 +21,7 @@
     "@harmony/vc": "workspace:*",
     "@harmony/vocab": "workspace:*",
     "@harmony/zcap": "workspace:*",
+    "better-sqlite3": "^11.9.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
@@ -28,6 +29,7 @@
   },
   "devDependencies": {
     "@rollup/plugin-typescript": "^12.3.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.6",
     "rollup": "^4.59.0",
     "tslib": "^2.8.1"

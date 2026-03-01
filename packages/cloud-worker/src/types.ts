@@ -20,6 +20,8 @@ export interface ConnectionMeta {
   did: string
   authenticated: boolean
   connectedAt: string
+  rateLimitCounter?: number
+  rateLimitWindowStart?: number
 }
 
 export interface HealthResponse {

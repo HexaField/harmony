@@ -6,6 +6,7 @@ import type { Invocation } from '@harmony/zcap'
 import { DIDKeyProvider } from '@harmony/did'
 import { IdentityManager, type Identity } from '@harmony/identity'
 import type { EncryptedExportBundle } from '@harmony/migration'
+import type Database from 'better-sqlite3'
 
 export interface ExportMetadata {
   exportId: string
@@ -17,18 +18,15 @@ export class PortalService {
   private identityManager: IdentityManager
   private vcService: VCService
   private didProvider: DIDKeyProvider
-  private exports: Map<string, { bundle: EncryptedExportBundle; storedAt: string }> = new Map()
-  private identities: Map<string, { identity: Identity; keyPair: KeyPair }> = new Map()
-  private discordLinks: Map<string, string> = new Map() // discordId → DID
-  private discordProfiles: Map<string, { discordId: string; username: string }> = new Map() // DID → discord profile
-  private friendsLists: Map<string, string[]> = new Map() // DID → Discord friend IDs
+  private db: Database.Database
 
   private portalKeyPair!: KeyPair
   private portalDID!: string
 
   private crypto: CryptoProvider
-  constructor(crypto: CryptoProvider) {
+  constructor(crypto: CryptoProvider, db: Database.Database) {
     this.crypto = crypto
+    this.db = db
     this.identityManager = new IdentityManager(crypto)
     this.vcService = new VCService(crypto)
     this.didProvider = new DIDKeyProvider(crypto)
@@ -42,13 +40,18 @@ export class PortalService {
 
   async createIdentity(): Promise<{ identity: Identity; keyPair: KeyPair; mnemonic: string }> {
     const result = await this.identityManager.create()
-    this.identities.set(result.identity.did, { identity: result.identity, keyPair: result.keyPair })
+    this.db
+      .prepare('INSERT OR REPLACE INTO identities (did, identity_json, keypair_json) VALUES (?, ?, ?)')
+      .run(result.identity.did, JSON.stringify(result.identity), JSON.stringify(result.keyPair))
     return result
   }
 
   async resolveIdentity(did: string): Promise<Identity | null> {
-    const entry = this.identities.get(did)
-    return entry?.identity ?? null
+    const row = this.db.prepare('SELECT identity_json FROM identities WHERE did = ?').get(did) as
+      | { identity_json: string }
+      | undefined
+    if (!row) return null
+    return JSON.parse(row.identity_json)
   }
 
   async initiateOAuthLink(params: {
@@ -56,8 +59,16 @@ export class PortalService {
     userDID: string
   }): Promise<{ redirectUrl: string; state: string }> {
     const state = randomBytes(32).toString('hex')
-    const redirectUrl = `https://oauth.example.com/${params.provider}/authorize?state=${state}&did=${params.userDID}`
-    return { redirectUrl, state }
+    const clientId = process.env[`${params.provider.toUpperCase()}_CLIENT_ID`] ?? ''
+    const redirectUri = process.env[`${params.provider.toUpperCase()}_REDIRECT_URI`] ?? ''
+
+    const urls: Record<string, string> = {
+      discord: `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify&state=${state}`,
+      github: `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`,
+      google: `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=openid+profile&state=${state}`
+    }
+
+    return { redirectUrl: urls[params.provider] ?? '', state }
   }
 
   async completeOAuthLink(params: {
@@ -80,11 +91,12 @@ export class PortalService {
     if (params.provider === 'discord') {
       claims.discordUserId = params.providerUserId
       claims.discordUsername = params.providerUsername
-      this.discordLinks.set(params.providerUserId, params.userDID)
-      this.discordProfiles.set(params.userDID, {
-        discordId: params.providerUserId,
-        username: params.providerUsername
-      })
+      this.db
+        .prepare('INSERT OR REPLACE INTO discord_links (discord_id, did) VALUES (?, ?)')
+        .run(params.providerUserId, params.userDID)
+      this.db
+        .prepare('INSERT OR REPLACE INTO discord_profiles (did, discord_id, username) VALUES (?, ?, ?)')
+        .run(params.userDID, params.providerUserId, params.providerUsername)
     }
 
     const vc = await this.vcService.issue({
@@ -100,66 +112,94 @@ export class PortalService {
 
   async storeExport(bundle: EncryptedExportBundle): Promise<{ exportId: string }> {
     const exportId = Array.from(new Uint8Array(8), () => Math.random().toString(36)[2]).join('')
-    this.exports.set(exportId, { bundle, storedAt: new Date().toISOString() })
+    this.db
+      .prepare('INSERT INTO exports (export_id, admin_did, bundle_json, stored_at) VALUES (?, ?, ?, ?)')
+      .run(exportId, bundle.metadata.adminDID, JSON.stringify(bundle), new Date().toISOString())
     return { exportId }
   }
 
   async retrieveExport(exportId: string, adminDID: string): Promise<EncryptedExportBundle> {
-    const entry = this.exports.get(exportId)
-    if (!entry) throw new Error('Export not found')
-    if (entry.bundle.metadata.adminDID !== adminDID) throw new Error('Unauthorized')
-    return entry.bundle
+    const row = this.db.prepare('SELECT admin_did, bundle_json FROM exports WHERE export_id = ?').get(exportId) as
+      | { admin_did: string; bundle_json: string }
+      | undefined
+    if (!row) throw new Error('Export not found')
+    if (row.admin_did !== adminDID) throw new Error('Unauthorized')
+    return JSON.parse(row.bundle_json)
   }
 
   async deleteExport(exportId: string, adminDID: string, _proof?: Invocation): Promise<void> {
-    const entry = this.exports.get(exportId)
-    if (!entry) throw new Error('Export not found')
-    if (entry.bundle.metadata.adminDID !== adminDID) throw new Error('Unauthorized')
-    this.exports.delete(exportId)
+    const row = this.db.prepare('SELECT admin_did FROM exports WHERE export_id = ?').get(exportId) as
+      | { admin_did: string }
+      | undefined
+    if (!row) throw new Error('Export not found')
+    if (row.admin_did !== adminDID) throw new Error('Unauthorized')
+    this.db.prepare('DELETE FROM exports WHERE export_id = ?').run(exportId)
   }
 
   async listExports(adminDID: string): Promise<ExportMetadata[]> {
-    const results: ExportMetadata[] = []
-    for (const [exportId, entry] of this.exports) {
-      if (entry.bundle.metadata.adminDID === adminDID) {
-        results.push({ exportId, metadata: entry.bundle.metadata, storedAt: entry.storedAt })
-      }
-    }
-    return results
+    const rows = this.db
+      .prepare('SELECT export_id, bundle_json, stored_at FROM exports WHERE admin_did = ?')
+      .all(adminDID) as Array<{ export_id: string; bundle_json: string; stored_at: string }>
+    return rows.map((row) => {
+      const bundle = JSON.parse(row.bundle_json)
+      return { exportId: row.export_id, metadata: bundle.metadata, storedAt: row.stored_at }
+    })
   }
 
   getDiscordProfile(did: string): { discordId: string; username: string } | null {
-    return this.discordProfiles.get(did) ?? null
+    const row = this.db.prepare('SELECT discord_id, username FROM discord_profiles WHERE did = ?').get(did) as
+      | { discord_id: string; username: string }
+      | undefined
+    if (!row) return null
+    return { discordId: row.discord_id, username: row.username }
   }
 
   resolveDiscordUser(discordId: string): string | null {
-    return this.discordLinks.get(discordId) || null
+    const row = this.db.prepare('SELECT did FROM discord_links WHERE discord_id = ?').get(discordId) as
+      | { did: string }
+      | undefined
+    return row?.did ?? null
   }
 
   async findLinkedIdentities(discordUserIds: string[]): Promise<Map<string, string>> {
     const result = new Map<string, string>()
-    for (const id of discordUserIds) {
-      const did = this.discordLinks.get(id)
-      if (did) result.set(id, did)
+    if (discordUserIds.length === 0) return result
+    const placeholders = discordUserIds.map(() => '?').join(',')
+    const rows = this.db
+      .prepare(`SELECT discord_id, did FROM discord_links WHERE discord_id IN (${placeholders})`)
+      .all(...discordUserIds) as Array<{ discord_id: string; did: string }>
+    for (const row of rows) {
+      result.set(row.discord_id, row.did)
     }
     return result
   }
 
   storeFriendsList(did: string, discordFriendIds: string[]): void {
-    this.friendsLists.set(did, discordFriendIds)
+    const deleteStmt = this.db.prepare('DELETE FROM friends_lists WHERE did = ?')
+    const insertStmt = this.db.prepare('INSERT INTO friends_lists (did, friend_discord_id) VALUES (?, ?)')
+    const tx = this.db.transaction(() => {
+      deleteStmt.run(did)
+      for (const friendId of discordFriendIds) {
+        insertStmt.run(did, friendId)
+      }
+    })
+    tx()
   }
 
   getStoredFriendIds(did: string): string[] {
-    return this.friendsLists.get(did) ?? []
+    const rows = this.db.prepare('SELECT friend_discord_id FROM friends_lists WHERE did = ?').all(did) as Array<{
+      friend_discord_id: string
+    }>
+    return rows.map((r) => r.friend_discord_id)
   }
 
   async discoverFriends(did: string): Promise<Array<{ discordId: string; did: string; username: string }>> {
-    const friendIds = this.friendsLists.get(did) ?? []
+    const friendIds = this.getStoredFriendIds(did)
     if (friendIds.length === 0) return []
     const linked = await this.findLinkedIdentities(friendIds)
     const results: Array<{ discordId: string; did: string; username: string }> = []
     for (const [discordId, friendDid] of linked) {
-      const profile = this.discordProfiles.get(friendDid)
+      const profile = this.getDiscordProfile(friendDid)
       results.push({
         discordId,
         did: friendDid,
@@ -171,13 +211,9 @@ export class PortalService {
 
   /** Search for linked identities by Discord username (case-insensitive partial match) */
   searchByDiscordUsername(query: string): Array<{ did: string; discordId: string; username: string }> {
-    const results: Array<{ did: string; discordId: string; username: string }> = []
-    const lowerQuery = query.toLowerCase()
-    for (const [did, profile] of this.discordProfiles) {
-      if (profile.username.toLowerCase().includes(lowerQuery)) {
-        results.push({ did, discordId: profile.discordId, username: profile.username })
-      }
-    }
-    return results
+    const rows = this.db
+      .prepare('SELECT did, discord_id, username FROM discord_profiles WHERE username LIKE ?')
+      .all(`%${query}%`) as Array<{ did: string; discord_id: string; username: string }>
+    return rows.map((r) => ({ did: r.did, discordId: r.discord_id, username: r.username }))
   }
 }

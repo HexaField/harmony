@@ -6,6 +6,12 @@ export function storageRoutes(portal: PortalService): Router {
 
   router.post('/storage/exports', async (req: Request, res: Response) => {
     try {
+      // Validate bundle size (max 100MB)
+      const contentLength = parseInt(req.headers['content-length'] ?? '0', 10)
+      if (contentLength > 100 * 1024 * 1024) {
+        res.status(413).json({ error: 'Export bundle exceeds 100MB limit' })
+        return
+      }
       const { ciphertext, nonce, metadata } = req.body
       if (!ciphertext || !nonce || !metadata) {
         res.status(400).json({ error: 'Missing required fields' })

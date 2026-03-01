@@ -9,6 +9,32 @@ import { DOQuadStore } from './do-quad-store.js'
 import { parseVP, verifyVP } from './auth.js'
 import type { Env, ConnectionMeta, HealthResponse } from './types.js'
 
+// ── Validation Constants ──
+const MAX_CONTENT_LENGTH = 4000
+const MAX_NAME_LENGTH = 100
+const MAX_TOPIC_LENGTH = 500
+const RATE_LIMIT_MAX = 50
+const RATE_LIMIT_WINDOW_MS = 10_000
+
+function validateDID(did: unknown): string | null {
+  if (typeof did !== 'string' || !did.startsWith('did:')) return 'Invalid DID format'
+  return null
+}
+
+function validateStringLength(value: string, maxLength: number, fieldName: string): string | null {
+  if (value.length > maxLength) return `${fieldName} exceeds maximum length of ${maxLength}`
+  return null
+}
+
+function validateRequiredStrings(fields: Record<string, unknown>): string | null {
+  for (const [key, value] of Object.entries(fields)) {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      return `Missing or empty required field: ${key}`
+    }
+  }
+  return null
+}
+
 export class CommunityDurableObject extends DurableObject {
   private quadStore: DOQuadStore
   private communityId: string | null = null
@@ -55,6 +81,17 @@ export class CommunityDurableObject extends DurableObject {
         joined_at TEXT NOT NULL,
         PRIMARY KEY (room_id, did)
       );
+
+      CREATE TABLE IF NOT EXISTS pins (channel_id TEXT NOT NULL, message_id TEXT NOT NULL, pinned_by TEXT NOT NULL, pinned_at TEXT NOT NULL, PRIMARY KEY (channel_id, message_id));
+      CREATE TABLE IF NOT EXISTS banned_users (did TEXT PRIMARY KEY, banned_by TEXT NOT NULL, banned_at TEXT NOT NULL, reason TEXT);
+      CREATE TABLE IF NOT EXISTS threads (id TEXT PRIMARY KEY, parent_message_id TEXT NOT NULL, channel_id TEXT NOT NULL, name TEXT NOT NULL, creator_did TEXT NOT NULL, created_at TEXT NOT NULL, message_count INTEGER NOT NULL DEFAULT 1);
+      CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT, permissions TEXT NOT NULL DEFAULT '[]', position INTEGER NOT NULL DEFAULT 0, created_by TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS member_roles (member_did TEXT NOT NULL, role_id TEXT NOT NULL, PRIMARY KEY (member_did, role_id));
+      CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, recipient_did TEXT NOT NULL, type TEXT NOT NULL, from_did TEXT NOT NULL, community_id TEXT, channel_id TEXT, message_id TEXT, content TEXT, read INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS key_packages (did TEXT NOT NULL, package_data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS e2ee_groups (group_id TEXT PRIMARY KEY, creator_did TEXT NOT NULL, channel_id TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS media (id TEXT PRIMARY KEY, filename TEXT NOT NULL, mime_type TEXT NOT NULL, size INTEGER NOT NULL, data TEXT NOT NULL, uploaded_by TEXT NOT NULL, channel_id TEXT NOT NULL, uploaded_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS moderation_rules (id TEXT PRIMARY KEY, type TEXT NOT NULL, config TEXT NOT NULL);
     `)
   }
 
@@ -118,6 +155,22 @@ export class CommunityDurableObject extends DurableObject {
       return
     }
 
+    // Rate limiting
+    const now = Date.now()
+    const windowStart = meta.rateLimitWindowStart ?? now
+    if (now - windowStart > RATE_LIMIT_WINDOW_MS) {
+      meta.rateLimitCounter = 1
+      meta.rateLimitWindowStart = now
+    } else {
+      meta.rateLimitCounter = (meta.rateLimitCounter ?? 0) + 1
+    }
+    ws.serializeAttachment(meta)
+
+    if (meta.rateLimitCounter > RATE_LIMIT_MAX) {
+      this.sendError(ws, 'Rate limit exceeded', 'RATE_LIMITED')
+      return
+    }
+
     // Parse protocol message
     let msg: ProtocolMessage
     try {
@@ -165,6 +218,20 @@ export class CommunityDurableObject extends DurableObject {
     if (!did) {
       this.sendError(ws, 'VP verification failed')
       ws.close(4001, 'Auth failed')
+      return
+    }
+
+    const didErr = validateDID(did)
+    if (didErr) {
+      this.sendError(ws, didErr)
+      ws.close(4001, 'Invalid DID')
+      return
+    }
+
+    // Check if banned
+    if (this.isBanned(did)) {
+      this.sendError(ws, 'You are banned from this community')
+      ws.close(4003, 'Banned')
       return
     }
 
@@ -258,13 +325,197 @@ export class CommunityDurableObject extends DurableObject {
       case 'voice.mute':
         await this.handleVoiceMute(ws, meta, msg)
         break
+      case 'channel.update':
+        this.handleChannelUpdate(ws, meta, msg)
+        break
+      case 'channel.delete.admin':
+        this.handleChannelDeleteAdmin(ws, meta, msg)
+        break
+      case 'channel.pin':
+        this.handleChannelPin(ws, meta, msg)
+        break
+      case 'channel.unpin':
+        this.handleChannelUnpin(ws, meta, msg)
+        break
+      case 'channel.pins.list':
+        this.handleChannelPinsList(ws, meta, msg)
+        break
+      case 'channel.reaction.add':
+        this.handleChannelReactionAdd(meta, msg)
+        break
+      case 'channel.reaction.remove':
+        this.handleChannelReactionRemove(meta, msg)
+        break
+      case 'channel.history':
+        this.handleChannelHistory(ws, msg)
+        break
+      case 'community.update':
+        this.handleCommunityUpdate(ws, meta, msg)
+        break
+      case 'community.info':
+        this.handleCommunityInfo(ws, msg)
+        break
+      case 'community.list':
+        this.handleCommunityList(ws, msg)
+        break
+      case 'community.ban':
+        this.handleCommunityBan(ws, meta, msg)
+        break
+      case 'community.unban':
+        this.handleCommunityUnban(ws, meta, msg)
+        break
+      case 'community.kick':
+        this.handleCommunityKick(ws, meta, msg)
+        break
+      case 'community.member.reconciled':
+        ws.send(
+          serialise({
+            id: msg.id,
+            type: 'community.member.reconciled.ack',
+            timestamp: new Date().toISOString(),
+            sender: 'server',
+            payload: {}
+          })
+        )
+        break
+      case 'dm.send':
+        this.handleDmSend(ws, meta, msg)
+        break
+      case 'dm.edit':
+        this.handleDmEdit(ws, meta, msg)
+        break
+      case 'dm.delete':
+        this.handleDmDelete(ws, meta, msg)
+        break
+      case 'dm.typing':
+        this.handleDmTyping(ws, meta, msg)
+        break
+      case 'dm.keyexchange':
+        this.handleDmKeyexchange(ws, meta, msg)
+        break
+      case 'thread.create':
+        this.handleThreadCreate(meta, msg)
+        break
+      case 'thread.send':
+        this.handleThreadSend(meta, msg)
+        break
+      case 'role.create':
+        this.handleRoleCreate(ws, meta, msg)
+        break
+      case 'role.update':
+        this.handleRoleUpdate(ws, meta, msg)
+        break
+      case 'role.delete':
+        this.handleRoleDelete(ws, meta, msg)
+        break
+      case 'role.assign':
+        this.handleRoleAssign(ws, meta, msg)
+        break
+      case 'role.remove':
+        this.handleRoleRemove(ws, meta, msg)
+        break
+      case 'member.update':
+        this.handleMemberUpdate(meta, msg)
+        break
+      case 'search.query':
+        this.handleSearchQuery(ws, msg)
+        break
+      case 'media.upload.request':
+        this.handleMediaUploadRequest(ws, meta, msg)
+        break
+      case 'media.delete':
+        this.handleMediaDelete(ws, meta, msg)
+        break
+      case 'mls.keypackage.upload':
+        this.handleMlsKeypackageUpload(meta, msg)
+        break
+      case 'mls.keypackage.fetch':
+        this.handleMlsKeypackageFetch(ws, msg)
+        break
+      case 'mls.welcome':
+        this.handleMlsWelcome(ws, meta, msg)
+        break
+      case 'mls.commit':
+        this.handleMlsCommit(ws, meta, msg)
+        break
+      case 'mls.group.setup':
+        this.handleMlsGroupSetup(ws, meta, msg)
+        break
+      case 'mls.member.joined':
+        // no-op client-to-client
+        break
+      case 'moderation.config.update':
+        this.handleModerationConfigUpdate(ws, meta, msg)
+        break
+      case 'moderation.config.get':
+        this.handleModerationConfigGet(ws, msg)
+        break
+      case 'notification.list':
+        this.handleNotificationList(ws, meta)
+        break
+      case 'notification.mark-read':
+        this.handleNotificationMarkRead(ws, meta, msg)
+        break
+      case 'notification.count':
+        this.handleNotificationCount(ws, meta)
+        break
+      case 'voice.unmute':
+        await this.handleVoiceMute(ws, meta, msg)
+        break
+      case 'voice.offer':
+      case 'voice.answer':
+      case 'voice.ice':
+        this.handleVoiceSignaling(ws, meta, msg)
+        break
+      case 'voice.video':
+        this.handleVoiceVideo(meta, msg)
+        break
+      case 'voice.screen':
+        this.handleVoiceScreen(meta, msg)
+        break
+      case 'voice.speaking':
+        this.handleVoiceSpeaking(ws, meta, msg)
+        break
+      case 'voice.token':
+        this.handleVoiceToken(ws, msg)
+        break
+      case 'voice.transport.connect':
+      case 'voice.transport.connect-recv':
+      case 'voice.transport.create-recv':
+      case 'voice.produce':
+      case 'voice.consume':
+      case 'voice.consumer.resume':
+        this.sendError(ws, 'NO_SFU: SFU mode not available in cloud worker')
+        break
+      case 'voice.get-producers':
+        ws.send(
+          serialise({
+            id: msg.id,
+            type: 'voice.producers',
+            timestamp: new Date().toISOString(),
+            sender: 'server',
+            payload: { producers: [] }
+          })
+        )
+        break
+      case 'voice.producer-closed':
+        this.handleVoiceProducerClosed(ws, meta, msg)
+        break
       default:
         this.sendError(ws, `Unsupported message type: ${msg.type}`)
     }
   }
 
-  private async handleChannelSend(_ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): Promise<void> {
+  private async handleChannelSend(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): Promise<void> {
     const payload = msg.payload as { communityId: string; channelId: string; content: unknown; nonce: string }
+
+    // Validate content length
+    const contentStr = typeof payload.content === 'string' ? payload.content : JSON.stringify(payload.content)
+    const lengthErr = validateStringLength(contentStr, MAX_CONTENT_LENGTH, 'content')
+    if (lengthErr) {
+      this.sendError(ws, lengthErr)
+      return
+    }
 
     // Store message as quads
     const graph = `${payload.communityId}:${payload.channelId}`
@@ -359,6 +610,18 @@ export class CommunityDurableObject extends DurableObject {
 
   private async handleCommunityCreate(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): Promise<void> {
     const payload = msg.payload as { name: string; description?: string }
+
+    const reqErr = validateRequiredStrings({ name: payload.name })
+    if (reqErr) {
+      this.sendError(ws, reqErr)
+      return
+    }
+    const nameErr = validateStringLength(payload.name, MAX_NAME_LENGTH, 'name')
+    if (nameErr) {
+      this.sendError(ws, nameErr)
+      return
+    }
+
     const communityId = crypto.randomUUID()
 
     this.quadStore.addAll([
@@ -439,8 +702,27 @@ export class CommunityDurableObject extends DurableObject {
     )
   }
 
-  private async handleChannelCreate(_ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): Promise<void> {
+  private async handleChannelCreate(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): Promise<void> {
     const payload = msg.payload as { name: string; type?: string; categoryId?: string; topic?: string }
+
+    const reqErr = validateRequiredStrings({ name: payload.name })
+    if (reqErr) {
+      this.sendError(ws, reqErr)
+      return
+    }
+    const nameErr = validateStringLength(payload.name, MAX_NAME_LENGTH, 'name')
+    if (nameErr) {
+      this.sendError(ws, nameErr)
+      return
+    }
+    if (payload.topic) {
+      const topicErr = validateStringLength(payload.topic, MAX_TOPIC_LENGTH, 'topic')
+      if (topicErr) {
+        this.sendError(ws, topicErr)
+        return
+      }
+    }
+
     const channelId = crypto.randomUUID()
     const now = new Date().toISOString()
 
@@ -639,7 +921,994 @@ export class CommunityDurableObject extends DurableObject {
     return result
   }
 
+  // ── Channel (additional) ──
+
+  private handleChannelUpdate(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { channelId: string; name?: string; topic?: string }
+    if (!this.isAdmin(meta.did)) {
+      this.sendError(ws, 'Not authorized')
+      return
+    }
+    if (payload.name !== undefined) {
+      this.ctx.storage.sql.exec('UPDATE channels SET name = ? WHERE id = ?', payload.name, payload.channelId)
+    }
+    if (payload.topic !== undefined) {
+      this.ctx.storage.sql.exec('UPDATE channels SET topic = ? WHERE id = ?', payload.topic, payload.channelId)
+    }
+    this.broadcast(
+      serialise({ id: msg.id, type: 'channel.updated', timestamp: new Date().toISOString(), sender: meta.did, payload })
+    )
+  }
+
+  private handleChannelDeleteAdmin(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { channelId: string }
+    if (!this.isAdmin(meta.did)) {
+      this.sendError(ws, 'Not authorized')
+      return
+    }
+    this.ctx.storage.sql.exec('DELETE FROM channels WHERE id = ?', payload.channelId)
+    this.broadcast(
+      serialise({ id: msg.id, type: 'channel.deleted', timestamp: new Date().toISOString(), sender: meta.did, payload })
+    )
+  }
+
+  private handleChannelPin(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { channelId: string; messageId: string }
+    // Enforce max 50
+    let count = 0
+    for (const row of this.ctx.storage.sql.exec(
+      'SELECT COUNT(*) as cnt FROM pins WHERE channel_id = ?',
+      payload.channelId
+    )) {
+      count = row.cnt as number
+    }
+    if (count >= 50) {
+      this.sendError(ws, 'Max 50 pins per channel')
+      return
+    }
+    this.ctx.storage.sql.exec(
+      'INSERT OR IGNORE INTO pins (channel_id, message_id, pinned_by, pinned_at) VALUES (?, ?, ?, ?)',
+      payload.channelId,
+      payload.messageId,
+      meta.did,
+      new Date().toISOString()
+    )
+    this.broadcast(
+      serialise({
+        id: msg.id,
+        type: 'channel.message.pinned',
+        timestamp: new Date().toISOString(),
+        sender: meta.did,
+        payload
+      })
+    )
+  }
+
+  private handleChannelUnpin(_ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { channelId: string; messageId: string }
+    this.ctx.storage.sql.exec(
+      'DELETE FROM pins WHERE channel_id = ? AND message_id = ?',
+      payload.channelId,
+      payload.messageId
+    )
+    this.broadcast(
+      serialise({
+        id: msg.id,
+        type: 'channel.message.unpinned',
+        timestamp: new Date().toISOString(),
+        sender: meta.did,
+        payload
+      })
+    )
+  }
+
+  private handleChannelPinsList(ws: WebSocket, _meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { channelId: string }
+    const pins: string[] = []
+    for (const row of this.ctx.storage.sql.exec(
+      'SELECT message_id FROM pins WHERE channel_id = ?',
+      payload.channelId
+    )) {
+      pins.push(row.message_id as string)
+    }
+    ws.send(
+      serialise({
+        id: msg.id,
+        type: 'channel.pins.list.response',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { channelId: payload.channelId, messageIds: pins }
+      })
+    )
+  }
+
+  private handleChannelReactionAdd(meta: ConnectionMeta, msg: ProtocolMessage): void {
+    this.broadcast(
+      serialise({
+        id: msg.id,
+        type: 'channel.reaction.added',
+        timestamp: new Date().toISOString(),
+        sender: meta.did,
+        payload: msg.payload
+      })
+    )
+  }
+
+  private handleChannelReactionRemove(meta: ConnectionMeta, msg: ProtocolMessage): void {
+    this.broadcast(
+      serialise({
+        id: msg.id,
+        type: 'channel.reaction.removed',
+        timestamp: new Date().toISOString(),
+        sender: meta.did,
+        payload: msg.payload
+      })
+    )
+  }
+
+  private handleChannelHistory(ws: WebSocket, msg: ProtocolMessage): void {
+    const payload = msg.payload as { communityId: string; channelId: string; limit?: number; before?: string }
+    const graph = `${payload.communityId}:${payload.channelId}`
+    const allMsgs = this.quadStore.match({ predicate: 'rdf:type', object: HarmonyType.Message, graph })
+    // Get message details
+    const limit = payload.limit ?? 50
+    const messages: Array<{ id: string; author: string; content: string; timestamp: string }> = []
+    for (const quad of allMsgs) {
+      const id = quad.subject
+      const author = this.quadStore.getValue(id, HarmonyPredicate.author, graph)
+      const content = this.quadStore.getValue(id, `${HARMONY}content`, graph)
+      const timestamp = this.quadStore.getValue(id, HarmonyPredicate.timestamp, graph)
+      if (payload.before && timestamp && timestamp >= payload.before) continue
+      messages.push({ id, author: author ?? '', content: content ?? '', timestamp: timestamp ?? '' })
+    }
+    messages.sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+    const sliced = messages.slice(0, limit)
+    ws.send(
+      serialise({
+        id: msg.id,
+        type: 'channel.history.response',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { channelId: payload.channelId, messages: sliced }
+      })
+    )
+  }
+
+  // ── Community (additional) ──
+
+  private handleCommunityUpdate(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { name?: string; description?: string }
+    if (!this.isAdmin(meta.did)) {
+      this.sendError(ws, 'Not authorized')
+      return
+    }
+    if (!this.communityId) return
+    if (payload.name !== undefined) {
+      const old = this.quadStore.getValue(this.communityId, HarmonyPredicate.name, this.communityId)
+      if (old !== null)
+        this.quadStore.remove({
+          subject: this.communityId,
+          predicate: HarmonyPredicate.name,
+          object: old,
+          graph: this.communityId
+        })
+      this.quadStore.add({
+        subject: this.communityId,
+        predicate: HarmonyPredicate.name,
+        object: payload.name,
+        graph: this.communityId
+      })
+    }
+    if (payload.description !== undefined) {
+      const old = this.quadStore.getValue(this.communityId, `${HARMONY}description`, this.communityId)
+      if (old !== null)
+        this.quadStore.remove({
+          subject: this.communityId,
+          predicate: `${HARMONY}description`,
+          object: old,
+          graph: this.communityId
+        })
+      this.quadStore.add({
+        subject: this.communityId,
+        predicate: `${HARMONY}description`,
+        object: payload.description,
+        graph: this.communityId
+      })
+    }
+    this.broadcast(
+      serialise({
+        id: msg.id,
+        type: 'community.updated',
+        timestamp: new Date().toISOString(),
+        sender: meta.did,
+        payload: { communityId: this.communityId, ...payload }
+      })
+    )
+  }
+
+  private handleCommunityInfo(ws: WebSocket, msg: ProtocolMessage): void {
+    const info = this.getCommunityInfo()
+    ws.send(
+      serialise({
+        id: msg.id,
+        type: 'community.info.response',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: info
+      })
+    )
+  }
+
+  private handleCommunityList(ws: WebSocket, msg: ProtocolMessage): void {
+    const info = this.getCommunityInfo()
+    ws.send(
+      serialise({
+        id: msg.id,
+        type: 'community.list.response',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { communities: [info] }
+      })
+    )
+  }
+
+  private getCommunityInfo(): {
+    communityId: string | null
+    name: string | null
+    description: string | null
+    members: Array<{ did: string; displayName: string | null }>
+  } {
+    const name = this.communityId
+      ? this.quadStore.getValue(this.communityId, HarmonyPredicate.name, this.communityId)
+      : null
+    const description = this.communityId
+      ? this.quadStore.getValue(this.communityId, `${HARMONY}description`, this.communityId)
+      : null
+    const members: Array<{ did: string; displayName: string | null }> = []
+    for (const row of this.ctx.storage.sql.exec('SELECT did, display_name FROM members')) {
+      members.push({ did: row.did as string, displayName: row.display_name as string | null })
+    }
+    return { communityId: this.communityId, name, description, members }
+  }
+
+  private handleCommunityBan(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { did: string; reason?: string }
+    if (!this.isAdmin(meta.did)) {
+      this.sendError(ws, 'Not authorized')
+      return
+    }
+    this.ctx.storage.sql.exec(
+      'INSERT OR REPLACE INTO banned_users (did, banned_by, banned_at, reason) VALUES (?, ?, ?, ?)',
+      payload.did,
+      meta.did,
+      new Date().toISOString(),
+      payload.reason ?? null
+    )
+    this.ctx.storage.sql.exec('DELETE FROM members WHERE did = ?', payload.did)
+    // Notify banned user
+    this.createNotification(payload.did, {
+      type: 'community.ban',
+      fromDID: meta.did,
+      communityId: this.communityId ?? undefined,
+      content: payload.reason
+    })
+    // Disconnect banned user
+    for (const target of this.findConnectionsByDID(payload.did)) {
+      target.send(
+        serialise({
+          id: msg.id,
+          type: 'community.ban.applied',
+          timestamp: new Date().toISOString(),
+          sender: 'server',
+          payload: { did: payload.did, reason: payload.reason }
+        })
+      )
+      target.close(4003, 'Banned')
+    }
+    this.broadcast(
+      serialise({
+        id: msg.id,
+        type: 'community.ban.applied',
+        timestamp: new Date().toISOString(),
+        sender: meta.did,
+        payload: { did: payload.did }
+      })
+    )
+  }
+
+  private handleCommunityUnban(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { did: string }
+    if (!this.isAdmin(meta.did)) {
+      this.sendError(ws, 'Not authorized')
+      return
+    }
+    this.ctx.storage.sql.exec('DELETE FROM banned_users WHERE did = ?', payload.did)
+    ws.send(
+      serialise({
+        id: msg.id,
+        type: 'community.unban.applied',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { did: payload.did }
+      })
+    )
+  }
+
+  private handleCommunityKick(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { did: string }
+    if (!this.isAdmin(meta.did)) {
+      this.sendError(ws, 'Not authorized')
+      return
+    }
+    this.ctx.storage.sql.exec('DELETE FROM members WHERE did = ?', payload.did)
+    for (const target of this.findConnectionsByDID(payload.did)) {
+      target.send(
+        serialise({
+          id: msg.id,
+          type: 'member.kicked',
+          timestamp: new Date().toISOString(),
+          sender: 'server',
+          payload: { did: payload.did }
+        })
+      )
+      target.close(4004, 'Kicked')
+    }
+    this.broadcast(
+      serialise({
+        id: msg.id,
+        type: 'member.kicked',
+        timestamp: new Date().toISOString(),
+        sender: meta.did,
+        payload: { did: payload.did }
+      })
+    )
+  }
+
+  // ── DM ──
+
+  private handleDmSend(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { recipientDID: string; content: unknown; nonce?: string }
+    const targets = this.findConnectionsByDID(payload.recipientDID)
+    if (targets.length === 0) {
+      this.sendError(ws, 'Recipient not connected')
+      return
+    }
+    const outMsg = serialise({ id: msg.id, type: 'dm.message', timestamp: msg.timestamp, sender: meta.did, payload })
+    for (const t of targets) t.send(outMsg)
+  }
+
+  private handleDmEdit(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { recipientDID: string; messageId: string; content: unknown }
+    const targets = this.findConnectionsByDID(payload.recipientDID)
+    if (targets.length === 0) {
+      this.sendError(ws, 'Recipient not connected')
+      return
+    }
+    const outMsg = serialise({ id: msg.id, type: 'dm.edited', timestamp: msg.timestamp, sender: meta.did, payload })
+    for (const t of targets) t.send(outMsg)
+  }
+
+  private handleDmDelete(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { recipientDID: string; messageId: string }
+    const targets = this.findConnectionsByDID(payload.recipientDID)
+    if (targets.length === 0) {
+      this.sendError(ws, 'Recipient not connected')
+      return
+    }
+    const outMsg = serialise({ id: msg.id, type: 'dm.deleted', timestamp: msg.timestamp, sender: meta.did, payload })
+    for (const t of targets) t.send(outMsg)
+  }
+
+  private handleDmTyping(_ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { recipientDID: string }
+    const targets = this.findConnectionsByDID(payload.recipientDID)
+    const outMsg = serialise({
+      id: msg.id,
+      type: 'dm.typing.indicator',
+      timestamp: msg.timestamp,
+      sender: meta.did,
+      payload
+    })
+    for (const t of targets) t.send(outMsg)
+  }
+
+  private handleDmKeyexchange(_ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { recipientDID: string }
+    const targets = this.findConnectionsByDID(payload.recipientDID)
+    const outMsg = serialise({
+      id: msg.id,
+      type: 'dm.keyexchange',
+      timestamp: msg.timestamp,
+      sender: meta.did,
+      payload
+    })
+    for (const t of targets) t.send(outMsg)
+  }
+
+  // ── Threads ──
+
+  private handleThreadCreate(meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { parentMessageId: string; channelId: string; name: string }
+    const id = crypto.randomUUID()
+    const now = new Date().toISOString()
+    this.ctx.storage.sql.exec(
+      'INSERT INTO threads (id, parent_message_id, channel_id, name, creator_did, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      id,
+      payload.parentMessageId,
+      payload.channelId,
+      payload.name,
+      meta.did,
+      now
+    )
+    this.broadcast(
+      serialise({
+        id: msg.id,
+        type: 'thread.created',
+        timestamp: now,
+        sender: meta.did,
+        payload: { threadId: id, ...payload }
+      })
+    )
+  }
+
+  private handleThreadSend(meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { threadId: string; content: unknown }
+    this.ctx.storage.sql.exec('UPDATE threads SET message_count = message_count + 1 WHERE id = ?', payload.threadId)
+    this.broadcast(
+      serialise({ id: msg.id, type: 'thread.message', timestamp: msg.timestamp, sender: meta.did, payload })
+    )
+  }
+
+  // ── Roles ──
+
+  private handleRoleCreate(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { name: string; color?: string; permissions?: string[]; position?: number }
+    if (!this.isAdmin(meta.did)) {
+      this.sendError(ws, 'Not authorized')
+      return
+    }
+    const id = crypto.randomUUID()
+    this.ctx.storage.sql.exec(
+      'INSERT INTO roles (id, name, color, permissions, position, created_by) VALUES (?, ?, ?, ?, ?, ?)',
+      id,
+      payload.name,
+      payload.color ?? null,
+      JSON.stringify(payload.permissions ?? []),
+      payload.position ?? 0,
+      meta.did
+    )
+    this.broadcast(
+      serialise({
+        id: msg.id,
+        type: 'role.created',
+        timestamp: new Date().toISOString(),
+        sender: meta.did,
+        payload: { roleId: id, ...payload }
+      })
+    )
+  }
+
+  private handleRoleUpdate(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as {
+      roleId: string
+      name?: string
+      color?: string
+      permissions?: string[]
+      position?: number
+    }
+    if (!this.isAdmin(meta.did)) {
+      this.sendError(ws, 'Not authorized')
+      return
+    }
+    if (payload.name !== undefined)
+      this.ctx.storage.sql.exec('UPDATE roles SET name = ? WHERE id = ?', payload.name, payload.roleId)
+    if (payload.color !== undefined)
+      this.ctx.storage.sql.exec('UPDATE roles SET color = ? WHERE id = ?', payload.color, payload.roleId)
+    if (payload.permissions !== undefined)
+      this.ctx.storage.sql.exec(
+        'UPDATE roles SET permissions = ? WHERE id = ?',
+        JSON.stringify(payload.permissions),
+        payload.roleId
+      )
+    if (payload.position !== undefined)
+      this.ctx.storage.sql.exec('UPDATE roles SET position = ? WHERE id = ?', payload.position, payload.roleId)
+    this.broadcast(
+      serialise({ id: msg.id, type: 'role.updated', timestamp: new Date().toISOString(), sender: meta.did, payload })
+    )
+  }
+
+  private handleRoleDelete(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { roleId: string }
+    if (!this.isAdmin(meta.did)) {
+      this.sendError(ws, 'Not authorized')
+      return
+    }
+    this.ctx.storage.sql.exec('DELETE FROM roles WHERE id = ?', payload.roleId)
+    this.ctx.storage.sql.exec('DELETE FROM member_roles WHERE role_id = ?', payload.roleId)
+    this.broadcast(
+      serialise({ id: msg.id, type: 'role.deleted', timestamp: new Date().toISOString(), sender: meta.did, payload })
+    )
+  }
+
+  private handleRoleAssign(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { did: string; roleId: string }
+    if (!this.isAdmin(meta.did)) {
+      this.sendError(ws, 'Not authorized')
+      return
+    }
+    this.ctx.storage.sql.exec(
+      'INSERT OR IGNORE INTO member_roles (member_did, role_id) VALUES (?, ?)',
+      payload.did,
+      payload.roleId
+    )
+    this.broadcast(
+      serialise({
+        id: msg.id,
+        type: 'community.member.updated',
+        timestamp: new Date().toISOString(),
+        sender: meta.did,
+        payload
+      })
+    )
+  }
+
+  private handleRoleRemove(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { did: string; roleId: string }
+    if (!this.isAdmin(meta.did)) {
+      this.sendError(ws, 'Not authorized')
+      return
+    }
+    this.ctx.storage.sql.exec(
+      'DELETE FROM member_roles WHERE member_did = ? AND role_id = ?',
+      payload.did,
+      payload.roleId
+    )
+    this.broadcast(
+      serialise({
+        id: msg.id,
+        type: 'community.member.updated',
+        timestamp: new Date().toISOString(),
+        sender: meta.did,
+        payload
+      })
+    )
+  }
+
+  // ── Member ──
+
+  private handleMemberUpdate(meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { displayName: string }
+    this.ctx.storage.sql.exec('UPDATE members SET display_name = ? WHERE did = ?', payload.displayName, meta.did)
+    this.broadcast(
+      serialise({
+        id: msg.id,
+        type: 'community.member.updated',
+        timestamp: new Date().toISOString(),
+        sender: meta.did,
+        payload: { did: meta.did, displayName: payload.displayName }
+      })
+    )
+  }
+
+  // ── Search ──
+
+  private handleSearchQuery(ws: WebSocket, msg: ProtocolMessage): void {
+    const payload = msg.payload as { query: string; channelId?: string; communityId?: string }
+    const pattern: { predicate: string; graph?: string } = { predicate: `${HARMONY}content` }
+    if (payload.communityId && payload.channelId) {
+      ;(pattern as Record<string, string>).graph = `${payload.communityId}:${payload.channelId}`
+    }
+    const allContent = this.quadStore.match(pattern)
+    const queryLower = payload.query.toLowerCase()
+    const results: Array<{ messageId: string; content: string }> = []
+    for (const quad of allContent) {
+      if (quad.object.toLowerCase().includes(queryLower)) {
+        results.push({ messageId: quad.subject, content: quad.object })
+      }
+    }
+    ws.send(
+      serialise({
+        id: msg.id,
+        type: 'search.results',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { query: payload.query, results: results.slice(0, 50) }
+      })
+    )
+  }
+
+  // ── Media ──
+
+  private handleMediaUploadRequest(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { filename: string; mimeType: string; size: number; data: string; channelId: string }
+    const id = crypto.randomUUID()
+    const now = new Date().toISOString()
+    this.ctx.storage.sql.exec(
+      'INSERT INTO media (id, filename, mime_type, size, data, uploaded_by, channel_id, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      id,
+      payload.filename,
+      payload.mimeType,
+      payload.size,
+      payload.data,
+      meta.did,
+      payload.channelId,
+      now
+    )
+    ws.send(
+      serialise({
+        id: msg.id,
+        type: 'media.upload.complete',
+        timestamp: now,
+        sender: 'server',
+        payload: { mediaId: id, filename: payload.filename }
+      })
+    )
+  }
+
+  private handleMediaDelete(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { mediaId: string }
+    // Verify uploader
+    let uploader: string | null = null
+    for (const row of this.ctx.storage.sql.exec('SELECT uploaded_by FROM media WHERE id = ?', payload.mediaId)) {
+      uploader = row.uploaded_by as string
+    }
+    if (uploader !== meta.did) {
+      this.sendError(ws, 'Not authorized')
+      return
+    }
+    this.ctx.storage.sql.exec('DELETE FROM media WHERE id = ?', payload.mediaId)
+    ws.send(
+      serialise({
+        id: msg.id,
+        type: 'media.deleted',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { mediaId: payload.mediaId }
+      })
+    )
+  }
+
+  // ── MLS E2EE ──
+
+  private handleMlsKeypackageUpload(meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { packageData: string }
+    this.ctx.storage.sql.exec(
+      'INSERT INTO key_packages (did, package_data) VALUES (?, ?)',
+      meta.did,
+      payload.packageData
+    )
+    void msg // used above
+  }
+
+  private handleMlsKeypackageFetch(ws: WebSocket, msg: ProtocolMessage): void {
+    const payload = msg.payload as { dids: string[] }
+    const packages: Record<string, string[]> = {}
+    for (const did of payload.dids) {
+      packages[did] = []
+      for (const row of this.ctx.storage.sql.exec('SELECT package_data FROM key_packages WHERE did = ?', did)) {
+        packages[did].push(row.package_data as string)
+      }
+    }
+    ws.send(
+      serialise({
+        id: msg.id,
+        type: 'mls.keypackage.response',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { packages }
+      })
+    )
+  }
+
+  private handleMlsWelcome(_ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { recipientDID: string }
+    const targets = this.findConnectionsByDID(payload.recipientDID)
+    const outMsg = serialise({ id: msg.id, type: 'mls.welcome', timestamp: msg.timestamp, sender: meta.did, payload })
+    for (const t of targets) t.send(outMsg)
+  }
+
+  private handleMlsCommit(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    this.broadcast(
+      serialise({ id: msg.id, type: 'mls.commit', timestamp: msg.timestamp, sender: meta.did, payload: msg.payload }),
+      ws
+    )
+  }
+
+  private handleMlsGroupSetup(_ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { groupId: string; channelId: string }
+    this.ctx.storage.sql.exec(
+      'INSERT OR REPLACE INTO e2ee_groups (group_id, creator_did, channel_id) VALUES (?, ?, ?)',
+      payload.groupId,
+      meta.did,
+      payload.channelId
+    )
+    this.broadcast(
+      serialise({ id: msg.id, type: 'mls.group.setup', timestamp: msg.timestamp, sender: meta.did, payload })
+    )
+  }
+
+  // ── Moderation ──
+
+  private handleModerationConfigUpdate(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { rules: Array<{ id: string; type: string; config: string }> }
+    if (!this.isAdmin(meta.did)) {
+      this.sendError(ws, 'Not authorized')
+      return
+    }
+    for (const rule of payload.rules) {
+      this.ctx.storage.sql.exec(
+        'INSERT OR REPLACE INTO moderation_rules (id, type, config) VALUES (?, ?, ?)',
+        rule.id,
+        rule.type,
+        rule.config
+      )
+    }
+    ws.send(
+      serialise({
+        id: msg.id,
+        type: 'moderation.config.updated',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: {}
+      })
+    )
+  }
+
+  private handleModerationConfigGet(ws: WebSocket, msg: ProtocolMessage): void {
+    const rules: Array<{ id: string; type: string; config: string }> = []
+    for (const row of this.ctx.storage.sql.exec('SELECT id, type, config FROM moderation_rules')) {
+      rules.push({ id: row.id as string, type: row.type as string, config: row.config as string })
+    }
+    ws.send(
+      serialise({
+        id: msg.id,
+        type: 'moderation.config.response',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { rules }
+      })
+    )
+  }
+
+  // ── Notifications ──
+
+  private handleNotificationList(ws: WebSocket, meta: ConnectionMeta): void {
+    const notifs: Array<Record<string, unknown>> = []
+    for (const row of this.ctx.storage.sql.exec(
+      'SELECT id, type, from_did, community_id, channel_id, message_id, content, read, created_at FROM notifications WHERE recipient_did = ? ORDER BY created_at DESC LIMIT 50',
+      meta.did
+    )) {
+      notifs.push({
+        id: row.id,
+        type: row.type,
+        fromDID: row.from_did,
+        communityId: row.community_id,
+        channelId: row.channel_id,
+        messageId: row.message_id,
+        content: row.content,
+        read: (row.read as number) === 1,
+        createdAt: row.created_at
+      })
+    }
+    ws.send(
+      serialise({
+        id: crypto.randomUUID(),
+        type: 'notification.list.response',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { notifications: notifs }
+      })
+    )
+  }
+
+  private handleNotificationMarkRead(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { notificationId: string }
+    this.ctx.storage.sql.exec(
+      'UPDATE notifications SET read = 1 WHERE id = ? AND recipient_did = ?',
+      payload.notificationId,
+      meta.did
+    )
+    ws.send(
+      serialise({
+        id: msg.id,
+        type: 'notification.marked-read',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { notificationId: payload.notificationId }
+      })
+    )
+  }
+
+  private handleNotificationCount(ws: WebSocket, meta: ConnectionMeta): void {
+    let count = 0
+    for (const row of this.ctx.storage.sql.exec(
+      'SELECT COUNT(*) as cnt FROM notifications WHERE recipient_did = ? AND read = 0',
+      meta.did
+    )) {
+      count = row.cnt as number
+    }
+    ws.send(
+      serialise({
+        id: crypto.randomUUID(),
+        type: 'notification.count.response',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { count }
+      })
+    )
+  }
+
+  // ── Voice (additional) ──
+
+  private handleVoiceSignaling(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { targetDID: string }
+    const targets = this.findConnectionsByDID(payload.targetDID)
+    if (targets.length === 0) {
+      this.sendError(ws, 'Target not connected')
+      return
+    }
+    const outMsg = serialise({
+      id: msg.id,
+      type: msg.type,
+      timestamp: msg.timestamp,
+      sender: meta.did,
+      payload: msg.payload
+    })
+    for (const t of targets) t.send(outMsg)
+  }
+
+  private handleVoiceVideo(meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { channelId: string; videoEnabled: boolean }
+    this.ctx.storage.sql.exec(
+      'UPDATE voice_participants SET video_enabled = ? WHERE room_id = ? AND did = ?',
+      payload.videoEnabled ? 1 : 0,
+      payload.channelId,
+      meta.did
+    )
+    this.broadcast(
+      serialise({
+        id: msg.id,
+        type: 'voice.video.changed',
+        timestamp: new Date().toISOString(),
+        sender: meta.did,
+        payload
+      })
+    )
+  }
+
+  private handleVoiceScreen(meta: ConnectionMeta, msg: ProtocolMessage): void {
+    this.broadcast(
+      serialise({
+        id: msg.id,
+        type: 'voice.screen.changed',
+        timestamp: new Date().toISOString(),
+        sender: meta.did,
+        payload: msg.payload
+      })
+    )
+  }
+
+  private handleVoiceSpeaking(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { channelId: string; speaking: boolean }
+    const participants = this.getVoiceParticipants(payload.channelId)
+    const outMsg = serialise({
+      id: msg.id,
+      type: 'voice.speaking',
+      timestamp: new Date().toISOString(),
+      sender: meta.did,
+      payload
+    })
+    for (const p of participants) {
+      if (p.did === meta.did) continue
+      for (const target of this.findConnectionsByDID(p.did, ws)) {
+        target.send(outMsg)
+      }
+    }
+  }
+
+  private handleVoiceToken(ws: WebSocket, msg: ProtocolMessage): void {
+    const token = btoa(JSON.stringify({ mode: 'signaling', timestamp: Date.now() }))
+    ws.send(
+      serialise({
+        id: msg.id,
+        type: 'voice.token.response',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { token }
+      })
+    )
+  }
+
+  private handleVoiceProducerClosed(_ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as { channelId: string }
+    const participants = this.getVoiceParticipants(payload.channelId)
+    const outMsg = serialise({
+      id: msg.id,
+      type: 'voice.producer-closed',
+      timestamp: new Date().toISOString(),
+      sender: meta.did,
+      payload
+    })
+    for (const p of participants) {
+      if (p.did === meta.did) continue
+      for (const target of this.findConnectionsByDID(p.did)) {
+        target.send(outMsg)
+      }
+    }
+  }
+
   // ── Helpers ──
+
+  private findConnectionsByDID(did: string, exclude?: WebSocket): WebSocket[] {
+    const result: WebSocket[] = []
+    for (const ws of this.ctx.getWebSockets()) {
+      if (ws === exclude) continue
+      const meta: ConnectionMeta = ws.deserializeAttachment()
+      if (meta.did === did) result.push(ws)
+    }
+    return result
+  }
+
+  private isAdmin(did: string): boolean {
+    if (!this.communityId) return false
+    const creator = this.quadStore.getValue(this.communityId, `${HARMONY}creator`, this.communityId)
+    return creator === did
+  }
+
+  private isBanned(did: string): boolean {
+    for (const _row of this.ctx.storage.sql.exec('SELECT 1 FROM banned_users WHERE did = ?', did)) {
+      return true
+    }
+    return false
+  }
+
+  private createNotification(
+    recipientDID: string,
+    opts: {
+      type: string
+      fromDID: string
+      communityId?: string
+      channelId?: string
+      messageId?: string
+      content?: string
+    }
+  ): void {
+    const id = `notif-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`
+    const now = new Date().toISOString()
+    this.ctx.storage.sql.exec(
+      'INSERT INTO notifications (id, recipient_did, type, from_did, community_id, channel_id, message_id, content, read, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)',
+      id,
+      recipientDID,
+      opts.type,
+      opts.fromDID,
+      opts.communityId ?? null,
+      opts.channelId ?? null,
+      opts.messageId ?? null,
+      opts.content ?? null,
+      now
+    )
+    for (const ws of this.findConnectionsByDID(recipientDID)) {
+      ws.send(
+        serialise({
+          id,
+          type: 'notification.new',
+          timestamp: now,
+          sender: 'server',
+          payload: {
+            id,
+            type: opts.type,
+            fromDID: opts.fromDID,
+            communityId: opts.communityId,
+            channelId: opts.channelId,
+            messageId: opts.messageId,
+            content: opts.content,
+            read: false,
+            createdAt: now
+          }
+        })
+      )
+    }
+  }
 
   private ensureMember(did: string): void {
     this.ctx.storage.sql.exec(
@@ -649,14 +1918,14 @@ export class CommunityDurableObject extends DurableObject {
     )
   }
 
-  private sendError(ws: WebSocket, message: string): void {
+  private sendError(ws: WebSocket, message: string, code?: string): void {
     ws.send(
       serialise({
         id: crypto.randomUUID(),
         type: 'error',
         timestamp: new Date().toISOString(),
         sender: 'server',
-        payload: { message }
+        payload: { message, ...(code ? { code } : {}) }
       })
     )
   }

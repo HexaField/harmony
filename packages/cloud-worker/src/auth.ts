@@ -135,21 +135,6 @@ export async function verifyVP(vp: VerifiablePresentation): Promise<string | nul
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 
 function base58Decode(input: string): Uint8Array {
-  const bytes: number[] = [0]
-  for (const char of input) {
-    const carry = BASE58_ALPHABET.indexOf(char)
-    if (carry < 0) throw new Error('Invalid base58 character')
-    for (let j = 0; j < bytes.length; j++) {
-      const x = bytes[j] * 58 + carry
-      bytes[j] = x & 0xff
-      if (j + 1 === bytes.length && x > 0xff) bytes.push(0)
-      // propagate carry
-      if (j + 1 < bytes.length) bytes[j + 1] += x >> 8
-      bytes[j] = x & 0xff
-    }
-    // Re-do properly
-  }
-  // Simpler approach
   let num = BigInt(0)
   for (const char of input) {
     const idx = BASE58_ALPHABET.indexOf(char)

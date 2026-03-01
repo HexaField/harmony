@@ -12,6 +12,10 @@ export function friendsRoutes(portal: PortalService): Router {
         res.status(400).json({ error: 'Missing discordUserIds array' })
         return
       }
+      if (discordUserIds.length > 10_000) {
+        res.status(400).json({ error: 'discordUserIds exceeds 10,000 entry limit' })
+        return
+      }
       const linkedMap = await portal.findLinkedIdentities(discordUserIds)
       const linked = Array.from(linkedMap.entries()).map(([discordId, did]) => ({ discordId, did }))
       res.json({ linked })
@@ -28,6 +32,10 @@ export function friendsRoutes(portal: PortalService): Router {
         res.status(400).json({ error: 'Missing did or discordFriendIds array' })
         return
       }
+      if (discordFriendIds.length > 10_000) {
+        res.status(400).json({ error: 'Friend list exceeds 10,000 entry limit' })
+        return
+      }
       portal.storeFriendsList(did, discordFriendIds)
       res.json({ stored: discordFriendIds.length })
     } catch (err: any) {
@@ -42,6 +50,10 @@ export function friendsRoutes(portal: PortalService): Router {
       const q = ((req.query.q as string) || '').trim()
       if (!q) {
         res.status(400).json({ error: 'Missing search query parameter q' })
+        return
+      }
+      if (q.length > 100) {
+        res.status(400).json({ error: 'Search query exceeds 100 character limit' })
         return
       }
       const results = portal.searchByDiscordUsername(q)

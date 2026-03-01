@@ -1010,91 +1010,92 @@ graph TB
 
 ## 21. Server vs Cloud Worker Protocol Conformance
 
-Both `@harmony/server` (used by `server-runtime` and Electron) and `cloud-worker` (`CommunityDurableObject` on Cloudflare) implement the same WebSocket protocol. However, **cloud-worker is a full reimplementation** — it does not import `@harmony/server`.
+Both `@harmony/server` (used by `server-runtime` and Electron) and `cloud-worker` (`CommunityDurableObject` on Cloudflare) implement the Harmony WebSocket protocol. However, **cloud-worker is a minimal reimplementation** covering roughly 25% of the server's protocol surface — it does not import `@harmony/server`.
 
 ### Shared vs Separate Code
 
 ```mermaid
 graph LR
     subgraph "Shared Packages"
-        Types["@harmony/types<br/>Message definitions"]
-        Identity["@harmony/identity<br/>VP verification, DIDs"]
-        QS["@harmony/quad-store<br/>QuadStore interface"]
-        MLSPkg["@harmony/mls<br/>MLS types"]
+        Protocol["@harmony/protocol<br/>serialise/deserialise"]
+        Vocab["@harmony/vocab<br/>Predicates, types"]
     end
 
     subgraph "Server Package"
-        Server["@harmony/server<br/>HarmonyServer class<br/>SqliteQuadStore<br/>VP auth in message flow"]
+        Server["@harmony/server<br/>HarmonyServer class<br/>QuadStore (async)<br/>Full VP + VC + ZCAP auth<br/>~55 message handlers"]
     end
 
     subgraph "Cloud Worker"
-        CW["cloud-worker<br/>CommunityDurableObject<br/>DOQuadStore<br/>VP auth at HTTP upgrade"]
+        CW["cloud-worker<br/>CommunityDurableObject<br/>DOQuadStore (sync) + SQL tables<br/>Simplified VP auth (WebCrypto)<br/>~13 message handlers"]
     end
 
-    Types --> Server
-    Types --> CW
-    Identity --> Server
-    Identity --> CW
-    QS --> Server
-    QS --> CW
-    MLSPkg --> Server
-    MLSPkg --> CW
+    Protocol --> Server
+    Protocol --> CW
+    Vocab --> Server
+    Vocab --> CW
 ```
+
+**Zero handler code is shared.** Auth, storage, broadcast, and every message handler are reimplemented independently for the Cloudflare DO runtime.
 
 ### Auth Divergence
 
-| Aspect                   | Server                       | Cloud Worker               |
-| ------------------------ | ---------------------------- | -------------------------- |
-| VP verification timing   | Post-connect (first message) | Pre-connect (HTTP upgrade) |
-| VP library               | `@harmony/identity`          | `@harmony/identity` (same) |
-| Session identity storage | In-memory map                | `ws.serializeAttachment()` |
-| Permission checks        | Shared handler middleware    | Reimplemented in `auth.ts` |
+| Aspect | Server | Cloud Worker |
+| --- | --- | --- |
+| Auth mechanism | VP sent as first message with `sync.state` | Raw VP JSON sent as first message |
+| VP verification | Full `VCService.verifyPresentation()` + embedded VC verification (expiration, revocation) | Ed25519 signature check only via WebCrypto — no VC verification, no revocation |
+| DID resolution | Configurable `DIDResolver`, supports multiple methods | `did:key` only (extracts public key inline) |
+| ZCAP authorization | Full `ZCAPService` invocation verification | None |
+| Ban checking | In-memory ban list checked on send/join | No ban support |
+| Moderation | Full plugin (slow mode, rate limit, raid detection, account age, VC requirements) | None |
+| Auth timeout | 30s `setTimeout` | 30s DO alarm |
 
 ### Protocol Message Conformance
 
-| Message Type        | Server          | Cloud Worker | Notes                              |
-| ------------------- | --------------- | ------------ | ---------------------------------- |
-| `community.join`    | ✅              | ✅           |                                    |
-| `community.update`  | ✅              | ✅           |                                    |
-| `community.delete`  | ✅              | ❌           | Not implemented in cloud           |
-| `channel.create`    | ✅              | ✅           |                                    |
-| `channel.update`    | ✅              | ✅           |                                    |
-| `channel.delete`    | ✅              | ✅           |                                    |
-| `channel.messages`  | ✅              | ✅           |                                    |
-| `message.send`      | ✅              | ✅           |                                    |
-| `message.update`    | ✅              | ✅           |                                    |
-| `message.delete`    | ✅              | ✅           |                                    |
-| `member.update`     | ✅              | ✅           |                                    |
-| `member.kick`       | ✅              | ✅           |                                    |
-| `member.ban`        | ✅              | ❌           | Not implemented in cloud           |
-| `role.create`       | ✅              | ✅           |                                    |
-| `role.update`       | ✅              | ✅           |                                    |
-| `role.delete`       | ✅              | ✅           |                                    |
-| `invite.create`     | ✅              | ✅           |                                    |
-| `invite.list`       | ✅              | ✅           |                                    |
-| `invite.delete`     | ✅              | ✅           |                                    |
-| `mls.keyPackage`    | ✅              | ✅           |                                    |
-| `mls.welcome`       | ✅              | ✅           |                                    |
-| `mls.commit`        | ✅              | ✅           |                                    |
-| `mls.proposal`      | ✅              | ❌           | Not implemented in cloud           |
-| `mls.groupInfo`     | ✅              | ✅           |                                    |
-| `voice.join`        | ✅              | ❌           | Requires SFU — not available in DO |
-| `voice.leave`       | ✅              | ❌           |                                    |
-| `voice.signal`      | ✅              | ❌           |                                    |
-| `attachment.upload` | ✅ (filesystem) | ✅ (R2)      | Different storage backends         |
-| `typing.start`      | ✅              | ✅           |                                    |
-| `typing.stop`       | ✅              | ✅           |                                    |
-| `reaction.add`      | ✅              | ✅           |                                    |
-| `reaction.remove`   | ✅              | ✅           |                                    |
-| `thread.create`     | ✅              | ❌           | Not implemented in cloud           |
-| `read.update`       | ✅              | ✅           |                                    |
+| Category          | Message Type                              | Server | Cloud Worker |
+| ----------------- | ----------------------------------------- | :----: | :----------: |
+| **Channel**       | `channel.send`                            |   ✅   |      ✅      |
+|                   | `channel.edit`                            |   ✅   |      ✅      |
+|                   | `channel.delete`                          |   ✅   |      ✅      |
+|                   | `channel.typing`                          |   ✅   |      ✅      |
+|                   | `channel.create`                          |   ✅   |      ✅      |
+|                   | `channel.update`                          |   ✅   |      ❌      |
+|                   | `channel.delete.admin`                    |   ✅   |      ❌      |
+|                   | `channel.reaction.add/remove`             |   ✅   |      ❌      |
+|                   | `channel.pin/unpin/pins.list`             |   ✅   |      ❌      |
+|                   | `channel.history`                         |   ✅   |      ❌      |
+| **DM**            | `dm.send/edit/delete/typing`              |   ✅   |      ❌      |
+|                   | `dm.keyexchange`                          |   ✅   |      ❌      |
+| **Community**     | `community.create/join/leave`             |   ✅   |      ✅      |
+|                   | `community.update/info/list`              |   ✅   |      ❌      |
+|                   | `community.ban/unban/kick`                |   ✅   |      ❌      |
+| **Presence**      | `presence.update`                         |   ✅   |      ✅      |
+| **Sync**          | `sync.request`                            |   ✅   |      ✅      |
+| **MLS/E2EE**      | `mls.keypackage.upload/fetch`             |   ✅   |      ❌      |
+|                   | `mls.welcome/commit/group.setup`          |   ✅   |      ❌      |
+| **Voice**         | `voice.join/leave/mute`                   |   ✅   |  ✅ (basic)  |
+|                   | `voice.offer/answer/ice` (WebRTC)         |   ✅   |      ❌      |
+|                   | `voice.transport.*/produce/consume` (SFU) |   ✅   |      ❌      |
+|                   | `voice.video/screen/speaking`             |   ✅   |      ❌      |
+| **Threads**       | `thread.create/send`                      |   ✅   |      ❌      |
+| **Roles**         | `role.create/update/delete/assign/remove` |   ✅   |      ❌      |
+| **Media**         | `media.upload.request/delete`             |   ✅   |      ❌      |
+| **Search**        | `search.query`                            |   ✅   |      ❌      |
+| **Notifications** | `notification.list/mark-read/count`       |   ✅   |      ❌      |
+| **Moderation**    | `moderation.config.update/get`            |   ✅   |      ❌      |
+| **Member**        | `member.update`                           |   ✅   |      ❌      |
 
-**Score:** Cloud worker supports **26/31** message types (84%). Missing: `community.delete`, `member.ban`, `mls.proposal`, `voice.*` (3 types), `thread.create`.
+**Score:** Server supports ~55 message types. Cloud worker supports ~13 (~25%). Cloud worker covers the core messaging happy path but lacks DMs, E2EE, threads, roles, pins, reactions, search, notifications, moderation, media, and most voice features.
+
+### Storage Divergence
+
+- **Server:** Async `QuadStore` abstraction backed by `better-sqlite3`
+- **Cloud Worker:** Hybrid approach — `DOQuadStore` (sync, backed by DO SQLite) plus direct SQL tables for members, channels, and voice participants
+- Handler connection signatures differ: server uses `(conn: ServerConnection, msg)`, cloud worker uses `(ws: WebSocket, meta: ConnectionMeta, msg)`
 
 ### Broadcast Divergence
 
-- **Server:** Room-based broadcast optimization — only sends to clients subscribed to the relevant channel
-- **Cloud Worker:** Broadcasts to all connected WebSockets via `getWebSockets()`; filtering happens client-side (less efficient at scale)
+- **Server:** Room-based broadcast — only sends to clients subscribed to the relevant channel
+- **Cloud Worker:** Broadcasts to all via `getWebSockets()`, filtering client-side (less efficient at scale)
 
 ### Testing Gap
 
@@ -1107,10 +1108,10 @@ graph LR
 
 > **Note:**
 >
-> 1. **Voice is cloud-incompatible** — communities needing voice must use self-hosted or Electron server
-> 2. **A conformance test suite is strongly recommended** — extract protocol tests into a backend-agnostic harness that runs against both server and cloud-worker
-> 3. **Permission logic is duplicated** — divergence risk is high; consider extracting into a shared `@harmony/permissions` package
-> 4. **Cloud-worker gaps should be documented** for users choosing deployment targets
+> 1. **Cloud worker is an MVP** — suitable for basic text chat communities only. DMs, E2EE, voice (beyond join/leave), threads, roles, moderation, and search all require the full server
+> 2. **A conformance test suite is strongly recommended** — extract protocol tests into a backend-agnostic harness that runs against both implementations
+> 3. **Auth simplification is a security concern** — cloud worker skips VC verification, revocation checks, and ZCAP authorization. This should be documented as a known limitation
+> 4. **Consider a shared handler layer** — the current reimplementation approach guarantees divergence as features are added to server
 > 5. **Broadcast efficiency** in cloud-worker may need attention before communities scale past ~100 concurrent members
 
 ---

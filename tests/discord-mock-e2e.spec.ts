@@ -12,8 +12,10 @@ import { DIDKeyProvider } from '../packages/did/src/index.js'
 import { DiscordRESTAPI } from '../packages/migration-bot/src/discord-api.js'
 import { MigrationBot, type ExportProgress } from '../packages/migration-bot/src/index.js'
 import { PortalService } from '../packages/portal/src/index.js'
+import { createPortalDB } from '../packages/portal/src/db.js'
 import { oauthRoutes, _pendingStates } from '../packages/portal/src/routes/oauth.js'
 import { DiscordLinkService } from '../packages/cloud/src/discord-link.js'
+// @ts-expect-error no @types/express
 import express from 'express'
 
 // ─── Fake Discord Data (real shapes from discord.com/developers/docs/resources) ─
@@ -560,10 +562,7 @@ function startMockDiscord(): Promise<number> {
 // ─── Patched DiscordRESTAPI that hits our mock ────────────────────────────────
 
 class MockDiscordRESTAPI extends DiscordRESTAPI {
-  constructor(
-    token: string,
-    private mockBaseUrl: string
-  ) {
+  constructor(token: string, mockBaseUrl: string) {
     super(token)
     // Override the private request method to redirect Discord API calls to mock
     const origRequest = (this as any).request.bind(this)
@@ -777,7 +776,7 @@ test.describe('Discord Mock — OAuth Flow (Portal)', () => {
     if (!mockDiscord) await startMockDiscord()
     resetMockState()
 
-    portal = new PortalService(crypto)
+    portal = new PortalService(crypto, createPortalDB(':memory:'))
     await portal.initialize()
 
     portalApp = express()
@@ -1210,7 +1209,7 @@ test.describe('Discord Mock — Portal Identity & Friends', () => {
   let portal: PortalService
 
   test.beforeAll(async () => {
-    portal = new PortalService(crypto)
+    portal = new PortalService(crypto, createPortalDB(':memory:'))
     await portal.initialize()
   })
 

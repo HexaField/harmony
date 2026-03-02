@@ -34,6 +34,7 @@ export interface ServerConfig {
   rateLimit?: RateLimitConfig
   callsAppId?: string
   callsAppSecret?: string
+  callsApiBase?: string
 }
 
 export interface RateLimitConfig {
@@ -3004,7 +3005,8 @@ export class HarmonyServer {
     if (!this.callsAppId || !this.callsAppSecret) {
       throw new Error('CF Realtime SFU not configured — set CALLS_APP_ID and CALLS_APP_SECRET')
     }
-    const url = `https://rtc.live.cloudflare.com/v1/apps/${this.callsAppId}${path}`
+    const base = this.config.callsApiBase ?? 'https://rtc.live.cloudflare.com'
+    const url = `${base}/v1/apps/${this.callsAppId}${path}`
     const response = await fetch(url, {
       method,
       headers: {

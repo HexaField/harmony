@@ -1,3 +1,24 @@
+/**
+ * VideoGrid — Remote Track Architecture
+ *
+ * Remote media tracks reach this component through two complementary systems:
+ *
+ * 1. **Callback-based track delivery** (used here for rendering):
+ *    `connection.onTrack(did, track, kind)` fires when VoiceConnectionImpl's
+ *    `pullRemoteTrack()` finds a live MediaStreamTrack on the PeerConnection's
+ *    receivers. This delivers the actual MediaStreamTrack object needed to feed
+ *    <video>/<audio> elements. `onTrackRemoved` fires when the remote producer
+ *    closes a track (signalled via `voice.track.removed`).
+ *
+ * 2. **Store metadata** (`voiceRemoteTracks` in store.tsx):
+ *    Maintains lightweight metadata (trackName, sessionId, kind, mediaType) for
+ *    reactive UI indicators (e.g. showing that a participant has video enabled).
+ *    Contains no actual MediaStreamTrack references.
+ *
+ * The two systems are intentionally separate: callbacks carry heavy media objects
+ * for imperative DOM attachment, while the store carries serialisable metadata
+ * for SolidJS reactive UI. Neither replaces the other.
+ */
 import { createSignal, createEffect, onCleanup, For, Show } from 'solid-js'
 import type { JSX } from 'solid-js'
 import { useAppStore } from '../../store'

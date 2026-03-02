@@ -153,7 +153,12 @@ export class VoiceClient {
 
     // If we have an SFU adapter, initialize the WebRTC session
     if (this.sfuAdapter && this.signaling) {
-      await conn.initSFUSession()
+      try {
+        await conn.initSFUSession()
+      } catch (err) {
+        // SFU init failed (e.g. RTCPeerConnection not available) — proceed in signaling-only mode
+        console.debug('[Voice] SFU init failed, proceeding in signaling-only mode:', err)
+      }
     }
 
     this.connection = conn

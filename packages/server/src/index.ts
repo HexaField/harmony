@@ -17,7 +17,7 @@ import type {
 import { serialise, deserialise } from '@harmony/protocol'
 import { HarmonyPredicate, HarmonyType, HarmonyAction, HARMONY, RDFPredicate, XSDDatatype } from '@harmony/vocab'
 import type { DIDDocument } from '@harmony/did'
-import type { SFUAdapter } from '@harmony/voice'
+
 import { MetadataSearchIndex } from '@harmony/search'
 import { ModerationPlugin } from '@harmony/moderation'
 
@@ -32,7 +32,6 @@ export interface ServerConfig {
   cryptoProvider?: CryptoProvider
   maxConnections?: number
   rateLimit?: RateLimitConfig
-  sfuAdapter?: SFUAdapter
   callsAppId?: string
   callsAppSecret?: string
 }
@@ -754,10 +753,8 @@ export class HarmonyServer {
   private memberRoles: Map<string, Map<string, Set<string>>> = new Map() // communityId → DID → Set<roleId>
   private pins: Map<string, Set<string>> = new Map() // channelKey → Set<messageId>
   private notifications: Map<string, HarmonyNotification[]> = new Map() // DID → notifications
-  private sfuAdapter: SFUAdapter | null = null
   private callsAppId: string | null = null
   private callsAppSecret: string | null = null
-  private sfuRooms: Set<string> = new Set() // channelIds with SFU rooms created
   private metadataIndex: MetadataSearchIndex
   private moderationPlugin: ModerationPlugin
 
@@ -768,7 +765,6 @@ export class HarmonyServer {
     this.communityManager = new CommunityManager(config.store, this.crypto)
     this.vcService = new VCService(this.crypto)
     this.zcapService = new ZCAPService(this.crypto)
-    this.sfuAdapter = config.sfuAdapter ?? null
     this.callsAppId = config.callsAppId ?? null
     this.callsAppSecret = config.callsAppSecret ?? null
     this.metadataIndex = new MetadataSearchIndex(config.store)
@@ -783,10 +779,6 @@ export class HarmonyServer {
   }
   get communityManagerInstance(): CommunityManager {
     return this.communityManager
-  }
-
-  setSFUAdapter(adapter: SFUAdapter): void {
-    this.sfuAdapter = adapter
   }
 
   private async createSessionToken(did: string): Promise<string> {
@@ -1280,22 +1272,18 @@ export class HarmonyServer {
         await this.handleVoiceToken(conn, msg)
         break
       case 'voice.transport.connect':
-        await this.handleVoiceTransportConnect(conn, msg)
-        break
       case 'voice.transport.connect-recv':
-        await this.handleVoiceTransportConnectRecv(conn, msg)
-        break
       case 'voice.transport.create-recv':
-        await this.handleVoiceCreateRecvTransport(conn, msg)
-        break
       case 'voice.produce':
-        await this.handleVoiceProduce(conn, msg)
-        break
       case 'voice.consume':
-        await this.handleVoiceConsume(conn, msg)
-        break
       case 'voice.consumer.resume':
-        await this.handleVoiceConsumerResume(conn, msg)
+        this.sendToConnection(conn, {
+          id: `err-${Date.now()}`,
+          type: 'error',
+          timestamp: new Date().toISOString(),
+          sender: 'server',
+          payload: { code: 'DEPRECATED', message: 'mediasoup is no longer supported. Use CF Realtime SFU.' }
+        })
         break
       case 'voice.get-producers':
         await this.handleVoiceGetProducers(conn, msg)
@@ -2943,21 +2931,7 @@ export class HarmonyServer {
   private async handleVoiceToken(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
     const payload = msg.payload as { channelId: string }
 
-    if (this.sfuAdapter) {
-      // Real SFU mode — create room if needed, generate real token
-      if (!this.sfuRooms.has(payload.channelId)) {
-        await this.sfuAdapter.createRoom(payload.channelId, {})
-        this.sfuRooms.add(payload.channelId)
-      }
-      const token = await this.sfuAdapter.generateToken(payload.channelId, conn.did, { did: conn.did })
-      this.sendToConnection(conn, {
-        id: `vt-${Date.now()}`,
-        type: 'voice.token.response' as ProtocolMessage['type'],
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: { channelId: payload.channelId, token, mode: 'sfu' }
-      })
-    } else if (this.callsAppId && this.callsAppSecret) {
+    if (this.callsAppId && this.callsAppSecret) {
       // CF Realtime SFU mode — client creates session via voice.session.create
       const token = Buffer.from(
         JSON.stringify({
@@ -3138,257 +3112,21 @@ export class HarmonyServer {
     }
   }
 
-  private async handleVoiceTransportConnect(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as { channelId?: string; roomId?: string; dtlsParameters: unknown }
-    const roomId = payload.roomId ?? payload.channelId
-    if (!this.sfuAdapter || !('connectTransport' in this.sfuAdapter)) {
-      this.sendToConnection(conn, {
-        id: `err-${Date.now()}`,
-        type: 'error',
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: { code: 'NO_SFU', message: 'SFU adapter does not support transport connect' }
-      })
-      return
-    }
-    try {
-      await (this.sfuAdapter as any).connectTransport(roomId, conn.did, payload.dtlsParameters, 'send')
-      this.sendToConnection(conn, {
-        id: `vtc-${Date.now()}`,
-        type: 'voice.transport.connect.response' as ProtocolMessage['type'],
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: { roomId, connected: true }
-      })
-    } catch (err) {
-      this.sendToConnection(conn, {
-        id: `err-${Date.now()}`,
-        type: 'error',
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: { code: 'TRANSPORT_CONNECT_FAILED', message: String(err) }
-      })
-    }
-  }
-
-  private async handleVoiceProduce(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as {
-      channelId?: string
-      roomId?: string
-      kind: 'audio' | 'video'
-      rtpParameters: unknown
-      mediaType?: string
-    }
-    const roomId = payload.roomId ?? payload.channelId
-    const mediaType = payload.mediaType ?? payload.kind
-    if (!this.sfuAdapter || !('produce' in this.sfuAdapter)) {
-      this.sendToConnection(conn, {
-        id: `err-${Date.now()}`,
-        type: 'error',
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: { code: 'NO_SFU', message: 'SFU adapter does not support produce' }
-      })
-      return
-    }
-    try {
-      const producerId = await (this.sfuAdapter as any).produce(roomId, conn.did, payload.rtpParameters, payload.kind)
-      this.sendToConnection(conn, {
-        id: `vp-${Date.now()}`,
-        type: 'voice.produce.response' as ProtocolMessage['type'],
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: { roomId, producerId, kind: payload.kind }
-      })
-
-      // Notify other participants about the new producer so they can consume
-      const channelId = roomId ?? ''
-      const participants = this.voiceChannelParticipants.get(channelId)
-      if (participants) {
-        for (const connId of participants) {
-          if (connId === conn.id) continue
-          const otherConn = this._connections.get(connId)
-          if (otherConn) {
-            this.sendToConnection(otherConn, {
-              id: `vnp-${Date.now()}`,
-              type: 'voice.new-producer' as ProtocolMessage['type'],
-              timestamp: new Date().toISOString(),
-              sender: conn.did,
-              payload: { roomId, producerId, kind: payload.kind, mediaType, participantId: conn.did }
-            })
-          }
-        }
-      }
-    } catch (err) {
-      this.sendToConnection(conn, {
-        id: `err-${Date.now()}`,
-        type: 'error',
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: { code: 'PRODUCE_FAILED', message: String(err) }
-      })
-    }
-  }
-
-  private async handleVoiceConsume(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as { channelId?: string; roomId?: string; producerId: string; rtpCapabilities: unknown }
-    const roomId = payload.roomId ?? payload.channelId
-    if (!this.sfuAdapter || !('consume' in this.sfuAdapter)) {
-      this.sendToConnection(conn, {
-        id: `err-${Date.now()}`,
-        type: 'error',
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: { code: 'NO_SFU', message: 'SFU adapter does not support consume' }
-      })
-      return
-    }
-    try {
-      const result = await (this.sfuAdapter as any).consume(
-        roomId,
-        conn.did,
-        payload.producerId,
-        payload.rtpCapabilities
-      )
-      this.sendToConnection(conn, {
-        id: `vc-${Date.now()}`,
-        type: 'voice.consume.response' as ProtocolMessage['type'],
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: {
-          roomId,
-          consumerId: result.consumerId,
-          producerId: result.producerId,
-          kind: result.kind,
-          rtpParameters: result.rtpParameters
-        }
-      })
-    } catch (err) {
-      this.sendToConnection(conn, {
-        id: `err-${Date.now()}`,
-        type: 'error',
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: { code: 'CONSUME_FAILED', message: String(err) }
-      })
-    }
-  }
-
-  private async handleVoiceConsumerResume(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    const payload = msg.payload as { consumerId: string }
-    // Acknowledge — consumer resume acknowledged
+  private async handleVoiceGetProducers(conn: ServerConnection, _msg: ProtocolMessage): Promise<void> {
+    // Return empty producers list — CF SFU tracks producers client-side
     this.sendToConnection(conn, {
-      id: `vcr-${Date.now()}`,
-      type: 'voice.consumer.resume.response',
+      id: `vgp-${Date.now()}`,
+      type: 'voice.get-producers.response',
       timestamp: new Date().toISOString(),
       sender: 'server',
-      payload: { consumerId: payload.consumerId }
+      payload: { producers: [] }
     })
-  }
-
-  private async handleVoiceCreateRecvTransport(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    if (!this.sfuAdapter) {
-      this.sendToConnection(conn, {
-        id: `err-${Date.now()}`,
-        type: 'error',
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: { code: 'NO_SFU', message: 'SFU adapter not configured' }
-      })
-      return
-    }
-    const payload = msg.payload as { roomId: string }
-    try {
-      const params = await (this.sfuAdapter as any).createRecvTransport(payload.roomId, conn.did)
-      this.sendToConnection(conn, {
-        id: `vtcr-${Date.now()}`,
-        type: 'voice.transport.create-recv.response',
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: {
-          transportId: params.transportId,
-          iceParameters: params.iceParameters,
-          iceCandidates: params.iceCandidates,
-          dtlsParameters: params.dtlsParameters
-        }
-      })
-    } catch (err) {
-      this.sendToConnection(conn, {
-        id: `err-${Date.now()}`,
-        type: 'error',
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: { code: 'RECV_TRANSPORT_FAILED', message: String(err) }
-      })
-    }
-  }
-
-  private async handleVoiceTransportConnectRecv(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    if (!this.sfuAdapter) return
-    const payload = msg.payload as { roomId: string; dtlsParameters: any }
-    try {
-      await (this.sfuAdapter as any).connectTransport(payload.roomId, conn.did, payload.dtlsParameters, 'recv')
-      this.sendToConnection(conn, {
-        id: `vtcr-${Date.now()}`,
-        type: 'voice.transport.connect-recv.response',
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: { connected: true }
-      })
-    } catch (err) {
-      this.sendToConnection(conn, {
-        id: `err-${Date.now()}`,
-        type: 'error',
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: { code: 'RECV_CONNECT_FAILED', message: String(err) }
-      })
-    }
-  }
-
-  private async handleVoiceGetProducers(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
-    if (!this.sfuAdapter) {
-      this.sendToConnection(conn, {
-        id: `vgp-${Date.now()}`,
-        type: 'voice.get-producers.response',
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: { producers: [] }
-      })
-      return
-    }
-    const payload = msg.payload as { roomId: string }
-    try {
-      const allProducers = (this.sfuAdapter as any).getProducers(payload.roomId) ?? []
-      // Exclude requester's own producers — they shouldn't consume their own media
-      const producers = allProducers.filter((p: any) => p.participantId !== conn.did)
-      this.sendToConnection(conn, {
-        id: `vgp-${Date.now()}`,
-        type: 'voice.get-producers.response',
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: { producers }
-      })
-    } catch {
-      this.sendToConnection(conn, {
-        id: `vgp-${Date.now()}`,
-        type: 'voice.get-producers.response',
-        timestamp: new Date().toISOString(),
-        sender: 'server',
-        payload: { producers: [] }
-      })
-    }
   }
 
   private async handleVoiceProducerClosed(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
     const payload = msg.payload as { producerId: string; roomId?: string; mediaType?: string }
     const channelId = this.findVoiceChannelForConn(conn.id)
     if (!channelId) return
-
-    // Remove from SFU adapter's producer list if it tracks them
-    if (this.sfuAdapter && typeof (this.sfuAdapter as any).removeProducer === 'function') {
-      ;(this.sfuAdapter as any).removeProducer(payload.roomId ?? channelId, payload.producerId)
-    }
 
     // Broadcast to all other participants so they close their consumers
     const participants = this.voiceChannelParticipants.get(channelId)

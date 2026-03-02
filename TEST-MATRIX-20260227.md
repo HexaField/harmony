@@ -545,3 +545,25 @@ _Updated 2026-03-02 14:10: Full E2E test run across all 5 services (self-hosted 
 ### Remaining ⚠️ — None
 
 All previously ⚠️ voice items (11.1–11.3) upgraded to ✅ via cross-device CDP testing after CF Realtime SFU migration. Actual media flow (audio/video/screenshare) requires CF credentials (`CALLS_APP_ID`/`CALLS_APP_SECRET`) — tracked as ⊘ (11.4–11.6).
+
+---
+
+## Fresh Re-Run Results (2026-03-02 15:05 AEST)
+
+Post-CF SFU migration, post-audit fixes, post-identity-resilience fix.
+
+| Suite | Results | Notes |
+| --- | --- | --- |
+| **Playwright cross-topology** | 41/42 (1 pre-existing role assignment failure) | 2.0m runtime |
+| **Vitest** | 2,561 passing, 77 failed (pre-existing), 84 skipped, 114 todo | 19.7s runtime |
+| **Cloud Worker E2E** | 18/18 ✅ | VP auth, communities, channels, DMs, roles, threads, pins, reactions, presence, voice, rate limiting |
+| **Portal E2E** | 10/10 ✅ | All HTTP routes |
+| **Electron E2E** | 10/10 ✅ | Identity, CDP, persistence, community, messaging |
+| **Cross-Device Media** | 19/24 (5 env limitations) | Voice join/leave, audio, mute, deafen all work. Video/screen share blocked by TCC/headless |
+
+### Pre-existing failures (not regressions)
+
+- 39 better-sqlite3 dlopen (Node 22/24 native module mismatch)
+- 31 portal SQLite migration (in-memory→SQLite conversion regressions)
+- 7 CLI/integration test issues
+- 1 Playwright role assignment (server doesn't return roles in member query)

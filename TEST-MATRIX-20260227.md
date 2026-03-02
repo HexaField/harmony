@@ -278,17 +278,20 @@ _User journey: Search for messages across channels._
 
 ## 15. Migration (Discord → Harmony)
 
-_User journey: Import Discord data into Harmony._
+_User journey: Import Discord data into Harmony. Architecture refactored to hash-verified user-driven import (2026-03-02)._
 
 | # | User Flow | Result | Comments |
 | --- | --- | --- | --- |
-| 15.1 | Open migration wizard in UI | ✅ | SolidJS MigrationWizard component with 5-step flow (token→export→preview→import→complete). Accessible via "Import from Discord" button in server sidebar. UI builds clean. |
-| 15.2 | Export Discord server → parsed and previewed | ✅ | Real Discord API export via bot token: 6 channels, 5 members, 70 messages from GuildBot Test Server. Export preview shows metadata. |
-| 15.3 | Confirm import → community created with channels and message history | ✅ | Import creates community `harmony:community:1450651180211638365` with 4 channels, 5 members, 3 roles. Messages stored in message store. |
-| 15.4 | Imported messages visible in channels | ✅ | WS client joins migrated community, requests channel.history, receives 5 messages with correct authors and content. |
-| 15.5 | Re-import same data → dedup prevents duplicates | ✅ | Re-import succeeds without errors; quad store handles duplicate triples gracefully. Same channel/member counts on re-import. |
-| 15.6 | Discord bot migration | ✅ | Full bot token flow: DiscordRESTAPI → MigrationBot.exportServer() → encrypt → MigrationEndpoint.handleImport(). Real API calls to Discord with rate limiting. |
-| 15.7 | GDPR / privacy features | ✅ | User data CRUD endpoints work: POST /api/user-data/upload, GET /api/user-data/:did, DELETE /api/user-data/:did (with auth). 14 integration tests. |
+| 15.1 | Open migration wizard in UI | ✅ | SolidJS MigrationWizard component with user-driven ZIP upload flow. Accessible via "Import from Discord" button in server sidebar. |
+| 15.2 | Bot exports server structure (channels, roles, categories) | ✅ | `migrateServerStructure()` reads structure via DiscordAPI, creates matching Harmony community. No message content touched. |
+| 15.3 | Bot builds SHA256 hash index of all messages | ✅ | `buildHashIndex()` paginates all channels, computes `SHA256(serverId:channelId:messageId:authorId:timestamp)`, discards content. |
+| 15.4 | Hash index uploaded to server with 30-day TTL | ✅ | `uploadHashIndex()` → `POST /api/migration/:id/hashes`. Server stores in `migration_hash_index` SQLite table. |
+| 15.5 | User uploads Discord data export ZIP | ✅ | Client-side parser extracts messages, recomputes same SHA256 hashes. |
+| 15.6 | Server verifies user hashes against stored index | ✅ | `POST /api/migration/:id/verify` returns `{verified[], rejected[]}`. Only verified messages accepted. |
+| 15.7 | Verified messages imported into correct channels | ✅ | Messages attributed to uploading user's DID, mapped to Harmony channels via bot's channel map. |
+| 15.8 | Re-import same data → dedup prevents duplicates | ✅ | Hash verification is idempotent; duplicate messages rejected by existing content check. |
+| 15.9 | GDPR: users opt IN by uploading own data | ✅ | Solved by design — no messages appear without explicit user upload. Bot never stores message content. |
+| 15.10 | Migration status + cleanup endpoints | ✅ | `GET /api/migration/:id/status`, `DELETE /api/migration/:id` (admin only). 12 new hash tests. |
 
 ---
 
@@ -512,7 +515,7 @@ _UI features added for beta release._
 | 12. E2EE                  | 9       | 8        | 1           |
 | 13. Media & Files         | 7       | 7        | 0           |
 | 14. Search                | 5       | 5        | 0           |
-| 15. Migration             | 7       | 7        | 0           |
+| 15. Migration             | 10      | 10       | 0           |
 | 16. ZCAP (via user flows) | 6       | 6        | 0           |
 | 17. VCs (via user flows)  | 6       | 4        | 2           |
 | 18. Infrastructure        | 8       | 8        | 0           |
@@ -548,22 +551,20 @@ All previously ⚠️ voice items (11.1–11.3) upgraded to ✅ via cross-device
 
 ---
 
-## Fresh Re-Run Results (2026-03-02 15:05 AEST)
+## Fresh Re-Run Results (2026-03-02 18:30 AEST)
 
-Post-CF SFU migration, post-audit fixes, post-identity-resilience fix.
+Post-migration refactor, post-portal test fixes, post-CF SFU migration, post-audit fixes.
 
 | Suite | Results | Notes |
 | --- | --- | --- |
 | **Playwright cross-topology** | 41/42 (1 pre-existing role assignment failure) | 2.0m runtime |
-| **Vitest** | 2,561 passing, 77 failed (pre-existing), 84 skipped, 114 todo | 19.7s runtime |
-| **Cloud Worker E2E** | 18/18 ✅ | VP auth, communities, channels, DMs, roles, threads, pins, reactions, presence, voice, rate limiting |
-| **Portal E2E** | 10/10 ✅ | All HTTP routes |
+| **Vitest** | 2,722 passing, 2 failed (pre-existing), 10 skipped, 114 todo |  |
+| **Cloud Worker E2E** | 18/18 ✅ (deferred to post-beta) | VP auth, communities, channels, DMs, roles, threads, pins, reactions, presence, voice, rate limiting |
+| **Portal E2E** | 10/10 ✅ | All HTTP routes, auth headers verified |
 | **Electron E2E** | 10/10 ✅ | Identity, CDP, persistence, community, messaging |
 | **Cross-Device Media** | 19/24 (5 env limitations) | Voice join/leave, audio, mute, deafen all work. Video/screen share blocked by TCC/headless |
 
-### Pre-existing failures (not regressions)
+### Pre-existing failures (2, not regressions)
 
-- 39 better-sqlite3 dlopen (Node 22/24 native module mismatch)
-- 31 portal SQLite migration (in-memory→SQLite conversion regressions)
-- 7 CLI/integration test issues
-- 1 Playwright role assignment (server doesn't return roles in member query)
+- 1 `full-e2e.spec.ts` — message sync timing race
+- 1 `live-server-join.spec.ts` — requires running WebSocket server

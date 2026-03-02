@@ -1,28 +1,28 @@
 # Harmony — Roadmap & Feature Status
 
-_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-02 17:05 AEDT._
+_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-02 18:32 AEDT._
 
 ---
 
 ## Codebase Snapshot
 
-| Metric             | Value                                                                                |
-| ------------------ | ------------------------------------------------------------------------------------ |
-| Packages           | 36                                                                                   |
-| Estimated LOC      | ~32,000+                                                                             |
-| Vitest passing     | 2,560                                                                                |
-| Vitest skipped     | 84                                                                                   |
-| Vitest todo        | 114                                                                                  |
-| Vitest failing     | 78 (39 pre-existing better-sqlite3 + 31 portal SQLite migration + 8 cli/integration) |
-| Playwright passing | 41 (cross-topology) + 7 voice (Topology 5)                                           |
-| Playwright skipped | 0                                                                                    |
-| Test matrix        | 131 ✅ / 0 ❌ / 0 ⚠️ / 16 ⊘                                                          |
-| TypeScript errors  | 0                                                                                    |
-| Oxlint warnings    | 7 (SolidJS `let ref` false positives)                                                |
-| Vulnerabilities    | 0                                                                                    |
-| UI bundle size     | 349 KB                                                                               |
-| Docker image       | 739 MB                                                                               |
-| Android APK        | 3.7 MB (unsigned)                                                                    |
+| Metric             | Value                                      |
+| ------------------ | ------------------------------------------ |
+| Packages           | 36                                         |
+| Estimated LOC      | ~32,000+                                   |
+| Vitest passing     | 2,722                                      |
+| Vitest skipped     | 10                                         |
+| Vitest todo        | 114                                        |
+| Vitest failing     | 2 (pre-existing live-server integration)   |
+| Playwright passing | 41 (cross-topology) + 7 voice (Topology 5) |
+| Playwright skipped | 0                                          |
+| Test matrix        | 134 ✅ / 0 ❌ / 0 ⚠️ / 16 ⊘                |
+| TypeScript errors  | 0                                          |
+| Oxlint warnings    | 7 (SolidJS `let ref` false positives)      |
+| Vulnerabilities    | 0                                          |
+| UI bundle size     | 349 KB                                     |
+| Docker image       | 739 MB                                     |
+| Android APK        | 3.7 MB (unsigned)                          |
 
 ---
 
@@ -409,11 +409,11 @@ _Single source of truth for all features, voice/video detail, and release planni
 | Sticker transform | ✅ | ✅ | ➖ |  |
 | Thread fetching (active + archived) | ✅ | ✅ | ➖ |  |
 | Reaction user resolution (per-emoji) | ✅ | ✅ | ➖ |  |
-| Migration bot (structure only) | 🔧 | 🔧 | ➖ | Refactor: bot exports channels/roles/categories, NOT messages |
-| Hash-based message verification | ❌ | ❌ | ❌ | Bot builds SHA256 hash index; server verifies user uploads |
-| User-driven message import | ❌ | ❌ | ❌ | User uploads Discord data export ZIP; client verifies against hash index |
-| Migration endpoint (REST API) | ➖ | ✅ | ➖ | Needs new hash upload/verify/import endpoints |
-| Migration wizard UI | ➖ | ➖ | ✅ | Needs update for user-driven flow |
+| Migration bot (structure only) | ✅ | ✅ | ➖ | Bot exports channels/roles/categories + SHA256 hash index, never touches content |
+| Hash-based message verification | ✅ | ✅ | ✅ | Isomorphic SHA-256 (Node crypto + WebCrypto), `buildHashIndex()`, `verifyUserMessages()` |
+| User-driven message import | ✅ | ✅ | ✅ | User uploads Discord data export ZIP; client verifies against hash index |
+| Migration endpoint (REST API) | ➖ | ✅ | ➖ | 6 endpoints: create, upload hashes, verify, import, status, delete (30-day TTL) |
+| Migration wizard UI | ➖ | ➖ | ✅ | Updated for user-driven ZIP upload + hash verification flow |
 | Migration dedup | ➖ | ➖ | ✅ |  |
 | GDPR member opt-out | ✅ | ✅ | ✅ | Solved by design — users opt IN by uploading their own data |
 | Privacy notice template | ❌ | ❌ | ❌ |  |
@@ -708,6 +708,12 @@ Everything below is done and committed.
 - **Cloud worker parity**: 13→71 message handlers (server has 75), 10 new DO SQLite tables, rate limiting, input validation
 - **Portal SQLite migration**: in-memory Maps → better-sqlite3 (WAL mode), auth middleware, CORS, input validation — 31 test regressions (better-sqlite3 Node version mismatch)
 - Key commits: `27b120d` (voice matrix test), `07d8de8` (CF proxy chain), `cf59ec6` (voice track broadcasts), `890b6bb` (voice track tests), `e8c2a8a` (CW handlers), `2d6ca24` (portal fixes)
+- **Beta scope narrowed**: Cloud Worker deferred to post-beta. Self-hosted server + Electron + Portal + Web UI only.
+- **Portal test regressions fixed** (commit `1e677a4`): 36 failures → 2 pre-existing. Auth headers + Uint8Array JSON serialization.
+- **Migration refactor implemented** (commit `43e8247`): All 7 phases — isomorphic SHA-256 hash infrastructure, bot refactored to structure-only + hash index, `/harmony migrate` command, 6 new server endpoints (30-day TTL), user-driven ZIP upload + verification in UI, cloud worker stubs. 1,028 lines added, 12 new tests. Test count: 2,722 passing.
+- **Legal analysis completed**: Discord ToS compliance (user-driven import), AU Pty Ltd recommendation (43.5% R&D offset), E2EE platform liability (architecture as legal shield).
+- **CF deployment guide written**: `docs/DEPLOY-CLOUDFLARE.md` — 12-step guide for post-beta cloud deployment.
+- Key commits: `44aa97d` (scope narrowing), `1e677a4` (portal test fixes), `43e8247` (migration refactor), `6e0ac6c` (CF deploy guide), `e979ce9` (migration plan)
 
 ---
 
@@ -749,15 +755,15 @@ Everything below is done and committed.
 | --- | --- | --- | --- | --- |
 | 1 | Penetration test | ✅ | Agent | 48 tests, 11 findings, all high items fixed |
 | 2 | Pen test remediation | ✅ | Agent | Ed25519 signed auth on all REST endpoints |
-| 3 | Fix portal test regressions | ⬜ | Agent | 31 failures from in-memory Maps → SQLite migration |
-| 4 | Fix credential test regressions | ⬜ | Agent | ~18 failures from `issueCredential()` signature change |
+| 3 | Fix portal test regressions | ✅ | Agent | Auth headers + Uint8Array serialization (commit `1e677a4`) |
+| 4 | Fix credential test regressions | ✅ | Agent | Call sites already had correct signatures |
 | 5 | Register domain | ⬜ | Josh | Landing page + download links |
 | 6 | OAuth app registrations | ⬜ | Josh | Discord, GitHub, Google developer consoles |
 | 7 | Discord mock E2E | 🔧 | Agent | Test file written (~48 tests) but API mismatches unresolved |
 | 8 | Voice E2E test | ✅ | Agent | Mac ↔ Linux, 22/23 E2E tests passing |
 | 9 | Cross-topology E2E | ✅ | Agent | 41/42 Playwright tests across 7 topology suites |
 | 10 | Electron build pipeline | ⬜ | Josh + Agent | macOS notarization, auto-update |
-| 11 | Migration refactor | ⬜ | Agent | Hash-verified user-driven import (see `docs/plans/migration-refactor.md`) |
+| 11 | Migration refactor | ✅ | Agent | Hash-verified user-driven import — all 7 phases (commit `43e8247`) |
 
 ### Phase 1: Dev Environment
 

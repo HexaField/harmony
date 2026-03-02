@@ -296,12 +296,17 @@ export class HarmonyClient {
         client._clock = { counter: 0, authorDID: client._did }
         client._vp = options.vp ?? null
         for (const s of state.servers) {
-          await client.connect({
-            serverUrl: s.url,
-            identity: options.identity,
-            keyPair: options.keyPair,
-            vp: options.vp
-          })
+          try {
+            await client.connect({
+              serverUrl: s.url,
+              identity: options.identity,
+              keyPair: options.keyPair,
+              vp: options.vp
+            })
+          } catch (connErr) {
+            // Connection failure should not prevent client creation — reconnect will retry
+            console.warn(`[HarmonyClient] failed to connect to ${s.url} on init (will retry):`, connErr)
+          }
           // Restore community mappings
           for (const cid of s.communityIds) {
             client._communityServerMap.set(cid, s.url)

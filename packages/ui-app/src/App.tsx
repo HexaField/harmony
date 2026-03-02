@@ -58,9 +58,15 @@ export const App: Component = () => {
         if (savedIdentity.displayName) {
           store.setDisplayName(savedIdentity.displayName)
         }
-        await store.initClient(result.identity, result.keyPair)
+        try {
+          await store.initClient(result.identity, result.keyPair)
+        } catch (connErr) {
+          // Connection failures should not wipe identity — the identity derivation succeeded
+          console.warn('[App] server connection failed (identity preserved):', connErr)
+        }
       } catch (err) {
-        console.error('[App] init error:', err)
+        // Identity derivation failed — corrupted mnemonic
+        console.error('[App] identity init error:', err)
         store.setDid('')
         store.setMnemonic('')
       }
@@ -76,9 +82,13 @@ export const App: Component = () => {
         const result = await idMgr.createFromMnemonic(m)
         store.setIdentity(result.identity)
         store.setKeyPair(result.keyPair)
-        await store.initClient(result.identity, result.keyPair)
+        try {
+          await store.initClient(result.identity, result.keyPair)
+        } catch (connErr) {
+          console.warn('[App] server connection failed (identity preserved):', connErr)
+        }
       } catch (err) {
-        console.error('[App] init error:', err)
+        console.error('[App] identity init error:', err)
         store.setDid('')
         store.setMnemonic('')
       }

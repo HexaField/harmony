@@ -19,3 +19,4 @@ test-results
 *.db-wal
 harmony.dbtest-ws.mjs
 tests/.server-*.mts
+packages/cloud-worker/.wrangler/

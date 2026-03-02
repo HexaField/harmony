@@ -15,6 +15,15 @@ function testDB() {
   return createPortalDB(':memory:')
 }
 
+/** Wrapper around fetch that adds the auth header required by requireAuth middleware */
+function authFetch(url: string, init?: RequestInit): Promise<Response> {
+  const headers = new Headers(init?.headers)
+  if (!headers.has('Authorization')) {
+    headers.set('Authorization', 'Bearer did:key:zTestAuth.fakesig')
+  }
+  return fetch(url, { ...init, headers })
+}
+
 function createTestBundle(adminDID: string): EncryptedExportBundle {
   return {
     ciphertext: new Uint8Array([1, 2, 3]),
@@ -200,7 +209,7 @@ describe('@harmony/portal HTTP Server', () => {
   })
 
   it('POST /api/identities creates identity', async () => {
-    const res = await fetch(`${baseUrl}/api/identities`, { method: 'POST' })
+    const res = await authFetch(`${baseUrl}/api/identities`, { method: 'POST' })
     expect(res.status).toBe(201)
     const body = await res.json()
     expect(body.did).toMatch(/^did:key:z/)
@@ -208,21 +217,21 @@ describe('@harmony/portal HTTP Server', () => {
   })
 
   it('GET /api/identities/:did resolves identity', async () => {
-    const createRes = await fetch(`${baseUrl}/api/identities`, { method: 'POST' })
+    const createRes = await authFetch(`${baseUrl}/api/identities`, { method: 'POST' })
     const { did } = await createRes.json()
-    const res = await fetch(`${baseUrl}/api/identities/${encodeURIComponent(did)}`)
+    const res = await authFetch(`${baseUrl}/api/identities/${encodeURIComponent(did)}`)
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.did).toBe(did)
   })
 
   it('GET /api/identities/:did returns 404 for unknown', async () => {
-    const res = await fetch(`${baseUrl}/api/identities/${encodeURIComponent('did:key:zUnknown')}`)
+    const res = await authFetch(`${baseUrl}/api/identities/${encodeURIComponent('did:key:zUnknown')}`)
     expect(res.status).toBe(404)
   })
 
   it('POST /api/storage/exports stores bundle', async () => {
-    const res = await fetch(`${baseUrl}/api/storage/exports`, {
+    const res = await authFetch(`${baseUrl}/api/storage/exports`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -245,14 +254,14 @@ describe('@harmony/portal HTTP Server', () => {
   })
 
   it('GET /api/storage/exports lists by admin DID', async () => {
-    const res = await fetch(`${baseUrl}/api/storage/exports?adminDID=${encodeURIComponent('did:key:zAdmin')}`)
+    const res = await authFetch(`${baseUrl}/api/storage/exports?adminDID=${encodeURIComponent('did:key:zAdmin')}`)
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(Array.isArray(body)).toBe(true)
   })
 
   it('POST /api/friends/find returns linked identities', async () => {
-    const res = await fetch(`${baseUrl}/api/friends/find`, {
+    const res = await authFetch(`${baseUrl}/api/friends/find`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ discordUserIds: ['unknown1'] })
@@ -263,7 +272,7 @@ describe('@harmony/portal HTTP Server', () => {
   })
 
   it('POST /api/oauth/initiate returns redirect URL', async () => {
-    const res = await fetch(`${baseUrl}/api/oauth/initiate`, {
+    const res = await authFetch(`${baseUrl}/api/oauth/initiate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider: 'discord', userDID: 'did:key:zTest' })
@@ -275,7 +284,7 @@ describe('@harmony/portal HTTP Server', () => {
   })
 
   it('POST /api/identity/create creates identity', async () => {
-    const res = await fetch(`${baseUrl}/api/identity/create`, { method: 'POST' })
+    const res = await authFetch(`${baseUrl}/api/identity/create`, { method: 'POST' })
     expect(res.status).toBe(201)
     const body = await res.json()
     expect(body.did).toMatch(/^did:key:z/)
@@ -283,16 +292,16 @@ describe('@harmony/portal HTTP Server', () => {
   })
 
   it('GET /api/identity/:did resolves identity', async () => {
-    const createRes = await fetch(`${baseUrl}/api/identity/create`, { method: 'POST' })
+    const createRes = await authFetch(`${baseUrl}/api/identity/create`, { method: 'POST' })
     const { did } = await createRes.json()
-    const res = await fetch(`${baseUrl}/api/identity/${encodeURIComponent(did)}`)
+    const res = await authFetch(`${baseUrl}/api/identity/${encodeURIComponent(did)}`)
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.did).toBe(did)
   })
 
   it('POST /api/identity/link returns redirect when Discord is configured, or 500 without', async () => {
-    const res = await fetch(`${baseUrl}/api/identity/link`, {
+    const res = await authFetch(`${baseUrl}/api/identity/link`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider: 'discord', userDID: 'did:key:zTest' })
@@ -307,7 +316,7 @@ describe('@harmony/portal HTTP Server', () => {
   })
 
   it('POST /api/identity/link rejects unsupported provider', async () => {
-    const res = await fetch(`${baseUrl}/api/identity/link`, {
+    const res = await authFetch(`${baseUrl}/api/identity/link`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider: 'twitter', userDID: 'did:key:zTest' })
@@ -316,31 +325,31 @@ describe('@harmony/portal HTTP Server', () => {
   })
 
   it('GET /api/oauth/discord/authorize requires userDID', async () => {
-    const res = await fetch(`${baseUrl}/api/oauth/discord/authorize`, { redirect: 'manual' })
+    const res = await authFetch(`${baseUrl}/api/oauth/discord/authorize`, { redirect: 'manual' })
     expect(res.status).toBeLessThanOrEqual(500)
   })
 
   it('GET /api/oauth/discord/callback rejects missing params', async () => {
-    const res = await fetch(`${baseUrl}/api/oauth/discord/callback`)
+    const res = await authFetch(`${baseUrl}/api/oauth/discord/callback`)
     expect(res.status).toBe(400)
   })
 
   it('GET /api/oauth/discord/callback rejects invalid state', async () => {
-    const res = await fetch(`${baseUrl}/api/oauth/discord/callback?code=fake&state=invalid`)
+    const res = await authFetch(`${baseUrl}/api/oauth/discord/callback?code=fake&state=invalid`)
     expect(res.status).toBe(400)
     const body = await res.json()
     expect(body.error).toContain('Invalid or expired')
   })
 
   it('GET /api/oauth/discord/callback returns error for OAuth error param', async () => {
-    const res = await fetch(`${baseUrl}/api/oauth/discord/callback?error=access_denied`)
+    const res = await authFetch(`${baseUrl}/api/oauth/discord/callback?error=access_denied`)
     expect(res.status).toBe(400)
     const body = await res.json()
     expect(body.error).toContain('access_denied')
   })
 
   it.skip('GET /api/oauth/discord/authorize redirects to Discord (needs DISCORD_CLIENT_ID)', async () => {
-    const res = await fetch(`${baseUrl}/api/oauth/discord/authorize?userDID=did:key:zTest`, { redirect: 'manual' })
+    const res = await authFetch(`${baseUrl}/api/oauth/discord/authorize?userDID=did:key:zTest`, { redirect: 'manual' })
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toContain('discord.com')
   })
@@ -351,7 +360,7 @@ describe('@harmony/portal HTTP Server', () => {
 
   describe('Friend Search', () => {
     it('MUST search by Discord username among linked identities', async () => {
-      const createRes = await fetch(`${baseUrl}/api/identities`, { method: 'POST' })
+      const createRes = await authFetch(`${baseUrl}/api/identities`, { method: 'POST' })
       const { did } = (await createRes.json()) as { did: string }
 
       await portal.completeOAuthLink({
@@ -361,7 +370,7 @@ describe('@harmony/portal HTTP Server', () => {
         userDID: did
       })
 
-      const searchRes = await fetch(`${baseUrl}/api/friends/search?q=TestSearch`)
+      const searchRes = await authFetch(`${baseUrl}/api/friends/search?q=TestSearch`)
       expect(searchRes.status).toBe(200)
       const body = (await searchRes.json()) as { results: any[] }
       expect(body.results.length).toBeGreaterThanOrEqual(1)
@@ -369,14 +378,14 @@ describe('@harmony/portal HTTP Server', () => {
     })
 
     it('MUST return empty results for unlinked users', async () => {
-      const searchRes = await fetch(`${baseUrl}/api/friends/search?q=NonExistentUser99999`)
+      const searchRes = await authFetch(`${baseUrl}/api/friends/search?q=NonExistentUser99999`)
       expect(searchRes.status).toBe(200)
       const body = (await searchRes.json()) as { results: any[] }
       expect(body.results).toHaveLength(0)
     })
 
     it('MUST handle multiple results', async () => {
-      const res1 = await fetch(`${baseUrl}/api/identities`, { method: 'POST' })
+      const res1 = await authFetch(`${baseUrl}/api/identities`, { method: 'POST' })
       const { did: did1 } = (await res1.json()) as { did: string }
       await portal.completeOAuthLink({
         provider: 'discord',
@@ -385,7 +394,7 @@ describe('@harmony/portal HTTP Server', () => {
         userDID: did1
       })
 
-      const res2 = await fetch(`${baseUrl}/api/identities`, { method: 'POST' })
+      const res2 = await authFetch(`${baseUrl}/api/identities`, { method: 'POST' })
       const { did: did2 } = (await res2.json()) as { did: string }
       await portal.completeOAuthLink({
         provider: 'discord',
@@ -394,14 +403,14 @@ describe('@harmony/portal HTTP Server', () => {
         userDID: did2
       })
 
-      const searchRes = await fetch(`${baseUrl}/api/friends/search?q=MultiResult`)
+      const searchRes = await authFetch(`${baseUrl}/api/friends/search?q=MultiResult`)
       expect(searchRes.status).toBe(200)
       const body = (await searchRes.json()) as { results: any[] }
       expect(body.results.length).toBeGreaterThanOrEqual(2)
     })
 
     it('MUST reject search without query parameter', async () => {
-      const res = await fetch(`${baseUrl}/api/friends/search`)
+      const res = await authFetch(`${baseUrl}/api/friends/search`)
       expect(res.status).toBe(400)
     })
   })
@@ -663,7 +672,7 @@ describe('@harmony/portal HTTP Friends & Discord Profile', () => {
   })
 
   it('POST /api/friends/store stores friend IDs', async () => {
-    const res = await fetch(`${baseUrl}/api/friends/store`, {
+    const res = await authFetch(`${baseUrl}/api/friends/store`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ did: 'did:key:zHTTP1', discordFriendIds: ['f1', 'f2'] })
@@ -674,7 +683,7 @@ describe('@harmony/portal HTTP Friends & Discord Profile', () => {
   })
 
   it('GET /api/friends/:did returns friends', async () => {
-    const res = await fetch(`${baseUrl}/api/friends/${encodeURIComponent('did:key:zHTTP1')}`)
+    const res = await authFetch(`${baseUrl}/api/friends/${encodeURIComponent('did:key:zHTTP1')}`)
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.friends).toBeDefined()
@@ -682,7 +691,7 @@ describe('@harmony/portal HTTP Friends & Discord Profile', () => {
   })
 
   it('POST /api/friends/discover returns discovered friends', async () => {
-    const res = await fetch(`${baseUrl}/api/friends/discover`, {
+    const res = await authFetch(`${baseUrl}/api/friends/discover`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ did: 'did:key:zHTTP1' })
@@ -693,7 +702,7 @@ describe('@harmony/portal HTTP Friends & Discord Profile', () => {
   })
 
   it('GET /api/identity/:did/discord-profile returns 404 when no link exists', async () => {
-    const res = await fetch(`${baseUrl}/api/identity/${encodeURIComponent('did:key:zNoProfile')}/discord-profile`)
+    const res = await authFetch(`${baseUrl}/api/identity/${encodeURIComponent('did:key:zNoProfile')}/discord-profile`)
     expect(res.status).toBe(404)
   })
 })
@@ -732,10 +741,10 @@ describe('@harmony/portal OAuth Security', () => {
       _pendingStates.set(fakeState, { userDID: 'did:key:zTest', createdAt: Date.now() })
 
       // First callback consumes the state (will fail at Discord token exchange, but state is consumed)
-      await fetch(`${base}/api/oauth/discord/callback?code=fake&state=${fakeState}`)
+      await authFetch(`${base}/api/oauth/discord/callback?code=fake&state=${fakeState}`)
 
       // Second attempt with same state should fail
-      const res2 = await fetch(`${base}/api/oauth/discord/callback?code=fake&state=${fakeState}`)
+      const res2 = await authFetch(`${base}/api/oauth/discord/callback?code=fake&state=${fakeState}`)
       expect(res2.status).toBe(400)
       const body = await res2.json()
       expect(body.error).toContain('Invalid or expired')

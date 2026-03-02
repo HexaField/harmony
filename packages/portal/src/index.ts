@@ -112,9 +112,14 @@ export class PortalService {
 
   async storeExport(bundle: EncryptedExportBundle): Promise<{ exportId: string }> {
     const exportId = Array.from(new Uint8Array(8), () => Math.random().toString(36)[2]).join('')
+    const serializable = {
+      ...bundle,
+      ciphertext: Array.from(bundle.ciphertext),
+      nonce: Array.from(bundle.nonce)
+    }
     this.db
       .prepare('INSERT INTO exports (export_id, admin_did, bundle_json, stored_at) VALUES (?, ?, ?, ?)')
-      .run(exportId, bundle.metadata.adminDID, JSON.stringify(bundle), new Date().toISOString())
+      .run(exportId, bundle.metadata.adminDID, JSON.stringify(serializable), new Date().toISOString())
     return { exportId }
   }
 

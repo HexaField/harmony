@@ -37,7 +37,10 @@ afterAll(() => {
 })
 
 async function api(method: string, path: string, body?: any) {
-  const opts: RequestInit = { method, headers: { 'Content-Type': 'application/json' } }
+  const opts: RequestInit = {
+    method,
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer did:key:zTestAuth.fakesig' }
+  }
   if (body) opts.body = JSON.stringify(body)
   const res = await fetch(`${baseUrl}${path}`, opts)
   const text = await res.text()
@@ -119,7 +122,10 @@ describe('Portal HTTP API — Full Coverage', () => {
     })
 
     it('GET /api/oauth/discord/authorize redirects to Discord', async () => {
-      const res = await fetch(`${baseUrl}/api/oauth/discord/authorize?userDID=did:key:zTest`, { redirect: 'manual' })
+      const res = await fetch(`${baseUrl}/api/oauth/discord/authorize?userDID=did:key:zTest`, {
+        redirect: 'manual',
+        headers: { Authorization: 'Bearer did:key:zTestAuth.fakesig' }
+      })
       expect(res.status).toBe(302)
       const location = res.headers.get('location')!
       expect(location).toContain('discord.com/api/oauth2/authorize')
@@ -127,7 +133,10 @@ describe('Portal HTTP API — Full Coverage', () => {
     })
 
     it('GET /api/oauth/discord/authorize rejects missing userDID', async () => {
-      const res = await fetch(`${baseUrl}/api/oauth/discord/authorize`, { redirect: 'manual' })
+      const res = await fetch(`${baseUrl}/api/oauth/discord/authorize`, {
+        redirect: 'manual',
+        headers: { Authorization: 'Bearer did:key:zTestAuth.fakesig' }
+      })
       expect(res.status).toBe(400)
     })
 
@@ -135,7 +144,7 @@ describe('Portal HTTP API — Full Coverage', () => {
       process.env.ALLOWED_REDIRECT_URIS = 'http://localhost:3000'
       const res = await fetch(
         `${baseUrl}/api/oauth/discord/authorize?userDID=did:key:z1&redirectUri=javascript:alert(1)`,
-        { redirect: 'manual' }
+        { redirect: 'manual', headers: { Authorization: 'Bearer did:key:zTestAuth.fakesig' } }
       )
       expect(res.status).toBe(400)
       delete process.env.ALLOWED_REDIRECT_URIS

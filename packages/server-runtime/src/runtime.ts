@@ -11,9 +11,9 @@ import { createCryptoProvider } from '@harmony/crypto'
 import { DIDKeyProvider } from '@harmony/did'
 import { IdentityManager } from '@harmony/identity'
 import type { DIDDocument } from '@harmony/did'
-import type { RevocationStore, RevocationEntry } from '@harmony/vc'
 
 import { SQLiteQuadStore } from './sqlite-quad-store.js'
+import { SqliteRevocationStore } from './sqlite-revocation-store.js'
 import { loadConfig, type RuntimeConfig } from './config.js'
 import { createLogger, type Logger } from './logger.js'
 import { MediaFileStore } from './media-store.js'
@@ -35,22 +35,6 @@ export interface ServerStatus {
 function createLocalDIDResolver(): (did: string) => Promise<DIDDocument | null> {
   const didProvider = new DIDKeyProvider(createCryptoProvider())
   return async (did: string) => didProvider.resolve(did)
-}
-
-// Simple in-memory revocation store
-class InMemoryRevocationStore implements RevocationStore {
-  private entries: RevocationEntry[] = []
-  async isRevoked(credentialId: string): Promise<boolean> {
-    return this.entries.some((e) => e.credentialId === credentialId)
-  }
-  async revoke(credentialId: string, reason?: string): Promise<void> {
-    if (!this.entries.find((e) => e.credentialId === credentialId)) {
-      this.entries.push({ credentialId, reason, revokedAt: new Date().toISOString() })
-    }
-  }
-  async list(): Promise<RevocationEntry[]> {
-    return [...this.entries]
-  }
 }
 
 export class ServerRuntime {
@@ -142,7 +126,7 @@ export class ServerRuntime {
       host: this.config.server.host,
       store: this.store,
       didResolver: createLocalDIDResolver(),
-      revocationStore: new InMemoryRevocationStore(),
+      revocationStore: new SqliteRevocationStore(this.config.storage.database),
       cryptoProvider: createCryptoProvider(),
       maxConnections: this.config.limits.maxConnections,
       rateLimit: this.config.moderation.rateLimit

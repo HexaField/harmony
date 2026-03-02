@@ -44,5 +44,11 @@ export type ClientEvent =
   | 'thread.created'
   | 'thread.message'
   | 'error'
+  // Social Recovery
+  | 'recovery.request.notify'
+  | 'recovery.request.created'
+  | 'recovery.request.cancelled'
+  | 'recovery.shard.submitted'
+  | 'recovery.shards.response'
 
 export type FederationEvent = 'peer.connected' | 'peer.disconnected' | 'peer.message' | 'peer.sync' | 'peer.error'

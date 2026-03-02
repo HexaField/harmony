@@ -189,6 +189,16 @@ export type MessageType =
   | 'dm.keyexchange'
   // MLS membership
   | 'mls.member.joined'
+  // Social Recovery
+  | 'recovery.request.create'
+  | 'recovery.request.cancel'
+  | 'recovery.shard.submit'
+  | 'recovery.shards.fetch'
+  | 'recovery.shards.response'
+  | 'recovery.request.notify'
+  | 'recovery.request.created'
+  | 'recovery.request.cancelled'
+  | 'recovery.shard.submitted'
   // Voice transport
   | 'voice.transport.connected'
   | 'voice.produced'
@@ -282,7 +292,12 @@ export const CLIENT_TO_SERVER_TYPES: MessageType[] = [
   'voice.tracks.push',
   'voice.tracks.pull',
   'voice.tracks.close',
-  'voice.renegotiate'
+  'voice.renegotiate',
+  // Social Recovery
+  'recovery.request.create',
+  'recovery.request.cancel',
+  'recovery.shard.submit',
+  'recovery.shards.fetch'
 ]
 
 export const SERVER_TO_CLIENT_TYPES: MessageType[] = [
@@ -348,7 +363,13 @@ export const SERVER_TO_CLIENT_TYPES: MessageType[] = [
   'voice.tracks.closed',
   'voice.renegotiated',
   'voice.track.published',
-  'voice.track.removed'
+  'voice.track.removed',
+  // Social Recovery
+  'recovery.shards.response',
+  'recovery.request.notify',
+  'recovery.request.created',
+  'recovery.request.cancelled',
+  'recovery.shard.submitted'
 ]
 
 export const FEDERATION_TYPES: MessageType[] = ['federation.relay', 'federation.sync', 'federation.presence']

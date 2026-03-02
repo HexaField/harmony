@@ -131,9 +131,57 @@ export const RECOVERY_FEATURES = {
   /** Initiate: creates local request ID, but can't notify trustees without server */
   initiate: true,
   /** Approve: requires server relay to receive and respond to requests */
-  approve: false,
+  approve: true,
   /** Status check: requires server to aggregate approvals */
-  statusCheck: false,
+  statusCheck: true,
   /** Complete: requires server to verify approvals and issue new credentials */
-  complete: false
+  complete: true
 } as const
+
+// ── Server Relay Functions ──
+
+import type { HarmonyClient } from '@harmony/client'
+
+/**
+ * Create a recovery request on the server, notifying guardians.
+ * Requires an active HarmonyClient connection.
+ */
+export function createRecoveryRequestViaRelay(
+  client: HarmonyClient,
+  params: {
+    requestId: string
+    requesterDID: string
+    guardianDIDs: string[]
+    threshold: number
+  }
+): void {
+  client.createRecoveryRequest(params)
+}
+
+/**
+ * Cancel a recovery request on the server.
+ */
+export function cancelRecoveryRequestViaRelay(client: HarmonyClient, requestId: string): void {
+  client.cancelRecoveryRequest(requestId)
+}
+
+/**
+ * Submit an encrypted shard as a guardian via server relay.
+ */
+export function submitShardViaRelay(
+  client: HarmonyClient,
+  params: {
+    requestId: string
+    guardianDID: string
+    encryptedShard: string
+  }
+): void {
+  client.submitRecoveryShard(params)
+}
+
+/**
+ * Fetch collected shards from the server.
+ */
+export function fetchShardsViaRelay(client: HarmonyClient, requestId: string): void {
+  client.fetchRecoveryShards(requestId)
+}

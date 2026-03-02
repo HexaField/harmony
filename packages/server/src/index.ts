@@ -696,6 +696,19 @@ export class HarmonyServer {
   private e2eeNotified: Map<string, Set<string>> = new Map()
   private _serverKeyPair: KeyPair | null = null
 
+  // Social Recovery relay state (in-memory, 24h expiry)
+  private recoveryRequests: Map<
+    string,
+    {
+      requesterDID: string
+      guardianDIDs: string[]
+      threshold: number
+      shards: Map<string, string> // guardianDID → encryptedShard (base64)
+      createdAt: number
+    }
+  > = new Map()
+  private recoveryCleanupTimer: ReturnType<typeof setInterval> | null = null
+
   /** Send mls.member.joined to group creator, deduplicating */
   private notifyMlsMemberJoined(
     creatorConn: ServerConnection,
@@ -1388,6 +1401,19 @@ export class HarmonyServer {
         break
       case 'moderation.config.get':
         await this.handleModerationConfigGet(conn, msg)
+        break
+      // Social Recovery
+      case 'recovery.request.create' as any:
+        this.handleRecoveryRequestCreate(conn, msg)
+        break
+      case 'recovery.request.cancel' as any:
+        this.handleRecoveryRequestCancel(conn, msg)
+        break
+      case 'recovery.shard.submit' as any:
+        this.handleRecoveryShardSubmit(conn, msg)
+        break
+      case 'recovery.shards.fetch' as any:
+        this.handleRecoveryShardsFetch(conn, msg)
         break
       default:
         // Unknown message type — send error
@@ -4287,6 +4313,229 @@ export class HarmonyServer {
       timestamp: new Date().toISOString(),
       sender: 'server',
       payload: { unread, byChannel }
+    })
+  }
+
+  // ── Social Recovery Relay ──
+
+  private cleanupExpiredRecoveryRequests(): void {
+    const now = Date.now()
+    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000
+    for (const [id, req] of this.recoveryRequests) {
+      if (now - req.createdAt > TWENTY_FOUR_HOURS) {
+        this.recoveryRequests.delete(id)
+      }
+    }
+  }
+
+  private ensureRecoveryCleanup(): void {
+    if (!this.recoveryCleanupTimer) {
+      this.recoveryCleanupTimer = setInterval(() => this.cleanupExpiredRecoveryRequests(), 60 * 60 * 1000)
+    }
+  }
+
+  private handleRecoveryRequestCreate(conn: ServerConnection, msg: ProtocolMessage): void {
+    const payload = msg.payload as {
+      requestId: string
+      requesterDID: string
+      guardianDIDs: string[]
+      threshold: number
+    }
+    if (!payload.requestId || !payload.requesterDID || !Array.isArray(payload.guardianDIDs) || !payload.threshold) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'INVALID_PAYLOAD', message: 'Missing required fields for recovery request' }
+      })
+      return
+    }
+
+    this.ensureRecoveryCleanup()
+    this.recoveryRequests.set(payload.requestId, {
+      requesterDID: payload.requesterDID,
+      guardianDIDs: payload.guardianDIDs,
+      threshold: payload.threshold,
+      shards: new Map(),
+      createdAt: Date.now()
+    })
+
+    // Confirm to requester
+    this.sendToConnection(conn, {
+      id: `recovery-created-${Date.now()}`,
+      type: 'recovery.request.created' as ProtocolMessage['type'],
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: { requestId: payload.requestId }
+    })
+
+    // Notify online guardians
+    for (const guardianDID of payload.guardianDIDs) {
+      for (const c of this._connections.values()) {
+        if (c.did === guardianDID) {
+          this.sendToConnection(c, {
+            id: `recovery-notify-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            type: 'recovery.request.notify' as ProtocolMessage['type'],
+            timestamp: new Date().toISOString(),
+            sender: 'server',
+            payload: {
+              requestId: payload.requestId,
+              requesterDID: payload.requesterDID,
+              timestamp: new Date().toISOString()
+            }
+          })
+        }
+      }
+    }
+  }
+
+  private handleRecoveryRequestCancel(conn: ServerConnection, msg: ProtocolMessage): void {
+    const payload = msg.payload as { requestId: string }
+    if (!payload.requestId) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'INVALID_PAYLOAD', message: 'Missing requestId' }
+      })
+      return
+    }
+
+    const request = this.recoveryRequests.get(payload.requestId)
+    if (!request || request.requesterDID !== conn.did) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'NOT_FOUND', message: 'Recovery request not found or not authorized' }
+      })
+      return
+    }
+
+    this.recoveryRequests.delete(payload.requestId)
+    this.sendToConnection(conn, {
+      id: `recovery-cancelled-${Date.now()}`,
+      type: 'recovery.request.cancelled' as ProtocolMessage['type'],
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: { requestId: payload.requestId }
+    })
+  }
+
+  private handleRecoveryShardSubmit(conn: ServerConnection, msg: ProtocolMessage): void {
+    const payload = msg.payload as {
+      requestId: string
+      guardianDID: string
+      encryptedShard: string
+    }
+    if (!payload.requestId || !payload.guardianDID || !payload.encryptedShard) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'INVALID_PAYLOAD', message: 'Missing required fields for shard submission' }
+      })
+      return
+    }
+
+    const request = this.recoveryRequests.get(payload.requestId)
+    if (!request) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'NOT_FOUND', message: 'Recovery request not found' }
+      })
+      return
+    }
+
+    if (!request.guardianDIDs.includes(payload.guardianDID)) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'UNAUTHORIZED', message: 'Not a guardian for this recovery request' }
+      })
+      return
+    }
+
+    request.shards.set(payload.guardianDID, payload.encryptedShard)
+
+    // Confirm to guardian
+    this.sendToConnection(conn, {
+      id: `shard-submitted-${Date.now()}`,
+      type: 'recovery.shard.submitted' as ProtocolMessage['type'],
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: { requestId: payload.requestId, guardianDID: payload.guardianDID }
+    })
+
+    // Notify requester that a shard was received
+    for (const c of this._connections.values()) {
+      if (c.did === request.requesterDID) {
+        this.sendToConnection(c, {
+          id: `shard-submitted-notify-${Date.now()}`,
+          type: 'recovery.shard.submitted' as ProtocolMessage['type'],
+          timestamp: new Date().toISOString(),
+          sender: 'server',
+          payload: {
+            requestId: payload.requestId,
+            guardianDID: payload.guardianDID,
+            shardsCollected: request.shards.size,
+            threshold: request.threshold
+          }
+        })
+      }
+    }
+  }
+
+  private handleRecoveryShardsFetch(conn: ServerConnection, msg: ProtocolMessage): void {
+    const payload = msg.payload as { requestId: string }
+    if (!payload.requestId) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'INVALID_PAYLOAD', message: 'Missing requestId' }
+      })
+      return
+    }
+
+    const request = this.recoveryRequests.get(payload.requestId)
+    if (!request || request.requesterDID !== conn.did) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'NOT_FOUND', message: 'Recovery request not found or not authorized' }
+      })
+      return
+    }
+
+    const shards = Array.from(request.shards.entries()).map(([guardianDID, encryptedShard]) => ({
+      guardianDID,
+      encryptedShard
+    }))
+
+    this.sendToConnection(conn, {
+      id: `shards-response-${Date.now()}`,
+      type: 'recovery.shards.response' as ProtocolMessage['type'],
+      timestamp: new Date().toISOString(),
+      sender: 'server',
+      payload: {
+        requestId: payload.requestId,
+        shards,
+        threshold: request.threshold,
+        total: request.guardianDIDs.length
+      }
     })
   }
 }

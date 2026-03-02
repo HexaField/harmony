@@ -4,7 +4,11 @@ import {
   initiateRecovery,
   loadRecoveryConfig,
   clearRecoveryConfig,
-  RECOVERY_FEATURES
+  RECOVERY_FEATURES,
+  createRecoveryRequestViaRelay,
+  cancelRecoveryRequestViaRelay,
+  submitShardViaRelay,
+  fetchShardsViaRelay
 } from '../src/services/recovery.js'
 
 // Mock localStorage
@@ -20,15 +24,12 @@ vi.stubGlobal('localStorage', {
 })
 
 describe('RECOVERY_FEATURES flags', () => {
-  it('setup and initiate are enabled', () => {
+  it('all features are enabled with server relay', () => {
     expect(RECOVERY_FEATURES.setup).toBe(true)
     expect(RECOVERY_FEATURES.initiate).toBe(true)
-  })
-
-  it('approve, statusCheck, complete are disabled', () => {
-    expect(RECOVERY_FEATURES.approve).toBe(false)
-    expect(RECOVERY_FEATURES.statusCheck).toBe(false)
-    expect(RECOVERY_FEATURES.complete).toBe(false)
+    expect(RECOVERY_FEATURES.approve).toBe(true)
+    expect(RECOVERY_FEATURES.statusCheck).toBe(true)
+    expect(RECOVERY_FEATURES.complete).toBe(true)
   })
 })
 
@@ -205,5 +206,51 @@ describe('initiateRecovery', () => {
     expect(result.ok).toBe(true)
     expect(result.data).toBeDefined()
     expect(result.data!.requestId).toMatch(/^recovery:/)
+  })
+})
+
+describe('Server relay functions', () => {
+  function createMockClient() {
+    return {
+      createRecoveryRequest: vi.fn(),
+      cancelRecoveryRequest: vi.fn(),
+      submitRecoveryShard: vi.fn(),
+      fetchRecoveryShards: vi.fn()
+    } as any
+  }
+
+  it('createRecoveryRequestViaRelay calls client.createRecoveryRequest', () => {
+    const client = createMockClient()
+    const params = {
+      requestId: 'recovery:test-123',
+      requesterDID: 'did:key:z6MkAlice123',
+      guardianDIDs: ['did:key:z6MkBob456'],
+      threshold: 1
+    }
+    createRecoveryRequestViaRelay(client, params)
+    expect(client.createRecoveryRequest).toHaveBeenCalledWith(params)
+  })
+
+  it('cancelRecoveryRequestViaRelay calls client.cancelRecoveryRequest', () => {
+    const client = createMockClient()
+    cancelRecoveryRequestViaRelay(client, 'recovery:test-123')
+    expect(client.cancelRecoveryRequest).toHaveBeenCalledWith('recovery:test-123')
+  })
+
+  it('submitShardViaRelay calls client.submitRecoveryShard', () => {
+    const client = createMockClient()
+    const params = {
+      requestId: 'recovery:test-123',
+      guardianDID: 'did:key:z6MkBob456',
+      encryptedShard: 'base64encodeddata'
+    }
+    submitShardViaRelay(client, params)
+    expect(client.submitRecoveryShard).toHaveBeenCalledWith(params)
+  })
+
+  it('fetchShardsViaRelay calls client.fetchRecoveryShards', () => {
+    const client = createMockClient()
+    fetchShardsViaRelay(client, 'recovery:test-123')
+    expect(client.fetchRecoveryShards).toHaveBeenCalledWith('recovery:test-123')
   })
 })

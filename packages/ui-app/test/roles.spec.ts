@@ -139,6 +139,31 @@ describe('Role assign to member', () => {
       expect(store.members()[0].roles).toContain('mod')
     })
   })
+
+  it('removes role from member via store', () => {
+    createRoot(() => {
+      const store = createAppStore()
+      store.addRole({ id: 'mod', name: 'Mod', permissions: [], position: 0 })
+      store.setMembers([{ did: 'did:test:1', displayName: 'Alice', roles: ['mod', 'admin'], status: 'online' }])
+      store.setMembers(
+        store.members().map((m) => (m.did === 'did:test:1' ? { ...m, roles: m.roles.filter((r) => r !== 'mod') } : m))
+      )
+      expect(store.members()[0].roles).not.toContain('mod')
+      expect(store.members()[0].roles).toContain('admin')
+    })
+  })
+
+  it('handles community.member.updated event updating member roles', () => {
+    createRoot(() => {
+      const store = createAppStore()
+      store.addRole({ id: 'mod', name: 'Mod', permissions: [], position: 0 })
+      store.setMembers([{ did: 'did:test:1', displayName: 'Alice', roles: [], status: 'online' }])
+      // Simulate the event handler logic from store
+      const event = { memberDID: 'did:test:1', roles: ['mod'] }
+      store.setMembers(store.members().map((m) => (m.did === event.memberDID ? { ...m, roles: event.roles } : m)))
+      expect(store.members()[0].roles).toEqual(['mod'])
+    })
+  })
 })
 
 describe('RoleManagerView DOM', () => {

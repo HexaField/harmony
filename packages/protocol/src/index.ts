@@ -337,3 +337,39 @@ export interface NotificationCountResponsePayload {
   unread: number
   byChannel: Record<string, number>
 }
+
+// ── Social Recovery ──
+
+export interface RecoveryRequestCreatePayload {
+  requestId: string
+  requesterDID: string
+  guardianDIDs: string[]
+  threshold: number
+}
+
+export interface RecoveryRequestCancelPayload {
+  requestId: string
+}
+
+export interface RecoveryShardSubmitPayload {
+  requestId: string
+  guardianDID: string
+  encryptedShard: string // base64
+}
+
+export interface RecoveryShardsFetchPayload {
+  requestId: string
+}
+
+export interface RecoveryShardsResponsePayload {
+  requestId: string
+  shards: Array<{ guardianDID: string; encryptedShard: string }>
+  threshold: number
+  total: number
+}
+
+export interface RecoveryRequestNotifyPayload {
+  requestId: string
+  requesterDID: string
+  timestamp: string
+}

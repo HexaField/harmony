@@ -1200,6 +1200,10 @@ export class HarmonyClient {
     this.send(this.createMessage('role.assign', { communityId, memberDID, roleId }))
   }
 
+  async removeRoleFromMember(communityId: string, memberDID: string, roleId: string): Promise<void> {
+    this.send(this.createMessage('role.remove', { communityId, memberDID, roleId }))
+  }
+
   async kickMember(communityId: string, memberDID: string, reason?: string): Promise<void> {
     this.send(this.createMessage('community.kick', { communityId, targetDID: memberDID, reason }))
   }
@@ -2844,6 +2848,33 @@ export class HarmonyClient {
 
   get sessionTokens(): Map<string, string> {
     return this._sessionTokens
+  }
+
+  // ── Social Recovery Relay ──
+
+  /** Create a recovery request on the server and notify guardians */
+  createRecoveryRequest(params: {
+    requestId: string
+    requesterDID: string
+    guardianDIDs: string[]
+    threshold: number
+  }): void {
+    this.send(this.createMessage('recovery.request.create', params))
+  }
+
+  /** Cancel a recovery request */
+  cancelRecoveryRequest(requestId: string): void {
+    this.send(this.createMessage('recovery.request.cancel', { requestId }))
+  }
+
+  /** Submit an encrypted shard as a guardian */
+  submitRecoveryShard(params: { requestId: string; guardianDID: string; encryptedShard: string }): void {
+    this.send(this.createMessage('recovery.shard.submit', params))
+  }
+
+  /** Fetch collected shards for a recovery request */
+  fetchRecoveryShards(requestId: string): void {
+    this.send(this.createMessage('recovery.shards.fetch', { requestId }))
   }
 
   private createMessage(type: string, payload: unknown, id?: string): ProtocolMessage {

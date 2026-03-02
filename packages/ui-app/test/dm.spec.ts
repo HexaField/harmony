@@ -49,6 +49,8 @@ describe('DM Store', () => {
     expect(store.showDMView()).toBe(false)
     expect(store.showNewDMModal()).toBe(false)
     expect(store.dmTypingUsers()).toEqual([])
+    expect(store.dmUnreadCount('did:test:anyone')).toBe(0)
+    expect(store.dmLastReadTimestamp('did:test:anyone')).toBeNull()
   })
 
   it('adds a DM conversation', () => {
@@ -107,7 +109,7 @@ describe('DM Store', () => {
     expect(store.dmConversations()[0].unreadCount).toBe(1)
   })
 
-  it('increments unread count for incoming messages', () => {
+  it('increments unread count for incoming messages (timestamp-based)', () => {
     const store = makeStore()
     store.setDid('did:test:me')
     const convo = makeConvo()
@@ -115,14 +117,14 @@ describe('DM Store', () => {
 
     const msg = makeMsg({ authorDid: 'did:test:alice' })
     store.addDMMessage('did:test:alice', msg)
-    expect(store.dmConversations()[0].unreadCount).toBe(1)
+    expect(store.dmUnreadCount('did:test:alice')).toBe(1)
 
     const msg2 = makeMsg({ authorDid: 'did:test:alice' })
     store.addDMMessage('did:test:alice', msg2)
-    expect(store.dmConversations()[0].unreadCount).toBe(2)
+    expect(store.dmUnreadCount('did:test:alice')).toBe(2)
   })
 
-  it('does not increment unread for own messages', () => {
+  it('does not count own messages as unread', () => {
     const store = makeStore()
     store.setDid('did:test:me')
     const convo = makeConvo()
@@ -130,15 +132,55 @@ describe('DM Store', () => {
 
     const msg = makeMsg({ authorDid: 'did:test:me' })
     store.addDMMessage('did:test:alice', msg)
-    expect(store.dmConversations()[0].unreadCount).toBe(0)
+    expect(store.dmUnreadCount('did:test:alice')).toBe(0)
   })
 
-  it('marks DM as read', () => {
+  it('marks DM as read using timestamp', () => {
     const store = makeStore()
     store.setDid('did:test:me')
-    store.addDMConversation(makeConvo({ unreadCount: 5 }))
+    store.addDMConversation(makeConvo())
+    store.addDMMessage('did:test:alice', makeMsg({ authorDid: 'did:test:alice' }))
+    expect(store.dmUnreadCount('did:test:alice')).toBe(1)
+
     store.markDMRead('did:test:alice')
-    expect(store.dmConversations()[0].unreadCount).toBe(0)
+    expect(store.dmUnreadCount('did:test:alice')).toBe(0)
+    expect(store.dmLastReadTimestamp('did:test:alice')).not.toBeNull()
+  })
+
+  it('new messages after markDMRead show as unread', () => {
+    const store = makeStore()
+    store.setDid('did:test:me')
+    store.addDMConversation(makeConvo())
+    store.addDMMessage('did:test:alice', makeMsg({ authorDid: 'did:test:alice', timestamp: '2024-01-01T00:00:00Z' }))
+    store.markDMRead('did:test:alice')
+    expect(store.dmUnreadCount('did:test:alice')).toBe(0)
+
+    // New message after read
+    store.addDMMessage(
+      'did:test:alice',
+      makeMsg({ authorDid: 'did:test:alice', timestamp: new Date(Date.now() + 10000).toISOString() })
+    )
+    expect(store.dmUnreadCount('did:test:alice')).toBe(1)
+  })
+
+  it('persists lastReadTimestamp to localStorage', () => {
+    const store = makeStore()
+    store.setDid('did:test:me')
+    store.addDMConversation(makeConvo())
+    store.markDMRead('did:test:alice')
+
+    const raw = storage.get('harmony:dmLastRead')
+    expect(raw).toBeDefined()
+    const parsed = JSON.parse(raw!)
+    expect(parsed['did:test:alice']).toBeDefined()
+  })
+
+  it('restores lastReadTimestamp from localStorage', () => {
+    // Pre-seed localStorage
+    const ts = '2024-06-01T00:00:00.000Z'
+    storage.set('harmony:dmLastRead', JSON.stringify({ 'did:test:alice': ts }))
+    const store = createAppStore()
+    expect(store.dmLastReadTimestamp('did:test:alice')).toBe(ts)
   })
 
   it('updates DM message content', () => {

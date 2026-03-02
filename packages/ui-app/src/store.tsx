@@ -100,6 +100,8 @@ export interface AppStore {
   updateDMMessage: (recipientDid: string, messageId: string, newContent: string) => void
   removeDMMessage: (recipientDid: string, messageId: string) => void
   markDMRead: (recipientDid: string) => void
+  dmUnreadCount: (recipientDid: string) => number
+  dmLastReadTimestamp: (recipientDid: string) => string | null
   showDMView: () => boolean
   setShowDMView: (s: boolean) => void
   showNewDMModal: () => boolean
@@ -440,6 +442,48 @@ export function createAppStore(): AppStore {
   const [showNewDMModal, setShowNewDMModal] = createSignal(false)
   const dmMessageCache = new Map<string, MessageData[]>()
   const [dmMsgVersion, setDmMsgVersion] = createSignal(0)
+
+  // DM last-read timestamps: recipientDid -> ISO timestamp string
+  const dmLastReadMap = new Map<string, string>()
+  const [dmLastReadVersion, setDmLastReadVersion] = createSignal(0)
+
+  // Restore from localStorage
+  try {
+    const saved = localStorage.getItem(STORAGE_PREFIX + 'dmLastRead')
+    if (saved) {
+      const parsed = JSON.parse(saved) as Record<string, string>
+      for (const [k, v] of Object.entries(parsed)) {
+        dmLastReadMap.set(k, v)
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  function persistDmLastRead() {
+    try {
+      const obj: Record<string, string> = {}
+      for (const [k, v] of dmLastReadMap) obj[k] = v
+      localStorage.setItem(STORAGE_PREFIX + 'dmLastRead', JSON.stringify(obj))
+    } catch {
+      /* quota / SSR */
+    }
+  }
+
+  const dmLastReadTimestamp = (recipientDid: string): string | null => {
+    dmLastReadVersion() // track reactivity
+    return dmLastReadMap.get(recipientDid) ?? null
+  }
+
+  const dmUnreadCount = (recipientDid: string): number => {
+    dmMsgVersion() // track reactivity
+    dmLastReadVersion() // track reactivity
+    const lastRead = dmLastReadMap.get(recipientDid)
+    const msgs = dmMessageCache.get(recipientDid) ?? []
+    if (!lastRead) return msgs.length > 0 ? msgs.filter((m) => m.authorDid !== did()).length : 0
+    const lastReadTime = new Date(lastRead).getTime()
+    return msgs.filter((m) => new Date(m.timestamp).getTime() > lastReadTime && m.authorDid !== did()).length
+  }
   // DM typing: recipientDid -> Map<did, { displayName, timestamp }>
   const dmTypingMap = new Map<string, Map<string, { displayName: string; timestamp: number }>>()
   const [dmTypingVersion, setDMTypingVersion] = createSignal(0)
@@ -520,6 +564,12 @@ export function createAppStore(): AppStore {
   }
 
   const markDMRead = (recipientDid: string) => {
+    // Set lastReadTimestamp to now
+    dmLastReadMap.set(recipientDid, new Date().toISOString())
+    setDmLastReadVersion((v) => v + 1)
+    persistDmLastRead()
+
+    // Also zero out the unreadCount on the conversation info for backward compat
     const convos = dmConversations()
     const idx = convos.findIndex((c) => c.participantDid === recipientDid)
     if (idx >= 0) {
@@ -899,8 +949,8 @@ export function createAppStore(): AppStore {
     channelUnreadVersion() // track reactivity
     let total = 0
     for (const count of channelUnreadMap.values()) total += count
-    // Include DM unreads
-    for (const convo of dmConversations()) total += convo.unreadCount
+    // Include DM unreads (timestamp-based)
+    for (const convo of dmConversations()) total += dmUnreadCount(convo.participantDid)
     return total
   }
 
@@ -1746,6 +1796,43 @@ export function createAppStore(): AppStore {
         })
       }
     })
+
+    // Social Recovery relay listeners
+    client.on('recovery.request.notify', (...args: unknown[]) => {
+      const event = args[0] as { requestId: string; requesterDID: string; timestamp: string }
+      if (event?.requestId) {
+        setPendingRecoveryRequests([
+          ...pendingRecoveryRequests(),
+          {
+            requestId: event.requestId,
+            claimedDID: event.requesterDID,
+            createdAt: event.timestamp,
+            approvalsCount: 0,
+            threshold: 0,
+            alreadyApproved: false
+          }
+        ])
+      }
+    })
+
+    client.on('recovery.shard.submitted', (...args: unknown[]) => {
+      const event = args[0] as {
+        requestId: string
+        guardianDID: string
+        shardsCollected?: number
+        threshold?: number
+      }
+      if (event?.requestId && event.shardsCollected !== undefined) {
+        // Update pending request approval count (requester side)
+        setPendingRecoveryRequests(
+          pendingRecoveryRequests().map((r) =>
+            r.requestId === event.requestId
+              ? { ...r, approvalsCount: event.shardsCollected!, threshold: event.threshold ?? r.threshold }
+              : r
+          )
+        )
+      }
+    })
   }
 
   function updateConnectionStateFromClient(client: HarmonyClient) {
@@ -1935,6 +2022,8 @@ export function createAppStore(): AppStore {
     updateDMMessage,
     removeDMMessage,
     markDMRead,
+    dmUnreadCount,
+    dmLastReadTimestamp,
     showDMView,
     setShowDMView,
     showNewDMModal,

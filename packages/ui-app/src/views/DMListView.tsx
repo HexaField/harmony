@@ -55,6 +55,7 @@ export const DMListView: Component = () => {
             const isActive = () => store.activeDMRecipient() === convo.participantDid
             const timeInfo = () => (convo.lastMessageAt ? RelativeTime({ timestamp: convo.lastMessageAt }) : null)
             const initials = convo.participantName.substring(0, 2).toUpperCase()
+            const unread = () => store.dmUnreadCount(convo.participantDid)
 
             return (
               <button
@@ -80,9 +81,9 @@ export const DMListView: Component = () => {
                   <Show when={convo.lastMessage}>
                     <div class="flex items-center justify-between">
                       <span class="text-xs text-[var(--text-muted)] truncate">{convo.lastMessage}</span>
-                      <Show when={convo.unreadCount > 0}>
+                      <Show when={unread() > 0}>
                         <span class="ml-1 shrink-0 w-5 h-5 rounded-full bg-[var(--accent)] text-white text-xs flex items-center justify-center font-semibold">
-                          {convo.unreadCount}
+                          {unread()}
                         </span>
                       </Show>
                     </div>

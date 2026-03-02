@@ -33,12 +33,13 @@ export const RoleManagerView: Component = () => {
   const [color, setColor] = createSignal(PRESET_COLORS[0])
   const [permissions, setPermissions] = createSignal<string[]>([])
   const [deleteConfirm, setDeleteConfirm] = createSignal<string | null>(null)
+  const [assigningRole, setAssigningRole] = createSignal<string | null>(null)
+  const [memberSearch, setMemberSearch] = createSignal('')
 
   const canManageRoles = () => {
     const myDid = store.did()
     const me = store.members().find((m) => m.did === myDid)
     if (!me) return false
-    // Check if user has manage_roles permission via any role, or is community creator (has admin role)
     if (me.roles.includes('admin')) return true
     const myRoles = store.roles().filter((r) => me.roles.includes(r.id))
     return myRoles.some((r) => r.permissions.includes('manage_roles'))
@@ -135,6 +136,42 @@ export const RoleManagerView: Component = () => {
     }
   }
 
+  const startAssign = (roleId: string) => {
+    setAssigningRole(roleId)
+    setMemberSearch('')
+  }
+
+  const membersWithRole = (roleId: string) => {
+    return store.members().filter((m) => m.roles.includes(roleId))
+  }
+
+  const membersWithoutRole = (roleId: string) => {
+    const q = memberSearch().toLowerCase()
+    return store.members().filter((m) => {
+      if (m.roles.includes(roleId)) return false
+      if (!q) return true
+      return m.displayName.toLowerCase().includes(q) || m.did.toLowerCase().includes(q)
+    })
+  }
+
+  const doAssignRole = async (memberDid: string, roleId: string) => {
+    const client = store.client()
+    const communityId = store.activeCommunityId()
+    if (!client || !communityId) return
+    await client.assignRole(communityId, memberDid, roleId)
+    store.setMembers(store.members().map((m) => (m.did === memberDid ? { ...m, roles: [...m.roles, roleId] } : m)))
+  }
+
+  const doRemoveRole = async (memberDid: string, roleId: string) => {
+    const client = store.client()
+    const communityId = store.activeCommunityId()
+    if (!client || !communityId) return
+    await client.removeRoleFromMember(communityId, memberDid, roleId)
+    store.setMembers(
+      store.members().map((m) => (m.did === memberDid ? { ...m, roles: m.roles.filter((r) => r !== roleId) } : m))
+    )
+  }
+
   return (
     <Show when={store.showRoleManager()}>
       <div
@@ -168,7 +205,7 @@ export const RoleManagerView: Component = () => {
 
           <Show when={canManageRoles()} fallback={<p class="text-[var(--text-muted)]">{t('ROLE_NO_ROLES')}</p>}>
             {/* Role list */}
-            <Show when={!creating() && !editing()}>
+            <Show when={!creating() && !editing() && !assigningRole()}>
               <button
                 class="mb-4 px-4 py-2 bg-[var(--accent)] rounded text-white text-sm hover:opacity-90"
                 onClick={startCreate}
@@ -181,45 +218,138 @@ export const RoleManagerView: Component = () => {
               <div class="space-y-2">
                 <For each={store.roles()}>
                   {(role, idx) => (
-                    <div class="flex items-center justify-between bg-[var(--bg-input)] rounded px-3 py-2">
-                      <div class="flex items-center gap-2">
-                        <div class="w-3 h-3 rounded-full" style={{ 'background-color': role.color ?? '#888' }} />
-                        <span class="text-sm">{role.name}</span>
+                    <div class="bg-[var(--bg-input)] rounded px-3 py-2">
+                      <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                          <div class="w-3 h-3 rounded-full" style={{ 'background-color': role.color ?? '#888' }} />
+                          <span class="text-sm">{role.name}</span>
+                          <span class="text-xs text-[var(--text-muted)]">{role.permissions.length} perms</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                          <button
+                            class="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] px-1 disabled:opacity-30"
+                            disabled={idx() === 0}
+                            onClick={() => moveRole(role.id, -1)}
+                            title={t('ROLE_MOVE_UP')}
+                          >
+                            ▲
+                          </button>
+                          <button
+                            class="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] px-1 disabled:opacity-30"
+                            disabled={idx() === store.roles().length - 1}
+                            onClick={() => moveRole(role.id, 1)}
+                            title={t('ROLE_MOVE_DOWN')}
+                          >
+                            ▼
+                          </button>
+                          <button
+                            class="text-xs text-[var(--accent)] hover:underline px-1"
+                            onClick={() => startAssign(role.id)}
+                          >
+                            {t('ROLE_ASSIGN')}
+                          </button>
+                          <button
+                            class="text-xs text-[var(--accent)] hover:underline px-1"
+                            onClick={() => startEdit(role)}
+                          >
+                            {t('ROLE_EDIT')}
+                          </button>
+                          <button
+                            class="text-xs text-[var(--error)] hover:underline px-1"
+                            onClick={() => confirmDelete(role.id)}
+                          >
+                            {t('ROLE_DELETE')}
+                          </button>
+                        </div>
                       </div>
-                      <div class="flex items-center gap-1">
-                        <button
-                          class="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] px-1 disabled:opacity-30"
-                          disabled={idx() === 0}
-                          onClick={() => moveRole(role.id, -1)}
-                          title={t('ROLE_MOVE_UP')}
-                        >
-                          ▲
-                        </button>
-                        <button
-                          class="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] px-1 disabled:opacity-30"
-                          disabled={idx() === store.roles().length - 1}
-                          onClick={() => moveRole(role.id, 1)}
-                          title={t('ROLE_MOVE_DOWN')}
-                        >
-                          ▼
-                        </button>
-                        <button
-                          class="text-xs text-[var(--accent)] hover:underline px-1"
-                          onClick={() => startEdit(role)}
-                        >
-                          {t('ROLE_EDIT')}
-                        </button>
-                        <button
-                          class="text-xs text-[var(--error)] hover:underline px-1"
-                          onClick={() => confirmDelete(role.id)}
-                        >
-                          {t('ROLE_DELETE')}
-                        </button>
-                      </div>
+                      {/* Show permissions inline */}
+                      <Show when={role.permissions.length > 0}>
+                        <div class="flex flex-wrap gap-1 mt-1">
+                          <For each={role.permissions}>
+                            {(perm) => {
+                              const permDef = ALL_PERMISSIONS.find((p) => p.key === perm)
+                              return (
+                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-primary)] text-[var(--text-muted)]">
+                                  {permDef ? permDef.label() : perm}
+                                </span>
+                              )
+                            }}
+                          </For>
+                        </div>
+                      </Show>
                     </div>
                   )}
                 </For>
               </div>
+            </Show>
+
+            {/* Assign / Remove role members */}
+            <Show when={assigningRole()}>
+              {(roleId) => {
+                const role = () => store.roles().find((r) => r.id === roleId())
+                return (
+                  <div class="space-y-4">
+                    <div class="flex items-center gap-2 mb-2">
+                      <button
+                        class="text-[var(--text-muted)] hover:text-[var(--text-primary)] text-sm"
+                        onClick={() => setAssigningRole(null)}
+                      >
+                        ← Back
+                      </button>
+                      <h3 class="text-sm font-semibold">{t('ROLE_MEMBER_MENU_TITLE', { name: role()?.name ?? '' })}</h3>
+                    </div>
+
+                    {/* Current members with this role */}
+                    <div>
+                      <label class="text-xs text-[var(--text-muted)] mb-1 block">Members with this role</label>
+                      <Show when={membersWithRole(roleId()).length === 0}>
+                        <p class="text-xs text-[var(--text-muted)] italic">No members have this role</p>
+                      </Show>
+                      <div class="space-y-1">
+                        <For each={membersWithRole(roleId())}>
+                          {(member) => (
+                            <div class="flex items-center justify-between bg-[var(--bg-input)] rounded px-3 py-1.5">
+                              <span class="text-sm">{member.displayName}</span>
+                              <button
+                                class="text-xs text-[var(--error)] hover:underline"
+                                onClick={() => doRemoveRole(member.did, roleId())}
+                              >
+                                {t('ROLE_REMOVE')}
+                              </button>
+                            </div>
+                          )}
+                        </For>
+                      </div>
+                    </div>
+
+                    {/* Search and assign */}
+                    <div>
+                      <label class="text-xs text-[var(--text-muted)] mb-1 block">{t('ROLE_ASSIGN')}</label>
+                      <input
+                        class="w-full bg-[var(--bg-input)] text-sm rounded px-3 py-2 outline-none mb-2"
+                        placeholder="Search members..."
+                        value={memberSearch()}
+                        onInput={(e) => setMemberSearch(e.currentTarget.value)}
+                      />
+                      <div class="space-y-1 max-h-40 overflow-y-auto">
+                        <For each={membersWithoutRole(roleId())}>
+                          {(member) => (
+                            <div class="flex items-center justify-between bg-[var(--bg-input)] rounded px-3 py-1.5">
+                              <span class="text-sm">{member.displayName}</span>
+                              <button
+                                class="text-xs text-[var(--accent)] hover:underline"
+                                onClick={() => doAssignRole(member.did, roleId())}
+                              >
+                                {t('ROLE_ASSIGN')}
+                              </button>
+                            </div>
+                          )}
+                        </For>
+                      </div>
+                    </div>
+                  </div>
+                )
+              }}
             </Show>
 
             {/* Create / Edit form */}

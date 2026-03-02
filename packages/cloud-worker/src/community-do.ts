@@ -92,6 +92,16 @@ export class CommunityDurableObject extends DurableObject {
       CREATE TABLE IF NOT EXISTS e2ee_groups (group_id TEXT PRIMARY KEY, creator_did TEXT NOT NULL, channel_id TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS media (id TEXT PRIMARY KEY, filename TEXT NOT NULL, mime_type TEXT NOT NULL, size INTEGER NOT NULL, data TEXT NOT NULL, uploaded_by TEXT NOT NULL, channel_id TEXT NOT NULL, uploaded_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS moderation_rules (id TEXT PRIMARY KEY, type TEXT NOT NULL, config TEXT NOT NULL);
+
+      CREATE TABLE IF NOT EXISTS voice_tracks (
+        room_id TEXT NOT NULL,
+        did TEXT NOT NULL,
+        track_name TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        media_type TEXT NOT NULL,
+        PRIMARY KEY (room_id, did, track_name)
+      );
     `)
   }
 
@@ -500,15 +510,16 @@ export class CommunityDurableObject extends DurableObject {
         this.sendError(ws, 'NO_SFU: SFU mode not available in cloud worker')
         break
       case 'voice.get-producers':
-        ws.send(
-          serialise({
-            id: msg.id,
-            type: 'voice.producers',
-            timestamp: new Date().toISOString(),
-            sender: 'server',
-            payload: { producers: [] }
-          })
-        )
+        this.handleVoiceGetProducers(ws, meta, msg)
+        break
+      case 'voice.track.published':
+        this.handleVoiceTrackPublished(ws, meta, msg)
+        break
+      case 'voice.track.removed':
+        this.handleVoiceTrackRemoved(ws, meta, msg)
+        break
+      case 'voice.tracks.close':
+        this.handleVoiceTracksClose(ws, msg)
         break
       case 'voice.producer-closed':
         this.handleVoiceProducerClosed(ws, meta, msg)
@@ -861,6 +872,7 @@ export class CommunityDurableObject extends DurableObject {
     const roomId = payload.channelId
 
     this.ctx.storage.sql.exec('DELETE FROM voice_participants WHERE room_id = ? AND did = ?', roomId, meta.did)
+    this.ctx.storage.sql.exec('DELETE FROM voice_tracks WHERE room_id = ? AND did = ?', roomId, meta.did)
 
     this.broadcast(
       serialise({
@@ -1883,28 +1895,6 @@ export class CommunityDurableObject extends DurableObject {
       sessionId: string
       tracks: unknown[]
       sessionDescription?: unknown
-      force?: boolean
-    }
-
-    if (payload.force !== undefined) {
-      try {
-        await this.callCFApi(`/sessions/${payload.sessionId}/tracks/close`, 'PUT', {
-          tracks: payload.tracks,
-          force: payload.force
-        })
-        ws.send(
-          serialise({
-            id: msg.id,
-            type: 'voice.tracks.pulled',
-            timestamp: new Date().toISOString(),
-            sender: 'server',
-            payload: { closed: true }
-          })
-        )
-      } catch (err) {
-        this.sendError(ws, `CF tracks close failed: ${err}`)
-      }
-      return
     }
 
     try {
@@ -1923,6 +1913,158 @@ export class CommunityDurableObject extends DurableObject {
       )
     } catch (err) {
       this.sendError(ws, `CF tracks pull failed: ${err}`)
+    }
+  }
+
+  private async handleVoiceTracksClose(ws: WebSocket, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as {
+      sessionId: string
+      tracks: unknown[]
+      force?: boolean
+    }
+    try {
+      await this.callCFApi(`/sessions/${payload.sessionId}/tracks/close`, 'PUT', {
+        tracks: payload.tracks,
+        force: payload.force ?? false
+      })
+      ws.send(
+        serialise({
+          id: msg.id,
+          type: 'voice.tracks.closed',
+          timestamp: new Date().toISOString(),
+          sender: 'server',
+          payload: { closed: true }
+        })
+      )
+    } catch (err) {
+      this.sendError(ws, `CF tracks close failed: ${err}`)
+    }
+  }
+
+  private handleVoiceGetProducers(ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    // Find which room the caller is in
+    let roomId: string | null = null
+    for (const row of this.ctx.storage.sql.exec(
+      'SELECT room_id FROM voice_participants WHERE did = ? LIMIT 1',
+      meta.did
+    )) {
+      roomId = row.room_id as string
+    }
+
+    const producers: Array<{
+      trackName: string
+      sessionId: string
+      kind: string
+      mediaType: string
+      participantId: string
+    }> = []
+    if (roomId) {
+      for (const row of this.ctx.storage.sql.exec(
+        'SELECT track_name, session_id, kind, media_type, did FROM voice_tracks WHERE room_id = ? AND did != ?',
+        roomId,
+        meta.did
+      )) {
+        producers.push({
+          trackName: row.track_name as string,
+          sessionId: row.session_id as string,
+          kind: row.kind as string,
+          mediaType: row.media_type as string,
+          participantId: row.did as string
+        })
+      }
+    }
+
+    ws.send(
+      serialise({
+        id: msg.id,
+        type: 'voice.get-producers.response',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { producers }
+      })
+    )
+  }
+
+  private handleVoiceTrackPublished(_ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as {
+      roomId: string
+      sessionId: string
+      trackName: string
+      kind: string
+      mediaType: string
+    }
+    const roomId = payload.roomId
+
+    // Store in DB
+    this.ctx.storage.sql.exec(
+      'INSERT OR REPLACE INTO voice_tracks (room_id, did, track_name, session_id, kind, media_type) VALUES (?, ?, ?, ?, ?, ?)',
+      roomId,
+      meta.did,
+      payload.trackName,
+      payload.sessionId,
+      payload.kind,
+      payload.mediaType
+    )
+
+    // Broadcast to all other participants
+    const outMsg = serialise({
+      id: `vtp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      type: 'voice.track.published',
+      timestamp: new Date().toISOString(),
+      sender: meta.did,
+      payload: {
+        roomId,
+        sessionId: payload.sessionId,
+        trackName: payload.trackName,
+        kind: payload.kind,
+        mediaType: payload.mediaType,
+        participantId: meta.did
+      }
+    })
+    const participants = this.getVoiceParticipants(roomId)
+    for (const p of participants) {
+      if (p.did === meta.did) continue
+      for (const target of this.findConnectionsByDID(p.did)) {
+        target.send(outMsg)
+      }
+    }
+  }
+
+  private handleVoiceTrackRemoved(_ws: WebSocket, meta: ConnectionMeta, msg: ProtocolMessage): void {
+    const payload = msg.payload as {
+      roomId: string
+      sessionId: string
+      trackName: string
+    }
+    const roomId = payload.roomId
+
+    // Remove from DB
+    this.ctx.storage.sql.exec(
+      'DELETE FROM voice_tracks WHERE room_id = ? AND did = ? AND track_name = ?',
+      roomId,
+      meta.did,
+      payload.trackName
+    )
+
+    // Broadcast to all other participants
+    const outMsg = serialise({
+      id: `vtr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      type: 'voice.track.removed',
+      timestamp: new Date().toISOString(),
+      sender: meta.did,
+      payload: {
+        roomId,
+        sessionId: payload.sessionId,
+        trackName: payload.trackName,
+        participantId: meta.did
+      }
+    })
+    const participants = this.getVoiceParticipants(roomId)
+    for (const p of participants) {
+      if (p.did === meta.did) continue
+      for (const target of this.findConnectionsByDID(p.did)) {
+        target.send(outMsg)
+      }
     }
   }
 

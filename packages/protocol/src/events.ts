@@ -39,6 +39,8 @@ export type ClientEvent =
   | 'voice.participant.left'
   | 'voice.new-producer'
   | 'voice.producer-closed'
+  | 'voice.track.published'
+  | 'voice.track.removed'
   | 'thread.created'
   | 'thread.message'
   | 'error'

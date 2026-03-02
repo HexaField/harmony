@@ -189,6 +189,9 @@ export interface AppStore {
   setVoiceConnectionState: (s: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected') => void
   speakingUsers: () => Set<string>
   setSpeaking: (did: string, isSpeaking: boolean) => void
+  /** Remote voice tracks by participant DID */
+  voiceRemoteTracks: () => Map<string, Array<{ trackName: string; sessionId: string; kind: string; mediaType: string }>>
+  voiceRemoteTracksVersion: () => number
 
   // Friends
   friends: () => FriendData[]
@@ -606,6 +609,15 @@ export function createAppStore(): AppStore {
     'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
   >('idle')
   const [speakingUsers, _setSpeakingUsers] = createSignal<Set<string>>(new Set())
+  const voiceRemoteTracksMap = new Map<
+    string,
+    Array<{ trackName: string; sessionId: string; kind: string; mediaType: string }>
+  >()
+  const [voiceRemoteTracksVersion, setVoiceRemoteTracksVersion] = createSignal(0)
+  const voiceRemoteTracks = () => {
+    voiceRemoteTracksVersion() // subscribe to changes
+    return voiceRemoteTracksMap
+  }
   const setSpeaking = (did: string, isSpeaking: boolean) => {
     _setSpeakingUsers((prev) => {
       const next = new Set(prev)
@@ -1506,6 +1518,51 @@ export function createAppStore(): AppStore {
     client.on('voice.left', () => {
       setVoiceChannelId(null)
       setVoiceUsers([])
+      voiceRemoteTracksMap.clear()
+      setVoiceRemoteTracksVersion((v) => v + 1)
+    })
+
+    client.on('voice.track.published', (...args: unknown[]) => {
+      const event = args[0] as {
+        participantId?: string
+        trackName?: string
+        sessionId?: string
+        kind?: string
+        mediaType?: string
+      }
+      if (event?.participantId && event?.trackName) {
+        const existing = voiceRemoteTracksMap.get(event.participantId) ?? []
+        const idx = existing.findIndex((t) => t.trackName === event.trackName)
+        const entry = {
+          trackName: event.trackName!,
+          sessionId: event.sessionId ?? '',
+          kind: event.kind ?? 'audio',
+          mediaType: event.mediaType ?? 'audio'
+        }
+        if (idx >= 0) {
+          existing[idx] = entry
+        } else {
+          existing.push(entry)
+        }
+        voiceRemoteTracksMap.set(event.participantId, existing)
+        setVoiceRemoteTracksVersion((v) => v + 1)
+      }
+    })
+
+    client.on('voice.track.removed', (...args: unknown[]) => {
+      const event = args[0] as { participantId?: string; trackName?: string }
+      if (event?.participantId && event?.trackName) {
+        const existing = voiceRemoteTracksMap.get(event.participantId)
+        if (existing) {
+          const filtered = existing.filter((t) => t.trackName !== event.trackName)
+          if (filtered.length > 0) {
+            voiceRemoteTracksMap.set(event.participantId, filtered)
+          } else {
+            voiceRemoteTracksMap.delete(event.participantId)
+          }
+          setVoiceRemoteTracksVersion((v) => v + 1)
+        }
+      }
     })
 
     // Channel lifecycle events
@@ -1948,6 +2005,8 @@ export function createAppStore(): AppStore {
     setVoiceConnectionState,
     speakingUsers,
     setSpeaking,
+    voiceRemoteTracks,
+    voiceRemoteTracksVersion,
     friends,
     setFriends,
     showFriendFinder,

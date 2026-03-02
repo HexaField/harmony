@@ -3,6 +3,11 @@ main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
+# CF Realtime SFU credentials — set via `wrangler secret put` for production
+[vars]
+CALLS_APP_ID = ""
+CALLS_APP_SECRET = ""
+
 [durable_objects]
 bindings = [
   { name = "COMMUNITY", class_name = "CommunityDurableObject" }
@@ -16,6 +21,10 @@ new_sqlite_classes = ["CommunityDurableObject"]
 
 [env.dev]
 name = "harmony-cloud-dev"
+
+[env.dev.vars]
+CALLS_APP_ID = ""
+CALLS_APP_SECRET = ""
 
 [[env.dev.d1_databases]]
 binding = "DB"
@@ -31,6 +40,10 @@ bucket_name = "harmony-media-dev"
 [env.staging]
 name = "harmony-cloud-staging"
 
+[env.staging.vars]
+CALLS_APP_ID = ""
+CALLS_APP_SECRET = ""
+
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "harmony-instances-staging"
@@ -44,6 +57,10 @@ bucket_name = "harmony-media-staging"
 
 [env.production]
 name = "harmony-cloud"
+
+[env.production.vars]
+CALLS_APP_ID = ""
+CALLS_APP_SECRET = ""
 
 [[env.production.d1_databases]]
 binding = "DB"

@@ -728,6 +728,19 @@ export class HarmonyServer {
   } // groupId → metadata
   private _threads: Map<string, ThreadState> = new Map()
   private voiceChannelParticipants: Map<string, Set<string>> = new Map() // channelId → Set<connId>
+  private voiceTrackRegistry: Map<
+    string,
+    Map<
+      string,
+      Array<{
+        trackName: string
+        sessionId: string
+        kind: 'audio' | 'video'
+        mediaType: 'audio' | 'video' | 'screen'
+        participantId: string
+      }>
+    >
+  > = new Map() // channelId → (connId → tracks[])
   private voiceParticipantState: Map<
     string,
     { muted: boolean; deafened: boolean; videoEnabled: boolean; screenSharing: boolean }
@@ -995,6 +1008,12 @@ export class HarmonyServer {
             if (participants.has(connId)) {
               participants.delete(connId)
               this.voiceParticipantState.delete(connId)
+              // Clean up voice track registry
+              const channelTracks = this.voiceTrackRegistry.get(channelId)
+              if (channelTracks) {
+                channelTracks.delete(connId)
+                if (channelTracks.size === 0) this.voiceTrackRegistry.delete(channelId)
+              }
               // Broadcast participant left
               this.broadcastVoiceState(channelId, conn.did, 'voice.participant.left')
             }
@@ -1300,8 +1319,17 @@ export class HarmonyServer {
       case 'voice.tracks.pull':
         this.handleVoiceTracksPull(conn, msg)
         break
+      case 'voice.tracks.close':
+        this.handleVoiceTracksClose(conn, msg)
+        break
       case 'voice.renegotiate':
         this.handleVoiceRenegotiate(conn, msg)
+        break
+      case 'voice.track.published':
+        this.handleVoiceTrackPublished(conn, msg)
+        break
+      case 'voice.track.removed':
+        this.handleVoiceTrackRemoved(conn, msg)
         break
       case 'thread.create':
         await this.handleThreadCreate(conn, msg)
@@ -2686,6 +2714,12 @@ export class HarmonyServer {
     if (participants) {
       participants.delete(conn.id)
       this.voiceParticipantState.delete(conn.id)
+      // Clean up voice track registry for this connection
+      const channelTracks = this.voiceTrackRegistry.get(channelId)
+      if (channelTracks) {
+        channelTracks.delete(conn.id)
+        if (channelTracks.size === 0) this.voiceTrackRegistry.delete(channelId)
+      }
       if (participants.size === 0) {
         this.voiceChannelParticipants.delete(channelId)
       }
@@ -3037,32 +3071,6 @@ export class HarmonyServer {
       sessionId: string
       tracks: unknown[]
       sessionDescription?: unknown
-      force?: boolean
-    }
-
-    if (payload.force !== undefined) {
-      try {
-        await this.callCFApi(`/sessions/${payload.sessionId}/tracks/close`, 'PUT', {
-          tracks: payload.tracks,
-          force: payload.force
-        })
-        this.sendToConnection(conn, {
-          id: `vtpl-${Date.now()}`,
-          type: 'voice.tracks.pulled' as ProtocolMessage['type'],
-          timestamp: new Date().toISOString(),
-          sender: 'server',
-          payload: { closed: true }
-        })
-      } catch (err) {
-        this.sendToConnection(conn, {
-          id: `err-${Date.now()}`,
-          type: 'error',
-          timestamp: new Date().toISOString(),
-          sender: 'server',
-          payload: { code: 'CF_TRACKS_CLOSE_FAILED', message: String(err) }
-        })
-      }
-      return
     }
 
     try {
@@ -3085,6 +3093,141 @@ export class HarmonyServer {
         sender: 'server',
         payload: { code: 'CF_TRACKS_PULL_FAILED', message: String(err) }
       })
+    }
+  }
+
+  private async handleVoiceTracksClose(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as {
+      sessionId: string
+      tracks: unknown[]
+      force?: boolean
+    }
+    try {
+      await this.callCFApi(`/sessions/${payload.sessionId}/tracks/close`, 'PUT', {
+        tracks: payload.tracks,
+        force: payload.force ?? false
+      })
+      this.sendToConnection(conn, {
+        id: `vtc-${Date.now()}`,
+        type: 'voice.tracks.closed' as ProtocolMessage['type'],
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { closed: true }
+      })
+    } catch (err) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'CF_TRACKS_CLOSE_FAILED', message: String(err) }
+      })
+    }
+  }
+
+  private handleVoiceTrackPublished(conn: ServerConnection, msg: ProtocolMessage): void {
+    const payload = msg.payload as {
+      roomId: string
+      sessionId: string
+      trackName: string
+      kind: string
+      mediaType: string
+    }
+    const channelId = payload.roomId || this.findVoiceChannelForConn(conn.id)
+    if (!channelId) return
+
+    // Store in registry
+    if (!this.voiceTrackRegistry.has(channelId)) {
+      this.voiceTrackRegistry.set(channelId, new Map())
+    }
+    const channelTracks = this.voiceTrackRegistry.get(channelId)!
+    if (!channelTracks.has(conn.id)) {
+      channelTracks.set(conn.id, [])
+    }
+    const tracks = channelTracks.get(conn.id)!
+    // Avoid duplicates
+    const existing = tracks.findIndex((t) => t.trackName === payload.trackName)
+    const trackInfo = {
+      trackName: payload.trackName,
+      sessionId: payload.sessionId,
+      kind: (payload.kind === 'video' ? 'video' : 'audio') as 'audio' | 'video',
+      mediaType: payload.mediaType as 'audio' | 'video' | 'screen',
+      participantId: conn.did
+    }
+    if (existing >= 0) {
+      tracks[existing] = trackInfo
+    } else {
+      tracks.push(trackInfo)
+    }
+
+    // Broadcast to all other participants in the channel
+    const participants = this.voiceChannelParticipants.get(channelId)
+    if (participants) {
+      for (const connId of participants) {
+        if (connId === conn.id) continue
+        const otherConn = this._connections.get(connId)
+        if (otherConn) {
+          this.sendToConnection(otherConn, {
+            id: `vtp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            type: 'voice.track.published' as ProtocolMessage['type'],
+            timestamp: new Date().toISOString(),
+            sender: conn.did,
+            payload: {
+              roomId: channelId,
+              sessionId: payload.sessionId,
+              trackName: payload.trackName,
+              kind: payload.kind,
+              mediaType: payload.mediaType,
+              participantId: conn.did
+            }
+          })
+        }
+      }
+    }
+  }
+
+  private handleVoiceTrackRemoved(conn: ServerConnection, msg: ProtocolMessage): void {
+    const payload = msg.payload as {
+      roomId: string
+      sessionId: string
+      trackName: string
+    }
+    const channelId = payload.roomId || this.findVoiceChannelForConn(conn.id)
+    if (!channelId) return
+
+    // Remove from registry
+    const channelTracks = this.voiceTrackRegistry.get(channelId)
+    if (channelTracks) {
+      const tracks = channelTracks.get(conn.id)
+      if (tracks) {
+        const idx = tracks.findIndex((t) => t.trackName === payload.trackName)
+        if (idx >= 0) tracks.splice(idx, 1)
+        if (tracks.length === 0) channelTracks.delete(conn.id)
+      }
+      if (channelTracks.size === 0) this.voiceTrackRegistry.delete(channelId)
+    }
+
+    // Broadcast to all other participants
+    const participants = this.voiceChannelParticipants.get(channelId)
+    if (participants) {
+      for (const connId of participants) {
+        if (connId === conn.id) continue
+        const otherConn = this._connections.get(connId)
+        if (otherConn) {
+          this.sendToConnection(otherConn, {
+            id: `vtr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            type: 'voice.track.removed' as ProtocolMessage['type'],
+            timestamp: new Date().toISOString(),
+            sender: conn.did,
+            payload: {
+              roomId: channelId,
+              sessionId: payload.sessionId,
+              trackName: payload.trackName,
+              participantId: conn.did
+            }
+          })
+        }
+      }
     }
   }
 
@@ -3113,13 +3256,33 @@ export class HarmonyServer {
   }
 
   private async handleVoiceGetProducers(conn: ServerConnection, _msg: ProtocolMessage): Promise<void> {
-    // Return empty producers list — CF SFU tracks producers client-side
+    const channelId = this.findVoiceChannelForConn(conn.id)
+    const producers: Array<{
+      trackName: string
+      sessionId: string
+      kind: 'audio' | 'video'
+      mediaType: 'audio' | 'video' | 'screen'
+      participantId: string
+    }> = []
+
+    if (channelId) {
+      const channelTracks = this.voiceTrackRegistry.get(channelId)
+      if (channelTracks) {
+        for (const [connId, tracks] of channelTracks) {
+          if (connId === conn.id) continue
+          for (const t of tracks) {
+            producers.push(t)
+          }
+        }
+      }
+    }
+
     this.sendToConnection(conn, {
       id: `vgp-${Date.now()}`,
       type: 'voice.get-producers.response',
       timestamp: new Date().toISOString(),
       sender: 'server',
-      payload: { producers: [] }
+      payload: { producers }
     })
   }
 

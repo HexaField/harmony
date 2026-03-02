@@ -1318,7 +1318,7 @@ export class HarmonyClient {
         'cf.session.new': 'voice.session.create',
         'cf.tracks.new': 'voice.tracks.push',
         'cf.renegotiate': 'voice.renegotiate',
-        'cf.tracks.close': 'voice.tracks.pull',
+        'cf.tracks.close': 'voice.tracks.close',
         'cf.session.close': 'voice.leave'
       }
       const msgType = typeMap[method] ?? method
@@ -1781,6 +1781,7 @@ export class HarmonyClient {
       case 'voice.session.created':
       case 'voice.tracks.pushed':
       case 'voice.tracks.pulled':
+      case 'voice.tracks.closed':
       case 'voice.renegotiated':
         this.emitter.emit(msg.type as string, msg.payload)
         break

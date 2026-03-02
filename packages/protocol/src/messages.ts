@@ -116,6 +116,8 @@ export type MessageType =
   | 'voice.tracks.pulled'
   | 'voice.renegotiate'
   | 'voice.renegotiated'
+  | 'voice.tracks.close'
+  | 'voice.tracks.closed'
   | 'voice.track.published'
   | 'voice.track.removed'
   // Files
@@ -279,6 +281,7 @@ export const CLIENT_TO_SERVER_TYPES: MessageType[] = [
   'voice.session.create',
   'voice.tracks.push',
   'voice.tracks.pull',
+  'voice.tracks.close',
   'voice.renegotiate'
 ]
 
@@ -342,6 +345,7 @@ export const SERVER_TO_CLIENT_TYPES: MessageType[] = [
   'voice.session.created',
   'voice.tracks.pushed',
   'voice.tracks.pulled',
+  'voice.tracks.closed',
   'voice.renegotiated',
   'voice.track.published',
   'voice.track.removed'

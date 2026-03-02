@@ -924,7 +924,7 @@ test.describe('Topology 4: Cross-server DMs', () => {
   })
 })
 
-test.describe.skip('Topology 5: Voice operations', () => {
+test.describe('Topology 5: Voice operations', () => {
   let alice: Page
   let bob: Page
   let commId: string
@@ -970,54 +970,68 @@ test.describe.skip('Topology 5: Voice operations', () => {
   })
 
   test('Alice joins voice', async () => {
-    await alice.evaluate((chId: string) => (window as any).__HARMONY_STORE__.joinVoice(chId), voiceChId)
+    await alice.evaluate(async (chId: string) => {
+      await (window as any).__HARMONY_STORE__.client().joinVoice(chId)
+    }, voiceChId)
     await alice.waitForTimeout(2000)
-    const state = await alice.evaluate(() => (window as any).__HARMONY_STORE__.voiceConnectionState())
-    expect(['connected', 'connecting']).toContain(state)
+    const channelId = await alice.evaluate(() => (window as any).__HARMONY_STORE__.voiceChannelId())
+    expect(channelId).toBe(voiceChId)
   })
 
   test('Bob joins voice', async () => {
-    await bob.evaluate((chId: string) => (window as any).__HARMONY_STORE__.joinVoice(chId), voiceChId)
+    await bob.evaluate(async (chId: string) => {
+      await (window as any).__HARMONY_STORE__.client().joinVoice(chId)
+    }, voiceChId)
     await bob.waitForTimeout(2000)
-    const state = await bob.evaluate(() => (window as any).__HARMONY_STORE__.voiceConnectionState())
-    expect(['connected', 'connecting']).toContain(state)
+    const channelId = await bob.evaluate(() => (window as any).__HARMONY_STORE__.voiceChannelId())
+    expect(channelId).toBe(voiceChId)
   })
 
   test('participants visible', async () => {
-    const count = await alice.evaluate(() => (window as any).__HARMONY_STORE__.voiceParticipants()?.length ?? 0)
+    await alice.waitForTimeout(1000)
+    const count = await alice.evaluate(
+      (chId: string) => (window as any).__HARMONY_STORE__.channelVoiceParticipants(chId).length,
+      voiceChId
+    )
     expect(count).toBeGreaterThanOrEqual(1)
   })
 
   test('mute/unmute', async () => {
-    await alice.evaluate(() => (window as any).__HARMONY_STORE__.toggleAudio())
+    await alice.evaluate(() => (window as any).__HARMONY_STORE__.setMuted(true))
     await alice.waitForTimeout(500)
     expect(await alice.evaluate(() => (window as any).__HARMONY_STORE__.isMuted())).toBe(true)
 
-    await alice.evaluate(() => (window as any).__HARMONY_STORE__.toggleAudio())
+    await alice.evaluate(() => (window as any).__HARMONY_STORE__.setMuted(false))
     await alice.waitForTimeout(500)
     expect(await alice.evaluate(() => (window as any).__HARMONY_STORE__.isMuted())).toBe(false)
   })
 
   test('deafen/undeafen', async () => {
-    await alice.evaluate(() => (window as any).__HARMONY_STORE__.toggleDeafen())
+    await alice.evaluate(() => (window as any).__HARMONY_STORE__.setDeafened(true))
     await alice.waitForTimeout(500)
     expect(await alice.evaluate(() => (window as any).__HARMONY_STORE__.isDeafened())).toBe(true)
 
-    await alice.evaluate(() => (window as any).__HARMONY_STORE__.toggleDeafen())
+    await alice.evaluate(() => (window as any).__HARMONY_STORE__.setDeafened(false))
     await alice.waitForTimeout(500)
     expect(await alice.evaluate(() => (window as any).__HARMONY_STORE__.isDeafened())).toBe(false)
   })
 
   test('Alice leaves voice', async () => {
-    await alice.evaluate(() => (window as any).__HARMONY_STORE__.leaveVoice())
+    await alice.evaluate(async () => {
+      await (window as any).__HARMONY_STORE__.client().leaveVoice()
+    })
     await alice.waitForTimeout(500)
-    expect(await alice.evaluate(() => (window as any).__HARMONY_STORE__.voiceConnectionState())).toBe('idle')
+    const channelId = await alice.evaluate(() => (window as any).__HARMONY_STORE__.voiceChannelId())
+    expect(channelId).toBeNull()
   })
 
   test('Bob leaves voice', async () => {
-    await bob.evaluate(() => (window as any).__HARMONY_STORE__.leaveVoice())
+    await bob.evaluate(async () => {
+      await (window as any).__HARMONY_STORE__.client().leaveVoice()
+    })
     await bob.waitForTimeout(500)
-    expect(await bob.evaluate(() => (window as any).__HARMONY_STORE__.voiceConnectionState())).toBe('idle')
+    const channelId = await bob.evaluate(() => (window as any).__HARMONY_STORE__.voiceChannelId())
+    expect(channelId).toBeNull()
   })
 })
 

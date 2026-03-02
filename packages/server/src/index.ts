@@ -2957,6 +2957,22 @@ export class HarmonyServer {
         sender: 'server',
         payload: { channelId: payload.channelId, token, mode: 'sfu' }
       })
+    } else if (this.callsAppId && this.callsAppSecret) {
+      // CF Realtime SFU mode — client creates session via voice.session.create
+      const token = Buffer.from(
+        JSON.stringify({
+          room: payload.channelId,
+          participant: conn.did,
+          iat: Date.now()
+        })
+      ).toString('base64')
+      this.sendToConnection(conn, {
+        id: `vt-${Date.now()}`,
+        type: 'voice.token.response' as ProtocolMessage['type'],
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { channelId: payload.channelId, token, mode: 'cf' }
+      })
     } else {
       // No SFU — generate a basic signaling-only token
       const token = Buffer.from(
@@ -2972,6 +2988,152 @@ export class HarmonyServer {
         timestamp: new Date().toISOString(),
         sender: 'server',
         payload: { channelId: payload.channelId, token, mode: 'signaling' }
+      })
+    }
+  }
+
+  private async callCFApi(path: string, method: string, body?: unknown): Promise<Record<string, unknown>> {
+    if (!this.callsAppId || !this.callsAppSecret) {
+      throw new Error('CF Realtime SFU not configured — set CALLS_APP_ID and CALLS_APP_SECRET')
+    }
+    const url = `https://rtc.live.cloudflare.com/v1/apps/${this.callsAppId}${path}`
+    const response = await fetch(url, {
+      method,
+      headers: {
+        Authorization: `Bearer ${this.callsAppSecret}`,
+        'Content-Type': 'application/json'
+      },
+      body: body ? JSON.stringify(body) : undefined
+    })
+    if (!response.ok) {
+      const text = await response.text()
+      throw new Error(`CF API error ${response.status}: ${text}`)
+    }
+    return response.json() as Promise<Record<string, unknown>>
+  }
+
+  private async handleVoiceSessionCreate(conn: ServerConnection, _msg: ProtocolMessage): Promise<void> {
+    try {
+      const result = await this.callCFApi('/sessions/new', 'POST')
+      this.sendToConnection(conn, {
+        id: `vsc-${Date.now()}`,
+        type: 'voice.session.created' as ProtocolMessage['type'],
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { sessionId: result.sessionId }
+      })
+    } catch (err) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'CF_SESSION_CREATE_FAILED', message: String(err) }
+      })
+    }
+  }
+
+  private async handleVoiceTracksPush(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { sessionId: string; tracks: unknown[]; sessionDescription?: unknown }
+    try {
+      const result = await this.callCFApi(`/sessions/${payload.sessionId}/tracks/new`, 'POST', {
+        tracks: payload.tracks,
+        sessionDescription: payload.sessionDescription
+      })
+      this.sendToConnection(conn, {
+        id: `vtp-${Date.now()}`,
+        type: 'voice.tracks.pushed' as ProtocolMessage['type'],
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: result
+      })
+    } catch (err) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'CF_TRACKS_PUSH_FAILED', message: String(err) }
+      })
+    }
+  }
+
+  private async handleVoiceTracksPull(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as {
+      sessionId: string
+      tracks: unknown[]
+      sessionDescription?: unknown
+      force?: boolean
+    }
+
+    if (payload.force !== undefined) {
+      try {
+        await this.callCFApi(`/sessions/${payload.sessionId}/tracks/close`, 'PUT', {
+          tracks: payload.tracks,
+          force: payload.force
+        })
+        this.sendToConnection(conn, {
+          id: `vtpl-${Date.now()}`,
+          type: 'voice.tracks.pulled' as ProtocolMessage['type'],
+          timestamp: new Date().toISOString(),
+          sender: 'server',
+          payload: { closed: true }
+        })
+      } catch (err) {
+        this.sendToConnection(conn, {
+          id: `err-${Date.now()}`,
+          type: 'error',
+          timestamp: new Date().toISOString(),
+          sender: 'server',
+          payload: { code: 'CF_TRACKS_CLOSE_FAILED', message: String(err) }
+        })
+      }
+      return
+    }
+
+    try {
+      const result = await this.callCFApi(`/sessions/${payload.sessionId}/tracks/new`, 'POST', {
+        tracks: payload.tracks,
+        sessionDescription: payload.sessionDescription
+      })
+      this.sendToConnection(conn, {
+        id: `vtpl-${Date.now()}`,
+        type: 'voice.tracks.pulled' as ProtocolMessage['type'],
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: result
+      })
+    } catch (err) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'CF_TRACKS_PULL_FAILED', message: String(err) }
+      })
+    }
+  }
+
+  private async handleVoiceRenegotiate(conn: ServerConnection, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { sessionId: string; sessionDescription: unknown }
+    try {
+      const result = await this.callCFApi(`/sessions/${payload.sessionId}/renegotiate`, 'PUT', {
+        sessionDescription: payload.sessionDescription
+      })
+      this.sendToConnection(conn, {
+        id: `vrn-${Date.now()}`,
+        type: 'voice.renegotiated' as ProtocolMessage['type'],
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: result
+      })
+    } catch (err) {
+      this.sendToConnection(conn, {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        sender: 'server',
+        payload: { code: 'CF_RENEGOTIATE_FAILED', message: String(err) }
       })
     }
   }

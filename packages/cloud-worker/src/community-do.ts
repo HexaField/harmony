@@ -479,6 +479,18 @@ export class CommunityDurableObject extends DurableObject {
       case 'voice.token':
         this.handleVoiceToken(ws, msg)
         break
+      case 'voice.session.create':
+        this.handleVoiceSessionCreate(ws, meta, msg)
+        break
+      case 'voice.tracks.push':
+        this.handleVoiceTracksPush(ws, msg)
+        break
+      case 'voice.tracks.pull':
+        this.handleVoiceTracksPull(ws, msg)
+        break
+      case 'voice.renegotiate':
+        this.handleVoiceRenegotiate(ws, msg)
+        break
       case 'voice.transport.connect':
       case 'voice.transport.connect-recv':
       case 'voice.transport.create-recv':
@@ -1806,15 +1818,145 @@ export class CommunityDurableObject extends DurableObject {
     }
   }
 
+  private async callCFApi(path: string, method: string, body?: unknown): Promise<Record<string, unknown>> {
+    const appId = (this.env as Env).CALLS_APP_ID
+    const appSecret = (this.env as Env).CALLS_APP_SECRET
+    if (!appId || !appSecret) {
+      throw new Error('CF Realtime SFU not configured')
+    }
+    const url = `https://rtc.live.cloudflare.com/v1/apps/${appId}${path}`
+    const response = await fetch(url, {
+      method,
+      headers: {
+        Authorization: `Bearer ${appSecret}`,
+        'Content-Type': 'application/json'
+      },
+      body: body ? JSON.stringify(body) : undefined
+    })
+    if (!response.ok) {
+      const text = await response.text()
+      throw new Error(`CF API error ${response.status}: ${text}`)
+    }
+    return response.json() as Promise<Record<string, unknown>>
+  }
+
+  private async handleVoiceSessionCreate(ws: WebSocket, _meta: ConnectionMeta, msg: ProtocolMessage): Promise<void> {
+    try {
+      const result = await this.callCFApi('/sessions/new', 'POST')
+      ws.send(
+        serialise({
+          id: msg.id,
+          type: 'voice.session.created',
+          timestamp: new Date().toISOString(),
+          sender: 'server',
+          payload: { sessionId: result.sessionId }
+        })
+      )
+    } catch (err) {
+      this.sendError(ws, `CF session create failed: ${err}`)
+    }
+  }
+
+  private async handleVoiceTracksPush(ws: WebSocket, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { sessionId: string; tracks: unknown[]; sessionDescription?: unknown }
+    try {
+      const result = await this.callCFApi(`/sessions/${payload.sessionId}/tracks/new`, 'POST', {
+        tracks: payload.tracks,
+        sessionDescription: payload.sessionDescription
+      })
+      ws.send(
+        serialise({
+          id: msg.id,
+          type: 'voice.tracks.pushed',
+          timestamp: new Date().toISOString(),
+          sender: 'server',
+          payload: result
+        })
+      )
+    } catch (err) {
+      this.sendError(ws, `CF tracks push failed: ${err}`)
+    }
+  }
+
+  private async handleVoiceTracksPull(ws: WebSocket, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as {
+      sessionId: string
+      tracks: unknown[]
+      sessionDescription?: unknown
+      force?: boolean
+    }
+
+    if (payload.force !== undefined) {
+      try {
+        await this.callCFApi(`/sessions/${payload.sessionId}/tracks/close`, 'PUT', {
+          tracks: payload.tracks,
+          force: payload.force
+        })
+        ws.send(
+          serialise({
+            id: msg.id,
+            type: 'voice.tracks.pulled',
+            timestamp: new Date().toISOString(),
+            sender: 'server',
+            payload: { closed: true }
+          })
+        )
+      } catch (err) {
+        this.sendError(ws, `CF tracks close failed: ${err}`)
+      }
+      return
+    }
+
+    try {
+      const result = await this.callCFApi(`/sessions/${payload.sessionId}/tracks/new`, 'POST', {
+        tracks: payload.tracks,
+        sessionDescription: payload.sessionDescription
+      })
+      ws.send(
+        serialise({
+          id: msg.id,
+          type: 'voice.tracks.pulled',
+          timestamp: new Date().toISOString(),
+          sender: 'server',
+          payload: result
+        })
+      )
+    } catch (err) {
+      this.sendError(ws, `CF tracks pull failed: ${err}`)
+    }
+  }
+
+  private async handleVoiceRenegotiate(ws: WebSocket, msg: ProtocolMessage): Promise<void> {
+    const payload = msg.payload as { sessionId: string; sessionDescription: unknown }
+    try {
+      const result = await this.callCFApi(`/sessions/${payload.sessionId}/renegotiate`, 'PUT', {
+        sessionDescription: payload.sessionDescription
+      })
+      ws.send(
+        serialise({
+          id: msg.id,
+          type: 'voice.renegotiated',
+          timestamp: new Date().toISOString(),
+          sender: 'server',
+          payload: result
+        })
+      )
+    } catch (err) {
+      this.sendError(ws, `CF renegotiate failed: ${err}`)
+    }
+  }
+
   private handleVoiceToken(ws: WebSocket, msg: ProtocolMessage): void {
-    const token = btoa(JSON.stringify({ mode: 'signaling', timestamp: Date.now() }))
+    const hasCF = !!(this.env as Env).CALLS_APP_ID && !!(this.env as Env).CALLS_APP_SECRET
+    const mode = hasCF ? 'cf' : 'signaling'
+    const token = btoa(JSON.stringify({ mode, timestamp: Date.now() }))
     ws.send(
       serialise({
         id: msg.id,
         type: 'voice.token.response',
         timestamp: new Date().toISOString(),
         sender: 'server',
-        payload: { token }
+        payload: { token, mode }
       })
     )
   }

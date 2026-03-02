@@ -5,6 +5,8 @@ export interface Env {
   DB: D1Database
   MEDIA: R2Bucket
   ALLOWED_ORIGINS: string
+  CALLS_APP_ID?: string
+  CALLS_APP_SECRET?: string
 }
 
 export interface Instance {

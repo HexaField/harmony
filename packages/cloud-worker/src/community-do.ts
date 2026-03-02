@@ -645,7 +645,8 @@ export class CommunityDurableObject extends DurableObject {
       return
     }
 
-    const communityId = crypto.randomUUID()
+    const communityId = this.communityId || crypto.randomUUID()
+    if (!this.communityId) this.communityId = communityId
 
     this.quadStore.addAll([
       { subject: communityId, predicate: 'rdf:type', object: HarmonyType.Community, graph: communityId },

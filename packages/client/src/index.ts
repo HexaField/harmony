@@ -19,7 +19,8 @@ import { VCService } from '@harmony/vc'
 import type { ZCAPService, Capability } from '@harmony/zcap'
 import type { MLSGroup, MLSProvider, DMChannel, DMProvider } from '@harmony/e2ee'
 import { SimplifiedMLSProvider, SimplifiedDMProvider } from '@harmony/e2ee'
-import type { VoiceClient, VoiceConnection, VoiceSignaling } from '@harmony/voice'
+import type { VoiceClient, VoiceConnection, VoiceSignaling, SignalingFn } from '@harmony/voice'
+import { CloudflareSFUAdapter } from '@harmony/voice'
 import type { MediaClient, MediaRef, FileInput, DecryptedFile } from '@harmony/media'
 import type { ClientSearchIndex, SearchQuery, SearchResult } from '@harmony/search'
 import type { GovernanceEngine, ProposalDef, Proposal } from '@harmony/governance'
@@ -1307,7 +1308,23 @@ export class HarmonyClient {
     const communityId = channelId.match(/^(community:[^:]+)/)?.[1] ?? undefined
 
     // Wire signaling before joining — route to the community's server
-    this.voiceClient.setSignaling(this.createVoiceSignaling(communityId))
+    const voiceSignaling = this.createVoiceSignaling(communityId)
+    this.voiceClient.setSignaling(voiceSignaling)
+
+    // Create CF SFU adapter — signaling goes through the server as a proxy
+    const sfuSignaling: SignalingFn = async (method, payload) => {
+      // Map CF adapter method names to voice signaling message types
+      const typeMap: Record<string, string> = {
+        'cf.session.new': 'voice.session.create',
+        'cf.tracks.new': 'voice.tracks.push',
+        'cf.renegotiate': 'voice.renegotiate',
+        'cf.tracks.close': 'voice.tracks.pull',
+        'cf.session.close': 'voice.leave'
+      }
+      const msgType = typeMap[method] ?? method
+      return voiceSignaling.sendVoiceSignal(msgType, payload)
+    }
+    this.voiceClient.setSFUAdapter(new CloudflareSFUAdapter(sfuSignaling))
 
     // Request token from server
     this.send(this.createMessage('voice.token', { channelId, communityId }))
@@ -1760,12 +1777,23 @@ export class HarmonyClient {
       case 'voice.transport.create-recv.response':
       case 'voice.consumer.resume.response':
       case 'voice.get-producers.response':
+      // CF SFU signaling responses
+      case 'voice.session.created':
+      case 'voice.tracks.pushed':
+      case 'voice.tracks.pulled':
+      case 'voice.renegotiated':
         this.emitter.emit(msg.type as string, msg.payload)
         break
       case 'voice.offer':
       case 'voice.answer':
       case 'voice.ice':
         this.emitter.emit(msg.type as string, msg)
+        break
+      case 'voice.track.published':
+      case 'voice.track.removed':
+        // Forward to voice signal handlers (VoiceClient listens for these)
+        this.emitter.emit(msg.type as string, msg.payload)
+        this.emitter.emit('voice.signal', { ...(msg.payload as Record<string, unknown>), type: msg.type })
         break
       case 'community.auto-joined':
         this.handleCommunityAutoJoined(msg)

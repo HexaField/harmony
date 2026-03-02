@@ -1729,7 +1729,7 @@ export function createAppStore(): AppStore {
       wsFactory: (url: string) => new WebSocket(url) as any,
       identity: id,
       keyPair: kp,
-      voiceClient: new VoiceClient({ mode: 'mediasoup', e2eeBridge: new E2EEBridge() }),
+      voiceClient: new VoiceClient({ e2eeBridge: new E2EEBridge() }),
       searchIndex
     })
 

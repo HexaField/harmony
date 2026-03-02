@@ -1,5 +1,6 @@
 import type { VoiceConnection, VoiceParticipant, JoinOptions } from './room-manager.js'
 import type { E2EEBridge } from './e2ee-bridge.js'
+import type { ClientSFUAdapter } from './sfu-adapter.js'
 import { createEncryptTransform, createDecryptTransform } from './insertable-streams.js'
 
 type ParticipantJoinedCb = (p: VoiceParticipant) => void
@@ -31,7 +32,7 @@ export const BrowserMediaProvider: MediaDeviceProvider = {
 }
 
 /**
- * Signaling interface for SFU communication.
+ * Signaling interface for voice communication.
  * The HarmonyClient implements this to route messages through the existing WebSocket.
  */
 export interface VoiceSignaling {
@@ -48,32 +49,36 @@ export interface VoiceSignaling {
 export interface VoiceClientOptions {
   mediaProvider?: MediaDeviceProvider
   e2eeBridge?: E2EEBridge
-  /** SFU mode: 'mediasoup' for real WebRTC, 'test' for InMemoryAdapter tokens */
-  mode?: 'mediasoup' | 'test'
-  /** Signaling interface for SFU communication */
+  /** Client-side SFU adapter. If not provided, voice operates in signaling-only mode (no media). */
+  sfuAdapter?: ClientSFUAdapter
+  /** Signaling interface for voice communication */
   signaling?: VoiceSignaling
+  /**
+   * @deprecated Use sfuAdapter instead. Kept for backward compat with test code.
+   * 'cf' = CloudflareSFUAdapter, 'test' = no SFU adapter (signaling only)
+   */
+  mode?: 'cf' | 'test'
 }
 
 /**
- * Client-side voice connection. Supports both test mode (InMemoryAdapter base64 tokens)
- * and mediasoup mode (real WebRTC via mediasoup-client).
+ * Client-side voice connection. Supports CF Realtime SFU (via ClientSFUAdapter)
+ * and a test/signaling-only mode for environments without WebRTC.
  */
 export class VoiceClient {
   private connection: VoiceConnectionImpl | null = null
   private mediaProvider: MediaDeviceProvider
   private e2eeBridge?: E2EEBridge
-  private mode: 'mediasoup' | 'test'
+  private sfuAdapter?: ClientSFUAdapter
   private signaling?: VoiceSignaling
 
   constructor(mediaProviderOrOpts?: MediaDeviceProvider | VoiceClientOptions) {
     if (mediaProviderOrOpts && 'getUserMedia' in mediaProviderOrOpts) {
       this.mediaProvider = mediaProviderOrOpts
-      this.mode = 'test'
     } else {
       const opts = mediaProviderOrOpts as VoiceClientOptions | undefined
       this.mediaProvider = opts?.mediaProvider ?? BrowserMediaProvider
       this.e2eeBridge = opts?.e2eeBridge
-      this.mode = opts?.mode ?? 'test'
+      this.sfuAdapter = opts?.sfuAdapter
       this.signaling = opts?.signaling
     }
   }
@@ -98,12 +103,21 @@ export class VoiceClient {
     this.signaling = signaling
   }
 
+  setSFUAdapter(adapter: ClientSFUAdapter): void {
+    this.sfuAdapter = adapter
+  }
+
   async joinRoom(token: string, opts?: JoinOptions): Promise<VoiceConnection> {
     let roomId: string
     let participantId: string
-    let sfuParams: SFUTransportParams | undefined
 
-    if (this.mode === 'mediasoup') {
+    try {
+      const decoded = typeof Buffer !== 'undefined' ? Buffer.from(token, 'base64').toString() : atob(token)
+      const tokenData = JSON.parse(decoded)
+      roomId = tokenData.room ?? tokenData.roomId ?? ''
+      participantId = tokenData.participant ?? tokenData.participantId ?? ''
+    } catch {
+      // Try JWT-style token (base64url segments)
       try {
         const base64 = token.split('.')[1]
         const json =
@@ -116,23 +130,8 @@ export class VoiceClient {
                   .join('')
               )
         const payload = JSON.parse(json)
-        roomId = payload.roomId
-        participantId = payload.participantId
-        sfuParams = {
-          transportId: payload.transportId,
-          dtlsParameters: payload.dtlsParameters,
-          iceCandidates: payload.iceCandidates,
-          iceParameters: payload.iceParameters,
-          routerRtpCapabilities: payload.routerRtpCapabilities
-        }
-      } catch {
-        throw new Error('Invalid mediasoup token')
-      }
-    } else {
-      try {
-        const tokenData = JSON.parse(Buffer.from(token, 'base64').toString())
-        roomId = tokenData.room
-        participantId = tokenData.participant
+        roomId = payload.room ?? payload.roomId ?? ''
+        participantId = payload.participant ?? payload.participantId ?? ''
       } catch {
         throw new Error('Invalid token')
       }
@@ -145,16 +144,16 @@ export class VoiceClient {
       opts?.videoEnabled ?? false,
       this.mediaProvider,
       this.e2eeBridge,
-      sfuParams,
+      this.sfuAdapter,
       this.signaling,
       () => {
         this.connection = null
       }
     )
 
-    // In mediasoup mode, set up the WebRTC connection
-    if (this.mode === 'mediasoup' && sfuParams && this.signaling) {
-      await conn.initMediasoup()
+    // If we have an SFU adapter, initialize the WebRTC session
+    if (this.sfuAdapter && this.signaling) {
+      await conn.initSFUSession()
     }
 
     this.connection = conn
@@ -173,14 +172,6 @@ export class VoiceClient {
   }
 }
 
-interface SFUTransportParams {
-  transportId: string
-  dtlsParameters: unknown
-  iceCandidates: unknown[]
-  iceParameters: unknown
-  routerRtpCapabilities: unknown
-}
-
 class VoiceConnectionImpl implements VoiceConnection {
   roomId: string
   participants: VoiceParticipant[] = []
@@ -196,20 +187,16 @@ class VoiceConnectionImpl implements VoiceConnection {
   private disconnected = false
   private mediaProvider: MediaDeviceProvider
   private e2eeBridge?: E2EEBridge
-  private sfuParams?: SFUTransportParams
+  private sfuAdapter?: ClientSFUAdapter
   private signaling?: VoiceSignaling
   private disconnectCb: () => void
 
-  // mediasoup-client instances
-  private msDevice: any | null = null
-  private sendTransport: any | null = null
-  private recvTransport: any | null = null
-  private audioProducer: any | null = null
-  private videoProducer: any | null = null
-  private screenProducer: any | null = null
-  private consumers = new Map<string, any>()
-  /** Map producerId → { participantId, kind } for cleanup on producer-closed */
-  private producerOwners = new Map<string, { participantId: string; kind: 'audio' | 'video' | 'screen' }>()
+  // SFU session state
+  private sessionId: string | null = null
+
+  // Track management
+  private localTrackMids = new Map<string, string>() // trackName → mid
+  private remoteTrackOwners = new Map<string, { participantId: string; kind: 'audio' | 'video' | 'screen' }>()
 
   // Local media streams
   private audioStream: MediaStream | null = null
@@ -229,7 +216,7 @@ class VoiceConnectionImpl implements VoiceConnection {
     videoEnabled: boolean,
     mediaProvider: MediaDeviceProvider,
     e2eeBridge: E2EEBridge | undefined,
-    sfuParams: SFUTransportParams | undefined,
+    sfuAdapter: ClientSFUAdapter | undefined,
     signaling: VoiceSignaling | undefined,
     disconnectCb: () => void
   ) {
@@ -239,168 +226,177 @@ class VoiceConnectionImpl implements VoiceConnection {
     this.localVideoEnabled = videoEnabled
     this.mediaProvider = mediaProvider
     this.e2eeBridge = e2eeBridge
-    this.sfuParams = sfuParams
+    this.sfuAdapter = sfuAdapter
     this.signaling = signaling
     this.disconnectCb = disconnectCb
   }
 
-  get hasSFUParams(): boolean {
-    return this.sfuParams !== undefined
+  get hasSFU(): boolean {
+    return this.sfuAdapter !== undefined && this.sessionId !== null
   }
   get hasE2EE(): boolean {
     return this.e2eeBridge?.hasKey() ?? false
   }
 
   /**
-   * Initialize mediasoup-client Device and transports.
-   * Called after constructor when in mediasoup mode.
+   * Initialize SFU session — create session, push initial tracks, set up listeners.
    */
-  async initMediasoup(): Promise<void> {
-    if (!this.sfuParams || !this.signaling) return
+  async initSFUSession(): Promise<void> {
+    if (!this.sfuAdapter || !this.signaling) return
 
     try {
-      // Dynamic import — mediasoup-client is only available in browser
-      const { Device } = await import('mediasoup-client')
+      this.sessionId = await this.sfuAdapter.createSession()
 
-      this.msDevice = new Device()
-      await this.msDevice.load({
-        routerRtpCapabilities: this.sfuParams.routerRtpCapabilities as any
-      })
-
-      // Create send transport
-      this.sendTransport = this.msDevice.createSendTransport({
-        id: this.sfuParams.transportId,
-        iceParameters: this.sfuParams.iceParameters as any,
-        iceCandidates: this.sfuParams.iceCandidates as any,
-        dtlsParameters: this.sfuParams.dtlsParameters as any,
-        iceServers: [],
-        additionalSettings: { encodedInsertableStreams: true }
-      })
-
-      this.sendTransport.on(
-        'connect',
-        async ({ dtlsParameters }: any, callback: () => void, errback: (e: Error) => void) => {
-          try {
-            await this.signaling!.sendVoiceSignal('voice.transport.connect', {
-              roomId: this.roomId,
-              dtlsParameters
-            })
-            callback()
-          } catch (err) {
-            errback(err instanceof Error ? err : new Error(String(err)))
-          }
-        }
-      )
-
-      this.sendTransport.on(
-        'produce',
-        async (
-          { kind, rtpParameters, appData }: any,
-          callback: (r: { id: string }) => void,
-          errback: (e: Error) => void
-        ) => {
-          try {
-            const response = await this.signaling!.sendVoiceSignal('voice.produce', {
-              roomId: this.roomId,
-              kind,
-              rtpParameters,
-              mediaType: appData?.type ?? kind // 'audio' | 'video' | 'screen'
-            })
-            callback({ id: response.producerId as string })
-          } catch (err) {
-            errback(err instanceof Error ? err : new Error(String(err)))
-          }
-        }
-      )
-
-      // Request a recv transport from the server
-      const recvParams = await this.signaling.sendVoiceSignal('voice.transport.create-recv', {
-        roomId: this.roomId
-      })
-
-      if (recvParams.transportId) {
-        this.recvTransport = this.msDevice.createRecvTransport({
-          id: recvParams.transportId as string,
-          iceParameters: recvParams.iceParameters as any,
-          iceCandidates: recvParams.iceCandidates as any,
-          dtlsParameters: recvParams.dtlsParameters as any,
-          iceServers: [],
-          additionalSettings: { encodedInsertableStreams: true }
-        })
-
-        this.recvTransport.on(
-          'connect',
-          async ({ dtlsParameters }: any, callback: () => void, errback: (e: Error) => void) => {
-            try {
-              await this.signaling!.sendVoiceSignal('voice.transport.connect-recv', {
-                roomId: this.roomId,
-                dtlsParameters
-              })
-              callback()
-            } catch (err) {
-              errback(err instanceof Error ? err : new Error(String(err)))
-            }
-          }
-        )
-      }
-
-      // If audio enabled on join, start producing audio
+      // If audio enabled on join, acquire and push audio
       if (this.localAudioEnabled) {
-        await this.startAudioProducer()
+        await this.startAudioTrack()
       }
 
-      // Listen for new producers from other participants
-      this.signaling.onVoiceSignal('voice.new-producer', async (payload) => {
+      // Attach E2EE transforms to the peer connection
+      this.attachE2EETransforms()
+
+      // Listen for new tracks from other participants
+      this.signaling.onVoiceSignal('voice.track.published', async (payload) => {
         const kind = payload.kind as string
         const mediaKind: 'audio' | 'video' | 'screen' =
           (payload.mediaType as string) === 'screen' ? 'screen' : (kind as 'audio' | 'video')
-        // Track producer ownership for cleanup
-        this.producerOwners.set(payload.producerId as string, {
-          participantId: payload.participantId as string,
-          kind: mediaKind
-        })
-        await this.consumeProducer(payload.producerId as string, payload.participantId as string, mediaKind)
+        const trackName = payload.trackName as string
+        const remoteSessionId = payload.sessionId as string
+        const participantId = payload.participantId as string
+
+        this.remoteTrackOwners.set(trackName, { participantId, kind: mediaKind })
+        await this.pullRemoteTrack(remoteSessionId, trackName, participantId, mediaKind)
       })
 
-      // Listen for producer-closed from server (remote stopped their media)
-      this.signaling.onVoiceSignal('voice.producer-closed', (payload) => {
-        const producerId = payload.producerId as string
-        const owner = this.producerOwners.get(producerId)
+      // Listen for track removal
+      this.signaling.onVoiceSignal('voice.track.removed', (payload) => {
+        const trackName = payload.trackName as string
+        const owner = this.remoteTrackOwners.get(trackName)
         if (owner) {
-          // Close the matching consumer
-          for (const [consumerId, consumer] of this.consumers) {
-            if (consumer.producerId === producerId) {
-              consumer.close()
-              this.consumers.delete(consumerId)
-              break
-            }
-          }
-          // Notify UI that this track is gone
           for (const cb of this.trackRemovedCbs) cb(owner.participantId, owner.kind)
-          this.producerOwners.delete(producerId)
+          this.remoteTrackOwners.delete(trackName)
         }
       })
 
-      // Request existing producers
+      // Request existing tracks from other participants already in the room
       const existing = await this.signaling.sendVoiceSignal('voice.get-producers', {
         roomId: this.roomId
       })
       if (Array.isArray(existing.producers)) {
         for (const p of existing.producers) {
           const mediaKind: 'audio' | 'video' | 'screen' = p.mediaType === 'screen' ? 'screen' : p.kind
-          this.producerOwners.set(p.producerId, { participantId: p.participantId, kind: mediaKind })
-          await this.consumeProducer(p.producerId, p.participantId, mediaKind)
+          const trackName = p.trackName ?? p.producerId
+          const remoteSessionId = p.sessionId ?? ''
+          this.remoteTrackOwners.set(trackName, { participantId: p.participantId, kind: mediaKind })
+          await this.pullRemoteTrack(remoteSessionId, trackName, p.participantId, mediaKind)
         }
       }
 
-      console.debug('[Voice] Mediasoup connection established')
+      console.debug('[Voice] SFU session established:', this.sessionId)
     } catch (err) {
-      console.error('[Voice] Mediasoup init failed:', err)
+      console.error('[Voice] SFU init failed:', err)
       throw err
     }
   }
 
-  private async startAudioProducer(): Promise<void> {
+  /**
+   * Push a local media track to the SFU.
+   */
+  private async pushLocalTrack(track: MediaStreamTrack, trackName: string): Promise<void> {
+    if (!this.sfuAdapter || !this.sessionId) return
+
+    const pc = this.sfuAdapter.getPeerConnection()
+    if (pc) {
+      pc.addTrack(track)
+
+      const offer = await pc.createOffer()
+      await pc.setLocalDescription(offer)
+
+      const result = await this.sfuAdapter.pushTracks(
+        this.sessionId,
+        [{ location: 'local', trackName }],
+        offer.sdp ?? ''
+      )
+
+      // Store the mid for this track
+      const trackInfo = result.tracks.find((t) => t.trackName === trackName)
+      if (trackInfo) {
+        this.localTrackMids.set(trackName, trackInfo.mid)
+      }
+
+      // Notify server about the new published track
+      this.signaling?.fireVoiceSignal?.('voice.track.published', {
+        roomId: this.roomId,
+        sessionId: this.sessionId,
+        trackName,
+        kind: track.kind,
+        mediaType: trackName // 'audio', 'video', or 'screen'
+      })
+    }
+  }
+
+  /**
+   * Pull a remote track from the SFU.
+   */
+  private async pullRemoteTrack(
+    remoteSessionId: string,
+    trackName: string,
+    participantId: string,
+    kind: 'audio' | 'video' | 'screen'
+  ): Promise<void> {
+    if (!this.sfuAdapter || !this.sessionId) return
+
+    try {
+      await this.sfuAdapter.pullTracks(this.sessionId, remoteSessionId, [trackName])
+
+      // The track should now be available on the peer connection
+      const pc = this.sfuAdapter.getPeerConnection()
+      if (pc) {
+        // Find the new track by looking at receivers
+        const receivers = pc.getReceivers()
+        const receiver = receivers.find((r) => {
+          if (!r.track) return false
+          // Match by track kind for the most recently added track
+          const expectedKind = kind === 'screen' ? 'video' : kind
+          return r.track.kind === expectedKind && r.track.readyState === 'live'
+        })
+
+        if (receiver?.track) {
+          // Attach E2EE decrypt transform
+          this.attachReceiverTransform(receiver, kind === 'screen' ? 'video' : kind)
+          for (const cb of this.trackCbs) cb(participantId, receiver.track, kind)
+        }
+      }
+    } catch (err) {
+      console.error('[Voice] Failed to pull remote track:', err)
+    }
+  }
+
+  /**
+   * Close a local track — remove from SFU and stop the media track.
+   */
+  private async closeLocalTrack(trackName: string, stream: MediaStream | null): Promise<void> {
+    const mid = this.localTrackMids.get(trackName)
+
+    if (mid && this.sfuAdapter && this.sessionId) {
+      await this.sfuAdapter.closeTracks(this.sessionId, [mid])
+    }
+
+    if (stream) {
+      for (const track of stream.getTracks()) track.stop()
+    }
+
+    this.localTrackMids.delete(trackName)
+
+    // Notify server this track is gone
+    this.signaling?.fireVoiceSignal?.('voice.track.removed', {
+      roomId: this.roomId,
+      sessionId: this.sessionId,
+      trackName
+    })
+  }
+
+  private async startAudioTrack(): Promise<void> {
     try {
       this.audioStream = await this.mediaProvider.getUserMedia({
         audio: {
@@ -411,12 +407,12 @@ class VoiceConnectionImpl implements VoiceConnection {
       })
 
       const audioTrack = this.audioStream.getAudioTracks()[0]
-      if (!audioTrack || !this.sendTransport) return
+      if (!audioTrack) return
 
-      this.audioProducer = await this.sendTransport.produce({ track: audioTrack })
+      await this.pushLocalTrack(audioTrack, 'audio')
 
-      // Attach E2EE encrypt transform if available
-      this.attachSenderTransform(this.audioProducer, 'audio')
+      // Attach E2EE encrypt transform to the sender
+      this.attachSenderTransformForTrack(audioTrack, 'audio')
 
       // Set up speaking detection
       this.setupSpeakingDetection(this.audioStream)
@@ -424,6 +420,79 @@ class VoiceConnectionImpl implements VoiceConnection {
       this.localAudioEnabled = true
     } catch (err) {
       console.error('[Voice] Failed to start audio:', err)
+    }
+  }
+
+  /**
+   * Attach E2EE transforms to all senders/receivers on the peer connection.
+   */
+  private attachE2EETransforms(): void {
+    if (!this.e2eeBridge) return
+    const pc = this.sfuAdapter?.getPeerConnection()
+    if (!pc) return
+
+    // Handle new tracks via the ontrack event
+    pc.ontrack = (event) => {
+      const receiver = event.receiver
+      const trackKind = event.track.kind as 'audio' | 'video'
+      this.attachReceiverTransform(receiver, trackKind)
+    }
+  }
+
+  /**
+   * Attach encrypt transform to a specific sender (found by matching the track).
+   */
+  private attachSenderTransformForTrack(track: MediaStreamTrack, kind: 'audio' | 'video'): void {
+    if (!this.e2eeBridge) return
+    const pc = this.sfuAdapter?.getPeerConnection()
+    if (!pc) return
+
+    const sender = pc.getSenders().find((s) => s.track === track)
+    if (!sender) return
+
+    this.attachSenderTransform(sender, kind)
+  }
+
+  /**
+   * Attach an encrypt TransformStream to an RTCRtpSender.
+   * Uses the Insertable Streams / Encoded Transforms API when available.
+   */
+  private attachSenderTransform(sender: RTCRtpSender, kind: 'audio' | 'video'): void {
+    if (!this.e2eeBridge) return
+
+    try {
+      if ('createEncodedStreams' in sender) {
+        const { readable, writable } = (
+          sender as unknown as { createEncodedStreams(): { readable: ReadableStream; writable: WritableStream } }
+        ).createEncodedStreams()
+        const transform = createEncryptTransform(this.e2eeBridge, kind)
+        readable.pipeThrough(transform).pipeTo(writable)
+      } else {
+        console.debug('[Voice] Insertable Streams not available on sender — no E2EE for this track')
+      }
+    } catch (err) {
+      console.warn('[Voice] Failed to attach sender E2EE transform (graceful degradation):', err)
+    }
+  }
+
+  /**
+   * Attach a decrypt TransformStream to an RTCRtpReceiver.
+   */
+  private attachReceiverTransform(receiver: RTCRtpReceiver, kind: 'audio' | 'video'): void {
+    if (!this.e2eeBridge) return
+
+    try {
+      if ('createEncodedStreams' in receiver) {
+        const { readable, writable } = (
+          receiver as unknown as { createEncodedStreams(): { readable: ReadableStream; writable: WritableStream } }
+        ).createEncodedStreams()
+        const transform = createDecryptTransform(this.e2eeBridge, kind)
+        readable.pipeThrough(transform).pipeTo(writable)
+      } else {
+        console.debug('[Voice] Insertable Streams not available on receiver — no E2EE for this track')
+      }
+    } catch (err) {
+      console.warn('[Voice] Failed to attach receiver E2EE transform (graceful degradation):', err)
     }
   }
 
@@ -443,12 +512,10 @@ class VoiceConnectionImpl implements VoiceConnection {
         if (!this.analyser) return
         this.analyser.getByteFrequencyData(dataArray)
         const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length
-        const isSpeaking = average > 15 // threshold
+        const isSpeaking = average > 15
         if (isSpeaking !== this.lastSpeakingState) {
           this.lastSpeakingState = isSpeaking
-          // Notify local callbacks
           for (const cb of this.speakingCbs) cb(this.localDID, isSpeaking)
-          // Notify server so other clients see it
           this.signaling?.fireVoiceSignal?.('voice.speaking', { speaking: isSpeaking })
         }
       }, 100)
@@ -467,7 +534,6 @@ class VoiceConnectionImpl implements VoiceConnection {
       this.audioContext = null
     }
     this.analyser = null
-    // If we were speaking, send not-speaking
     if (this.lastSpeakingState) {
       this.lastSpeakingState = false
       for (const cb of this.speakingCbs) cb(this.localDID, false)
@@ -475,135 +541,18 @@ class VoiceConnectionImpl implements VoiceConnection {
     }
   }
 
-  private async consumeProducer(
-    producerId: string,
-    participantId: string,
-    kind: 'audio' | 'video' | 'screen'
-  ): Promise<void> {
-    if (!this.recvTransport || !this.msDevice) return
-
-    try {
-      const consumeKind = kind === 'screen' ? 'video' : kind
-      const response = await this.signaling!.sendVoiceSignal('voice.consume', {
-        roomId: this.roomId,
-        producerId,
-        rtpCapabilities: this.msDevice.rtpCapabilities
-      })
-
-      const consumer = await this.recvTransport.consume({
-        id: response.consumerId as string,
-        producerId: response.producerId as string,
-        kind: consumeKind,
-        rtpParameters: response.rtpParameters as any
-      })
-
-      this.consumers.set(consumer.id, consumer)
-
-      // Attach E2EE decrypt transform if available
-      this.attachReceiverTransform(consumer, consumeKind as 'audio' | 'video')
-
-      // Resume the consumer
-      await this.signaling!.sendVoiceSignal('voice.consumer.resume', {
-        consumerId: consumer.id
-      })
-
-      // Notify UI about the new track
-      const track = consumer.track as MediaStreamTrack
-      for (const cb of this.trackCbs) cb(participantId, track, kind)
-    } catch (err) {
-      console.error('[Voice] Failed to consume producer:', err)
-    }
-  }
-
-  /**
-   * Attach an encrypt TransformStream to an RTCRtpSender (via mediasoup producer).
-   * Uses the Insertable Streams / Encoded Transforms API when available.
-   * Fails silently if not supported (graceful degradation).
-   */
-  private attachSenderTransform(producer: any, kind: 'audio' | 'video'): void {
-    if (!this.e2eeBridge || !producer) return
-
-    try {
-      const sender: RTCRtpSender | undefined = producer.rtpSender
-      if (!sender) return
-
-      if ('createEncodedStreams' in sender) {
-        // Insertable Streams API (Chrome with encodedInsertableStreams: true)
-        const { readable, writable } = (sender as any).createEncodedStreams()
-        const transform = createEncryptTransform(this.e2eeBridge, kind)
-        readable.pipeThrough(transform).pipeTo(writable)
-      } else {
-        console.debug('[Voice] Insertable Streams not available on sender — no E2EE for this track')
-      }
-    } catch (err) {
-      console.warn('[Voice] Failed to attach sender E2EE transform (graceful degradation):', err)
-    }
-  }
-
-  /**
-   * Attach a decrypt TransformStream to an RTCRtpReceiver (via mediasoup consumer).
-   * Uses the Insertable Streams / Encoded Transforms API when available.
-   */
-  private attachReceiverTransform(consumer: any, kind: 'audio' | 'video'): void {
-    if (!this.e2eeBridge || !consumer) return
-
-    try {
-      const receiver: RTCRtpReceiver | undefined = consumer.rtpReceiver
-      if (!receiver) return
-
-      if ('createEncodedStreams' in receiver) {
-        const { readable, writable } = (receiver as any).createEncodedStreams()
-        const transform = createDecryptTransform(this.e2eeBridge, kind)
-        readable.pipeThrough(transform).pipeTo(writable)
-      } else {
-        console.debug('[Voice] Insertable Streams not available on receiver — no E2EE for this track')
-      }
-    } catch (err) {
-      console.warn('[Voice] Failed to attach receiver E2EE transform (graceful degradation):', err)
-    }
-  }
-
-  /**
-   * Close a local producer, stop its tracks, and notify the server.
-   * Server will broadcast `voice.producer-closed` to other clients.
-   */
-  private async closeProducer(
-    producer: any,
-    stream: MediaStream | null,
-    mediaType: 'audio' | 'video' | 'screen'
-  ): Promise<void> {
-    const producerId = producer?.id
-    if (producer && !producer.closed) {
-      producer.close()
-    }
-    if (stream) {
-      for (const track of stream.getTracks()) track.stop()
-    }
-    // Tell the server this producer is gone so it can notify other clients
-    if (producerId && this.signaling) {
-      this.signaling.fireVoiceSignal?.('voice.producer-closed', {
-        producerId,
-        roomId: this.roomId,
-        mediaType
-      })
-    }
-  }
-
   // --- Public API ---
 
   async toggleAudio(): Promise<void> {
     if (this.localAudioEnabled) {
-      // Fully stop audio — close producer, stop tracks, stop speaking detection
       this.cleanupSpeakingDetection()
-      await this.closeProducer(this.audioProducer, this.audioStream, 'audio')
-      this.audioProducer = null
+      await this.closeLocalTrack('audio', this.audioStream)
       this.audioStream = null
       this.localAudioEnabled = false
       this.signaling?.fireVoiceSignal?.('voice.mute', {})
     } else {
-      // Re-acquire audio and produce
       try {
-        await this.startAudioProducer()
+        await this.startAudioTrack()
         this.signaling?.fireVoiceSignal?.('voice.unmute', {})
       } catch (err) {
         console.error('[Voice] Failed to re-enable audio:', err)
@@ -630,16 +579,14 @@ class VoiceConnectionImpl implements VoiceConnection {
       })
 
       const videoTrack = this.videoStream.getVideoTracks()[0]
-
-      if (videoTrack && this.sendTransport) {
-        this.videoProducer = await this.sendTransport.produce({ track: videoTrack })
-        this.attachSenderTransform(this.videoProducer, 'video')
+      if (videoTrack) {
+        await this.pushLocalTrack(videoTrack, 'video')
+        this.attachSenderTransformForTrack(videoTrack, 'video')
       }
 
       this.localVideoEnabled = true
       this.signaling?.fireVoiceSignal?.('voice.video', { enabled: true })
 
-      // Notify UI about local video track
       if (videoTrack) {
         for (const cb of this.trackCbs) cb(this.localDID, videoTrack, 'video')
       }
@@ -649,19 +596,16 @@ class VoiceConnectionImpl implements VoiceConnection {
   }
 
   async disableVideo(): Promise<void> {
-    await this.closeProducer(this.videoProducer, this.videoStream, 'video')
-    this.videoProducer = null
+    await this.closeLocalTrack('video', this.videoStream)
     this.videoStream = null
     this.localVideoEnabled = false
     this.signaling?.fireVoiceSignal?.('voice.video', { enabled: false })
-    // Notify local UI the video track is gone
     for (const cb of this.trackRemovedCbs) cb(this.localDID, 'video')
   }
 
   async startScreenShare(sourceId?: string): Promise<void> {
     try {
       if (sourceId) {
-        // Electron: use chromeMediaSource with specific sourceId
         this.screenStream = await this.mediaProvider.getUserMedia({
           audio: false,
           video: {
@@ -683,17 +627,10 @@ class VoiceConnectionImpl implements VoiceConnection {
       }
 
       const videoTrack = this.screenStream.getVideoTracks()[0]
+      if (videoTrack) {
+        await this.pushLocalTrack(videoTrack, 'screen')
+        this.attachSenderTransformForTrack(videoTrack, 'video')
 
-      if (videoTrack && this.sendTransport) {
-        this.screenProducer = await this.sendTransport.produce({
-          track: videoTrack,
-          appData: { type: 'screen' }
-        })
-
-        // Attach E2EE encrypt transform for screen share (treated as video)
-        this.attachSenderTransform(this.screenProducer, 'video')
-
-        // Auto-stop when user ends share via browser UI
         videoTrack.onended = () => {
           this.stopScreenShare()
         }
@@ -702,7 +639,6 @@ class VoiceConnectionImpl implements VoiceConnection {
       this.localScreenSharing = true
       this.signaling?.fireVoiceSignal?.('voice.screen', { sharing: true })
 
-      // Notify UI
       if (videoTrack) {
         for (const cb of this.trackCbs) cb(this.localDID, videoTrack, 'screen')
       }
@@ -713,89 +649,59 @@ class VoiceConnectionImpl implements VoiceConnection {
   }
 
   async stopScreenShare(): Promise<void> {
-    await this.closeProducer(this.screenProducer, this.screenStream, 'screen')
-    this.screenProducer = null
+    await this.closeLocalTrack('screen', this.screenStream)
     this.screenStream = null
     this.localScreenSharing = false
     this.signaling?.fireVoiceSignal?.('voice.screen', { sharing: false })
-    // Notify local UI the screen track is gone
     for (const cb of this.trackRemovedCbs) cb(this.localDID, 'screen')
   }
 
   setDeafened(deafened: boolean): void {
-    for (const consumer of this.consumers.values()) {
-      if (deafened) {
-        consumer.pause()
-      } else {
-        consumer.resume()
-      }
+    const pc = this.sfuAdapter?.getPeerConnection()
+    if (!pc) return
+    for (const receiver of pc.getReceivers()) {
+      receiver.track.enabled = !deafened
     }
   }
 
-  /** Get the local audio stream (for audio level meters etc.) */
   getLocalAudioStream(): MediaStream | null {
     return this.audioStream
   }
-  /** Get the local video stream (for self-view) */
   getLocalVideoStream(): MediaStream | null {
     return this.videoStream
   }
-  /** Get the local screen share stream */
   getLocalScreenStream(): MediaStream | null {
     return this.screenStream
   }
 
-  /** Debug introspection of internal state */
   debugState(): Record<string, unknown> {
-    const consumers: Array<Record<string, unknown>> = []
-    if (this.consumers) {
-      for (const [id, c] of this.consumers) {
-        consumers.push({
-          id,
-          kind: c.kind,
-          paused: c.paused,
-          closed: c.closed,
-          producerId: c.producerId,
-          track: c.track ? { state: c.track.readyState, kind: c.track.kind, muted: c.track.muted } : null
-        })
-      }
-    }
+    const pc = this.sfuAdapter?.getPeerConnection()
     return {
       localAudioEnabled: this.localAudioEnabled,
       localVideoEnabled: this.localVideoEnabled,
       localScreenSharing: this.localScreenSharing,
-      hasAudioProducer: !!this.audioProducer,
-      audioProducerPaused: this.audioProducer?.paused,
-      hasVideoProducer: !!this.videoProducer,
-      videoProducerPaused: this.videoProducer?.paused,
-      hasScreenProducer: !!this.screenProducer,
-      sendTransport: this.sendTransport
+      sessionId: this.sessionId,
+      hasSFU: this.hasSFU,
+      hasE2EE: this.hasE2EE,
+      localTrackMids: Object.fromEntries(this.localTrackMids),
+      remoteTrackOwners: Object.fromEntries(Array.from(this.remoteTrackOwners.entries()).map(([k, v]) => [k, v])),
+      peerConnection: pc
         ? {
-            id: this.sendTransport.id,
-            closed: this.sendTransport.closed,
-            connectionState: this.sendTransport.connectionState
+            connectionState: pc.connectionState,
+            iceConnectionState: pc.iceConnectionState,
+            signalingState: pc.signalingState,
+            senders: pc.getSenders().length,
+            receivers: pc.getReceivers().length
           }
         : null,
-      recvTransport: this.recvTransport
-        ? {
-            id: this.recvTransport.id,
-            closed: this.recvTransport.closed,
-            connectionState: this.recvTransport.connectionState
-          }
-        : null,
-      deviceLoaded: this.msDevice?.loaded,
-      consumers,
-      producerOwners: Array.from(this.producerOwners.entries()),
       participantCount: this.participants.length
     }
   }
 
-  /** Register callback for remote media tracks */
   onTrack(cb: MediaStreamTrackCb): void {
     this.trackCbs.push(cb)
   }
 
-  /** Register callback for when a remote track is removed (producer closed) */
   onTrackRemoved(cb: TrackRemovedCb): void {
     this.trackRemovedCbs.push(cb)
   }
@@ -813,31 +719,17 @@ class VoiceConnectionImpl implements VoiceConnection {
   async disconnect(): Promise<void> {
     this.disconnected = true
 
-    // Stop speaking detection
     this.cleanupSpeakingDetection()
 
-    // Close producers (notify server each is gone)
-    if (this.audioProducer) await this.closeProducer(this.audioProducer, this.audioStream, 'audio')
-    else if (this.audioStream) {
-      for (const t of this.audioStream.getTracks()) t.stop()
-    }
-    if (this.videoProducer) await this.closeProducer(this.videoProducer, this.videoStream, 'video')
-    else if (this.videoStream) {
-      for (const t of this.videoStream.getTracks()) t.stop()
-    }
-    if (this.screenProducer) await this.closeProducer(this.screenProducer, this.screenStream, 'screen')
-    else if (this.screenStream) {
-      for (const t of this.screenStream.getTracks()) t.stop()
-    }
+    // Close local tracks
+    await this.closeLocalTrack('audio', this.audioStream)
+    await this.closeLocalTrack('video', this.videoStream)
+    await this.closeLocalTrack('screen', this.screenStream)
 
-    // Close consumers
-    for (const consumer of this.consumers.values()) consumer.close()
-    this.consumers.clear()
-    this.producerOwners.clear()
-
-    // Close transports
-    this.sendTransport?.close()
-    this.recvTransport?.close()
+    // Close the SFU session
+    if (this.sfuAdapter && this.sessionId) {
+      await this.sfuAdapter.closeSession(this.sessionId)
+    }
 
     this.audioStream = null
     this.videoStream = null
@@ -845,12 +737,9 @@ class VoiceConnectionImpl implements VoiceConnection {
     this.localAudioEnabled = false
     this.localVideoEnabled = false
     this.localScreenSharing = false
-    this.audioProducer = null
-    this.videoProducer = null
-    this.screenProducer = null
-    this.sendTransport = null
-    this.recvTransport = null
-    this.msDevice = null
+    this.sessionId = null
+    this.localTrackMids.clear()
+    this.remoteTrackOwners.clear()
 
     this.participants = []
     this.joinedCbs = []

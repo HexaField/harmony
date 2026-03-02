@@ -33,6 +33,8 @@ export interface ServerConfig {
   maxConnections?: number
   rateLimit?: RateLimitConfig
   sfuAdapter?: SFUAdapter
+  callsAppId?: string
+  callsAppSecret?: string
 }
 
 export interface RateLimitConfig {
@@ -753,6 +755,8 @@ export class HarmonyServer {
   private pins: Map<string, Set<string>> = new Map() // channelKey → Set<messageId>
   private notifications: Map<string, HarmonyNotification[]> = new Map() // DID → notifications
   private sfuAdapter: SFUAdapter | null = null
+  private callsAppId: string | null = null
+  private callsAppSecret: string | null = null
   private sfuRooms: Set<string> = new Set() // channelIds with SFU rooms created
   private metadataIndex: MetadataSearchIndex
   private moderationPlugin: ModerationPlugin
@@ -765,6 +769,8 @@ export class HarmonyServer {
     this.vcService = new VCService(this.crypto)
     this.zcapService = new ZCAPService(this.crypto)
     this.sfuAdapter = config.sfuAdapter ?? null
+    this.callsAppId = config.callsAppId ?? null
+    this.callsAppSecret = config.callsAppSecret ?? null
     this.metadataIndex = new MetadataSearchIndex(config.store)
     this.moderationPlugin = new ModerationPlugin()
   }
@@ -1296,6 +1302,18 @@ export class HarmonyServer {
         break
       case 'voice.producer-closed':
         await this.handleVoiceProducerClosed(conn, msg)
+        break
+      case 'voice.session.create':
+        this.handleVoiceSessionCreate(conn, msg)
+        break
+      case 'voice.tracks.push':
+        this.handleVoiceTracksPush(conn, msg)
+        break
+      case 'voice.tracks.pull':
+        this.handleVoiceTracksPull(conn, msg)
+        break
+      case 'voice.renegotiate':
+        this.handleVoiceRenegotiate(conn, msg)
         break
       case 'thread.create':
         await this.handleThreadCreate(conn, msg)

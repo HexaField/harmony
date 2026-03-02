@@ -8,6 +8,15 @@ export const strings = {
   EXPORT_ENCRYPT_UPLOAD: 'Encrypting and uploading...',
   EXPORT_DM_TOKENS: 'DMing identity linking tokens to {count} members',
   EXPORT_IN_PROGRESS: 'An export is already in progress',
+  MIGRATE_STARTING: 'Starting migration of {guild}...',
+  MIGRATE_STRUCTURE: 'Migrating server structure...',
+  MIGRATE_HASHING: 'Building message hash index... {current}/{total} channels',
+  MIGRATE_UPLOADING: 'Uploading hash index to Harmony...',
+  MIGRATE_COMPLETE:
+    'Migration complete! {channels} channels, {hashCount} message hashes indexed. Members can now claim their messages by uploading their Discord data export.',
+  MIGRATE_IN_PROGRESS: 'A migration is already in progress',
+  MIGRATE_ANNOUNCE:
+    '🎉 This server has been migrated to Harmony! To claim your messages:\n1. Request your Discord data export (Settings → Privacy → Request All Data)\n2. Upload the ZIP to Harmony\n3. Your verified messages will be attributed to your identity',
   EXPORT_STATUS: 'Export progress: {percent}% — {channel}',
   LINK_DM: 'Link your Discord account to Harmony: {url}',
   LINK_ALREADY: 'Already linked to {did}',

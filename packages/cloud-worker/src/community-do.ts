@@ -123,6 +123,26 @@ export class CommunityDurableObject extends DurableObject {
       return Response.json({ status: 'ok', connections } satisfies HealthResponse)
     }
 
+    // ── Hash-based migration endpoints (deferred — stubs) ──
+    if (url.pathname.endsWith('/migration/create') && request.method === 'POST') {
+      return Response.json({ error: 'Migration endpoints not yet implemented for cloud workers' }, { status: 501 })
+    }
+    if (url.pathname.match(/\/migration\/[a-f0-9-]+\/hashes$/) && request.method === 'POST') {
+      return Response.json({ error: 'Migration endpoints not yet implemented for cloud workers' }, { status: 501 })
+    }
+    if (url.pathname.match(/\/migration\/[a-f0-9-]+\/verify$/) && request.method === 'POST') {
+      return Response.json({ error: 'Migration endpoints not yet implemented for cloud workers' }, { status: 501 })
+    }
+    if (url.pathname.match(/\/migration\/[a-f0-9-]+\/import$/) && request.method === 'POST') {
+      return Response.json({ error: 'Migration endpoints not yet implemented for cloud workers' }, { status: 501 })
+    }
+    if (url.pathname.match(/\/migration\/[a-f0-9-]+\/status$/) && request.method === 'GET') {
+      return Response.json({ error: 'Migration endpoints not yet implemented for cloud workers' }, { status: 501 })
+    }
+    if (url.pathname.match(/\/migration\/[a-f0-9-]+$/) && request.method === 'DELETE') {
+      return Response.json({ error: 'Migration endpoints not yet implemented for cloud workers' }, { status: 501 })
+    }
+
     // WebSocket upgrade
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('Expected WebSocket upgrade', { status: 426 })

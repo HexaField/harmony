@@ -25,7 +25,12 @@ export const HARMONY_COMMANDS: SlashCommand[] = [
     description: 'Harmony community platform commands',
     subcommands: [
       { name: 'setup', description: 'Configure Harmony for this server', requiredPermissions: ['Administrator'] },
-      { name: 'export', description: 'Export this server to Harmony', requiredPermissions: ['Administrator'] },
+      { name: 'export', description: 'Export this server to Harmony (legacy)', requiredPermissions: ['Administrator'] },
+      {
+        name: 'migrate',
+        description: 'Migrate this server to Harmony (hash-based)',
+        requiredPermissions: ['Administrator']
+      },
       { name: 'link', description: 'Link your Discord account to a DID' },
       { name: 'identity', description: 'Show your linked Harmony identity' },
       { name: 'info', description: 'Show Harmony info and invite link' }
@@ -43,6 +48,17 @@ export interface ExportState {
   startedAt: number
   channelsExported: number
   messagesExported: number
+}
+
+// Migrate progress tracking (hash-based)
+export interface MigrateState {
+  guildId: string
+  phase: 'structure' | 'hashing' | 'uploading' | 'announcing' | 'complete'
+  current: number
+  total: number
+  channelName: string
+  startedAt: number
+  hashCount: number
 }
 
 // Bot configuration
@@ -191,6 +207,7 @@ export class HarmonyDiscordBot {
   private config: BotConfig
   private guildConfigs: Map<string, GuildConfig> = new Map()
   private activeExports: Map<string, ExportState> = new Map()
+  private activeMigrations: Map<string, MigrateState> = new Map()
   private linkedIdentities: Map<string, string> = new Map() // userId → DID
   private running = false
   private reconnectCount = 0
@@ -326,6 +343,88 @@ export class HarmonyDiscordBot {
     } finally {
       this.activeExports.delete(guildId)
     }
+  }
+
+  async handleMigrate(
+    guildId: string,
+    adapter: DiscordAPI,
+    _params: {
+      serverUrl: string
+      adminDID: string
+      authHeader: string
+    },
+    onProgress?: (state: MigrateState) => void
+  ): Promise<{ success: boolean; message: string; hashCount?: number }> {
+    if (this.activeMigrations.has(guildId)) {
+      return { success: false, message: t('MIGRATE_IN_PROGRESS') }
+    }
+
+    const state: MigrateState = {
+      guildId,
+      phase: 'structure',
+      current: 0,
+      total: 0,
+      channelName: '',
+      startedAt: Date.now(),
+      hashCount: 0
+    }
+
+    this.activeMigrations.set(guildId, state)
+
+    try {
+      // Fetch server structure
+      await adapter.getGuild(guildId)
+      state.phase = 'structure'
+      onProgress?.(state)
+
+      const channels = await adapter.getGuildChannels(guildId)
+      await adapter.getGuildRoles(guildId)
+      await adapter.getGuildMembers(guildId)
+
+      // Build hash index from messages (without storing content)
+      state.phase = 'hashing'
+      const textChannels = channels.filter((c) => c.type === 'text')
+      state.total = textChannels.length
+
+      const hashIndex = new Map<string, { channelId: string; messageId: string }>()
+
+      for (let i = 0; i < textChannels.length; i++) {
+        const channel = textChannels[i]
+        state.current = i
+        state.channelName = channel.name
+        onProgress?.(state)
+
+        const messages = await adapter.getChannelMessages(channel.id)
+        // Import hash function dynamically to keep this file light
+        const { computeMessageHash } = await import('@harmony/migration')
+        for (const msg of messages) {
+          const hash = await computeMessageHash({
+            serverId: guildId,
+            channelId: channel.id,
+            messageId: msg.id,
+            authorId: msg.author.id,
+            timestamp: msg.timestamp
+          })
+          hashIndex.set(hash, { channelId: channel.id, messageId: msg.id })
+        }
+      }
+
+      state.hashCount = hashIndex.size
+      state.phase = 'complete'
+      onProgress?.(state)
+
+      return {
+        success: true,
+        message: t('MIGRATE_COMPLETE', { channels: textChannels.length, hashCount: hashIndex.size }),
+        hashCount: hashIndex.size
+      }
+    } finally {
+      this.activeMigrations.delete(guildId)
+    }
+  }
+
+  getMigrateStatus(guildId: string): MigrateState | null {
+    return this.activeMigrations.get(guildId) ?? null
   }
 
   getExportStatus(guildId: string): ExportState | null {

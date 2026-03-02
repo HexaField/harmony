@@ -2,6 +2,7 @@ export { DiscordRESTAPI } from './discord-api.js'
 import type { KeyPair, CryptoProvider } from '@harmony/crypto'
 import {
   MigrationService,
+  buildHashIndex,
   type DiscordServerExport,
   type DiscordServer,
   type DiscordChannel,
@@ -10,6 +11,20 @@ import {
   type DiscordMessage,
   type EncryptedExportBundle
 } from '@harmony/migration'
+
+export interface MigrateProgress {
+  phase: 'structure' | 'hashing' | 'uploading' | 'announcing'
+  current: number
+  total: number
+  channelName?: string
+}
+
+export interface MigrationResult {
+  serverId: string
+  communityId: string
+  channelMap: Map<string, string> // discordChannelId → harmonyChannelId
+  hashCount: number
+}
 
 export interface ExportProgress {
   phase: 'channels' | 'roles' | 'members' | 'messages' | 'encrypting'
@@ -212,6 +227,162 @@ export class MigrationBot {
 
     onProgress?.({ phase: 'encrypting', current: 1, total: 1 })
     return bundle
+  }
+
+  /**
+   * Migrate server structure — fetch channels, roles, members and create Harmony community.
+   * Does NOT fetch or store message content.
+   */
+  async migrateServerStructure(params: {
+    serverId: string
+    adminDID: string
+    adminKeyPair: KeyPair
+    options?: { channels?: string[]; excludeUsers?: string[] }
+    onProgress?: (progress: MigrateProgress) => void
+  }): Promise<{ serverExport: DiscordServerExport; channelMap: Map<string, string> }> {
+    const { serverId, options, onProgress } = params
+
+    const server = await this.api.getGuild(serverId)
+
+    onProgress?.({ phase: 'structure', current: 0, total: 4 })
+    const allChannels = await this.api.getGuildChannels(serverId)
+
+    // Fetch threads
+    const threads: DiscordChannel[] = []
+    if (this.api.getActiveThreads) {
+      const active = await this.api.getActiveThreads(serverId)
+      threads.push(...active)
+    }
+    if (this.api.getArchivedThreads) {
+      for (const ch of allChannels.filter((c) => c.type === 'text')) {
+        const archived = await this.api.getArchivedThreads(ch.id)
+        threads.push(...archived)
+      }
+    }
+
+    const seenIds = new Set<string>()
+    const mergedChannels: DiscordChannel[] = []
+    for (const ch of [...allChannels, ...threads]) {
+      if (!seenIds.has(ch.id)) {
+        seenIds.add(ch.id)
+        mergedChannels.push(ch)
+      }
+    }
+
+    const channels = options?.channels ? mergedChannels.filter((c) => options.channels!.includes(c.id)) : mergedChannels
+    onProgress?.({ phase: 'structure', current: 1, total: 4 })
+
+    const roles = await this.api.getGuildRoles(serverId)
+    onProgress?.({ phase: 'structure', current: 2, total: 4 })
+
+    const members = await this.api.getGuildMembers(serverId)
+    onProgress?.({ phase: 'structure', current: 3, total: 4 })
+
+    // Build channel map: discordChannelId → harmonyChannelId
+    const channelMap = new Map<string, string>()
+    for (const ch of channels) {
+      channelMap.set(ch.id, `harmony:channel:${ch.id}`)
+    }
+
+    const serverExport: DiscordServerExport = {
+      server,
+      channels,
+      roles,
+      members,
+      messages: new Map(), // No messages in structure-only export
+      pins: new Map()
+    }
+
+    onProgress?.({ phase: 'structure', current: 4, total: 4 })
+    return { serverExport, channelMap }
+  }
+
+  /**
+   * Build hash index by paginating all messages. Never stores message content.
+   * Returns the hash index map.
+   */
+  async buildServerHashIndex(params: {
+    serverId: string
+    channels: DiscordChannel[]
+    options?: { afterDate?: string; beforeDate?: string }
+    onProgress?: (progress: MigrateProgress) => void
+  }): Promise<Map<string, { channelId: string; messageId: string }>> {
+    const { serverId, channels, options, onProgress } = params
+    const textChannels = channels.filter((c) => c.type === 'text' || c.type === 'thread')
+    const allMessages = new Map<string, DiscordMessage[]>()
+
+    for (let i = 0; i < textChannels.length; i++) {
+      const channel = textChannels[i]
+      onProgress?.({ phase: 'hashing', current: i, total: textChannels.length, channelName: channel.name })
+
+      const channelMessages: DiscordMessage[] = []
+      let before: string | undefined
+      let hasMore = true
+
+      while (hasMore) {
+        const batch = await this.api.getChannelMessages(channel.id, { before, limit: 100 })
+        if (batch.length === 0) {
+          hasMore = false
+          break
+        }
+
+        for (const msg of batch) {
+          if (options?.afterDate && msg.timestamp < options.afterDate) continue
+          if (options?.beforeDate && msg.timestamp > options.beforeDate) continue
+          // Only store minimal data needed for hashing
+          channelMessages.push({
+            id: msg.id,
+            channelId: channel.id,
+            author: { id: msg.author.id, username: '' },
+            content: '', // Never store content
+            timestamp: msg.timestamp
+          })
+        }
+
+        before = batch[batch.length - 1].id
+        if (batch.length < 100) hasMore = false
+      }
+
+      allMessages.set(channel.id, channelMessages)
+    }
+
+    onProgress?.({ phase: 'hashing', current: textChannels.length, total: textChannels.length })
+    return buildHashIndex(serverId, allMessages)
+  }
+
+  /**
+   * Upload hash index to Harmony server.
+   */
+  async uploadHashIndex(params: {
+    serverUrl: string
+    migrationId: string
+    hashes: Map<string, { channelId: string; messageId: string }>
+    authHeader: string
+    onProgress?: (progress: MigrateProgress) => void
+  }): Promise<void> {
+    const { serverUrl, migrationId, hashes, authHeader, onProgress } = params
+    onProgress?.({ phase: 'uploading', current: 0, total: 1 })
+
+    const hashEntries = Array.from(hashes.entries()).map(([hash, meta]) => ({
+      hash,
+      channelId: meta.channelId,
+      messageId: meta.messageId
+    }))
+
+    const response = await fetch(`${serverUrl}/api/migration/${migrationId}/hashes`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: authHeader
+      },
+      body: JSON.stringify({ hashes: hashEntries })
+    })
+
+    if (!response.ok) {
+      throw new Error(`Hash upload failed: ${response.status} ${response.statusText}`)
+    }
+
+    onProgress?.({ phase: 'uploading', current: 1, total: 1 })
   }
 
   generateLinkToken(discordUserId: string): LinkToken {

@@ -26,6 +26,19 @@ interface ExportJob {
   createdAt: number
 }
 
+/** Hash-based migration metadata */
+interface MigrationRecord {
+  id: string
+  serverId: string
+  serverName: string
+  adminDID: string
+  channelMap: Record<string, string> // discordChannelId → harmonyChannelId
+  hashCount: number
+  createdAt: string
+  expiresAt: string
+  status: 'active' | 'expired' | 'deleted'
+}
+
 export interface ImportChannel {
   id: string
   name: string
@@ -53,6 +66,8 @@ export interface ImportResult {
 
 export class MigrationEndpoint {
   private exports: Map<string, ExportJob> = new Map()
+  private migrations: Map<string, MigrationRecord> = new Map()
+  private migrationHashes: Map<string, Set<string>> = new Map() // migrationId → set of hashes
   private logger: Logger
   private store: SQLiteQuadStore | null
   private harmonyServer: HarmonyServer | null = null
@@ -238,6 +253,53 @@ export class MigrationEndpoint {
       const authedDID = await this.authenticateRequest(req, res)
       if (!authedDID) return true
       await this.handleImport(req, res)
+      return true
+    }
+
+    // ── Hash-based migration endpoints ──
+
+    if (req.method === 'POST' && url === '/api/migration/create') {
+      const authedDID = await this.authenticateRequest(req, res)
+      if (!authedDID) return true
+      await this.handleMigrationCreate(req, res, authedDID)
+      return true
+    }
+
+    const migrationHashesMatch = url.match(/^\/api\/migration\/([a-f0-9-]+)\/hashes$/)
+    if (req.method === 'POST' && migrationHashesMatch) {
+      const authedDID = await this.authenticateRequest(req, res)
+      if (!authedDID) return true
+      await this.handleMigrationHashes(migrationHashesMatch[1], req, res, authedDID)
+      return true
+    }
+
+    const migrationVerifyMatch = url.match(/^\/api\/migration\/([a-f0-9-]+)\/verify$/)
+    if (req.method === 'POST' && migrationVerifyMatch) {
+      const authedDID = await this.authenticateRequest(req, res)
+      if (!authedDID) return true
+      await this.handleMigrationVerify(migrationVerifyMatch[1], req, res)
+      return true
+    }
+
+    const migrationImportMatch = url.match(/^\/api\/migration\/([a-f0-9-]+)\/import$/)
+    if (req.method === 'POST' && migrationImportMatch) {
+      const authedDID = await this.authenticateRequest(req, res)
+      if (!authedDID) return true
+      await this.handleMigrationImportVerified(migrationImportMatch[1], req, res, authedDID)
+      return true
+    }
+
+    const migrationStatusMatch = url.match(/^\/api\/migration\/([a-f0-9-]+)\/status$/)
+    if (req.method === 'GET' && migrationStatusMatch) {
+      this.handleMigrationStatus(migrationStatusMatch[1], res)
+      return true
+    }
+
+    const migrationDeleteMatch = url.match(/^\/api\/migration\/([a-f0-9-]+)$/)
+    if (req.method === 'DELETE' && migrationDeleteMatch) {
+      const authedDID = await this.authenticateRequest(req, res)
+      if (!authedDID) return true
+      this.handleMigrationDelete(migrationDeleteMatch[1], res, authedDID)
       return true
     }
 
@@ -435,6 +497,269 @@ export class MigrationEndpoint {
       const message = err instanceof Error ? err.message : String(err)
       this.json(res, 500, { error: `Delete failed: ${message}` })
     }
+  }
+
+  // ── Hash-based migration methods ──
+
+  private async handleMigrationCreate(req: IncomingMessage, res: ServerResponse, authedDID: string): Promise<void> {
+    let body: {
+      serverId: string
+      serverName: string
+      channelMap: Record<string, string>
+    }
+
+    try {
+      body = JSON.parse(await this.readBody(req))
+    } catch {
+      this.json(res, 400, { error: 'Invalid JSON body' })
+      return
+    }
+
+    if (!body.serverId || !body.serverName || !body.channelMap) {
+      this.json(res, 400, { error: 'Missing required fields: serverId, serverName, channelMap' })
+      return
+    }
+
+    const TTL_DAYS = 30
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + TTL_DAYS * 24 * 60 * 60 * 1000)
+
+    const id = crypto.randomUUID()
+    const record: MigrationRecord = {
+      id,
+      serverId: body.serverId,
+      serverName: body.serverName,
+      adminDID: authedDID,
+      channelMap: body.channelMap,
+      hashCount: 0,
+      createdAt: now.toISOString(),
+      expiresAt: expiresAt.toISOString(),
+      status: 'active'
+    }
+
+    this.migrations.set(id, record)
+    this.migrationHashes.set(id, new Set())
+
+    this.logger.info('Migration created', { id, serverId: body.serverId, adminDID: authedDID })
+    this.json(res, 201, { id, expiresAt: expiresAt.toISOString() })
+  }
+
+  private async handleMigrationHashes(
+    migrationId: string,
+    req: IncomingMessage,
+    res: ServerResponse,
+    authedDID: string
+  ): Promise<void> {
+    const migration = this.migrations.get(migrationId)
+    if (!migration) {
+      this.json(res, 404, { error: 'Migration not found' })
+      return
+    }
+    if (migration.adminDID !== authedDID) {
+      this.json(res, 403, { error: 'Only the migration admin can upload hashes' })
+      return
+    }
+    if (migration.status !== 'active') {
+      this.json(res, 410, { error: 'Migration is no longer active' })
+      return
+    }
+
+    let body: { hashes: Array<{ hash: string; channelId: string; messageId: string }> }
+    try {
+      body = JSON.parse(await this.readBody(req))
+    } catch {
+      this.json(res, 400, { error: 'Invalid JSON body' })
+      return
+    }
+
+    if (!body.hashes || !Array.isArray(body.hashes)) {
+      this.json(res, 400, { error: 'Missing required field: hashes (array)' })
+      return
+    }
+
+    const hashSet = this.migrationHashes.get(migrationId)!
+    for (const entry of body.hashes) {
+      hashSet.add(entry.hash)
+    }
+    migration.hashCount = hashSet.size
+
+    this.logger.info('Migration hashes uploaded', { migrationId, count: body.hashes.length, total: hashSet.size })
+    this.json(res, 200, { ok: true, totalHashes: hashSet.size })
+  }
+
+  private async handleMigrationVerify(migrationId: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const migration = this.migrations.get(migrationId)
+    if (!migration) {
+      this.json(res, 404, { error: 'Migration not found' })
+      return
+    }
+    if (migration.status !== 'active') {
+      this.json(res, 410, { error: 'Migration is no longer active' })
+      return
+    }
+
+    let body: { hashes: string[] }
+    try {
+      body = JSON.parse(await this.readBody(req))
+    } catch {
+      this.json(res, 400, { error: 'Invalid JSON body' })
+      return
+    }
+
+    if (!body.hashes || !Array.isArray(body.hashes)) {
+      this.json(res, 400, { error: 'Missing required field: hashes (array of hash strings)' })
+      return
+    }
+
+    const storedIndex = this.migrationHashes.get(migrationId)!
+    const verified: string[] = []
+    const rejected: string[] = []
+
+    for (const hash of body.hashes) {
+      if (storedIndex.has(hash)) {
+        verified.push(hash)
+      } else {
+        rejected.push(hash)
+      }
+    }
+
+    this.json(res, 200, {
+      verified: verified.length,
+      rejected: rejected.length,
+      total: body.hashes.length,
+      verifiedHashes: verified
+    })
+  }
+
+  private async handleMigrationImportVerified(
+    migrationId: string,
+    req: IncomingMessage,
+    res: ServerResponse,
+    authedDID: string
+  ): Promise<void> {
+    const migration = this.migrations.get(migrationId)
+    if (!migration) {
+      this.json(res, 404, { error: 'Migration not found' })
+      return
+    }
+    if (migration.status !== 'active') {
+      this.json(res, 410, { error: 'Migration is no longer active' })
+      return
+    }
+
+    let body: {
+      verifiedHashes: string[]
+      messages: Array<{
+        hash: string
+        channelId: string
+        content: string
+        timestamp: string
+      }>
+    }
+
+    try {
+      body = JSON.parse(await this.readBody(req))
+    } catch {
+      this.json(res, 400, { error: 'Invalid JSON body' })
+      return
+    }
+
+    if (!body.messages || !Array.isArray(body.messages)) {
+      this.json(res, 400, { error: 'Missing required field: messages' })
+      return
+    }
+
+    // Only import messages whose hashes were verified
+    const storedIndex = this.migrationHashes.get(migrationId)!
+    const verifiedSet = new Set(body.verifiedHashes)
+    let imported = 0
+
+    for (const msg of body.messages) {
+      if (!storedIndex.has(msg.hash) || !verifiedSet.has(msg.hash)) continue
+
+      // Import into store if available
+      if (this.store && this.harmonyServer) {
+        const harmonyChannelId = migration.channelMap[msg.channelId] ?? msg.channelId
+        const communityId = `harmony:community:${migration.serverId}`
+
+        const protocolMessage = {
+          id: `harmony:message:${msg.hash.slice(0, 16)}`,
+          type: 'channel.send' as const,
+          timestamp: msg.timestamp,
+          sender: authedDID,
+          payload: { content: msg.content, clock: { counter: 0, nodeId: authedDID } }
+        }
+
+        await this.harmonyServer.messageStoreInstance.storeMessage(communityId, harmonyChannelId, protocolMessage)
+        imported++
+      }
+    }
+
+    this.logger.info('Migration messages imported', { migrationId, imported, userDID: authedDID })
+    this.json(res, 200, { ok: true, imported })
+  }
+
+  private handleMigrationStatus(migrationId: string, res: ServerResponse): void {
+    const migration = this.migrations.get(migrationId)
+    if (!migration) {
+      this.json(res, 404, { error: 'Migration not found' })
+      return
+    }
+
+    // Check TTL
+    if (new Date() > new Date(migration.expiresAt) && migration.status === 'active') {
+      migration.status = 'expired'
+      this.migrationHashes.delete(migrationId)
+    }
+
+    this.json(res, 200, {
+      id: migration.id,
+      serverId: migration.serverId,
+      serverName: migration.serverName,
+      hashCount: migration.hashCount,
+      status: migration.status,
+      createdAt: migration.createdAt,
+      expiresAt: migration.expiresAt
+    })
+  }
+
+  private handleMigrationDelete(migrationId: string, res: ServerResponse, authedDID: string): void {
+    const migration = this.migrations.get(migrationId)
+    if (!migration) {
+      this.json(res, 404, { error: 'Migration not found' })
+      return
+    }
+    if (migration.adminDID !== authedDID) {
+      this.json(res, 403, { error: 'Only the migration admin can delete' })
+      return
+    }
+
+    migration.status = 'deleted'
+    this.migrationHashes.delete(migrationId)
+    this.migrations.delete(migrationId)
+
+    this.logger.info('Migration deleted', { migrationId })
+    this.json(res, 200, { ok: true })
+  }
+
+  /**
+   * Periodic cleanup of expired migrations (call from server tick or cron).
+   */
+  cleanupExpiredMigrations(): number {
+    const now = new Date()
+    let cleaned = 0
+    for (const [id, record] of this.migrations) {
+      if (now > new Date(record.expiresAt)) {
+        record.status = 'expired'
+        this.migrationHashes.delete(id)
+        this.migrations.delete(id)
+        cleaned++
+      }
+    }
+    if (cleaned > 0) {
+      this.logger.info('Cleaned up expired migrations', { count: cleaned })
+    }
+    return cleaned
   }
 
   private async handleExport(req: IncomingMessage, res: ServerResponse): Promise<void> {

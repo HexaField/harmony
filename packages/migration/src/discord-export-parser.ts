@@ -7,6 +7,8 @@ export interface ParsedMessage {
   timestamp: string
   content: string
   attachments: string
+  channelId?: string
+  authorId?: string
 }
 
 export interface DiscordDataPackage {
@@ -177,7 +179,9 @@ function parseMessages(
           id: String(msg.ID ?? msg.id ?? ''),
           timestamp: String(msg.Timestamp ?? msg.timestamp ?? ''),
           content: String(msg.Contents ?? msg.content ?? ''),
-          attachments: String(msg.Attachments ?? msg.attachments ?? '')
+          attachments: String(msg.Attachments ?? msg.attachments ?? ''),
+          channelId,
+          authorId: msg.Author ? String((msg.Author as Record<string, unknown>).id ?? '') : undefined
         })
       }
     } else {
@@ -191,7 +195,8 @@ function parseMessages(
             id: row['ID'] ?? row['id'] ?? '',
             timestamp: row['Timestamp'] ?? row['timestamp'] ?? '',
             content: row['Contents'] ?? row['content'] ?? '',
-            attachments: row['Attachments'] ?? row['attachments'] ?? ''
+            attachments: row['Attachments'] ?? row['attachments'] ?? '',
+            channelId
           })
         }
       }

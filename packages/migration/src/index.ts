@@ -548,3 +548,6 @@ export {
 } from './discord-export-parser.js'
 export { deriveStorageKey, encryptUserData, decryptUserData, type UserDataPayload } from './user-data-encryption.js'
 export { transformDiscordExportToQuads, computeDataMeta } from './user-data-transform.js'
+
+// Hash-based migration (v2)
+export { computeMessageHash, buildHashIndex, verifyUserHashes } from './hash.js'

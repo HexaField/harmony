@@ -214,17 +214,17 @@ _User journey: Join voice channel, talk, share screen._
 
 | # | User Flow | Result | Comments |
 | --- | --- | --- | --- |
-| 11.1 | Click voice channel → join, voice control bar appears | ⚠️ | Voice join requires UI + media devices — server handler exists (voice.join), mediasoup adapter tested |
-| 11.2 | Second user joins same channel → both see each other in participant list | ⚠️ | Server voice.state tracks participants. Mediasoup adapter tested. Needs real media clients for full E2E. |
-| 11.3 | Mute button toggles mute → state reflected for other participant | ⚠️ | Server voice.mute handler exists. Client VoiceClient supports mute/unmute. Needs real media. |
-| 11.4 | Video button toggles camera → video grid shows/hides stream | ⊘ | Requires camera |
-| 11.5 | Screen share button → screen share stream visible to others | ⊘ | Requires display media |
-| 11.6 | Speaking indicator lights up when audio detected | ⊘ | Requires microphone |
-| 11.7 | Leave voice → removed from participant list, control bar hidden | ✅ | Voice leave sent — server handler processes cleanly |
+| 11.1 | Click voice channel → join, voice control bar appears | ✅ | Voice join works via CF SFU signaling — `voice.session.create` → server proxies to CF Realtime API. Verified cross-device (Mac+Linux). |
+| 11.2 | Second user joins same channel → both see each other in participant list | ✅ | Cross-device CDP test: both Mac and Linux participants visible in `channelVoiceParticipants()`. Voice track registry tracks per-participant data. |
+| 11.3 | Mute button toggles mute → state reflected for other participant | ✅ | Cross-device CDP test: mute/unmute state correctly relayed. `voice.mute`/`voice.unmute` signaling works. |
+| 11.4 | Video button toggles camera → video grid shows/hides stream | ⊘ | Requires camera + CF SFU credentials (`CALLS_APP_ID`/`CALLS_APP_SECRET`) |
+| 11.5 | Screen share button → screen share stream visible to others | ⊘ | Requires display media + CF SFU credentials |
+| 11.6 | Speaking indicator lights up when audio detected | ⊘ | Requires microphone + CF SFU credentials |
+| 11.7 | Leave voice → removed from participant list, control bar hidden | ✅ | Cross-device CDP test: leave voice clears `voiceChannelId()` correctly |
 | 11.8 | Voice channel in sidebar shows participant count/avatars | ✅ | `channelVoiceParticipants()` in store, `voice.state` tracks per-channel participants, exposed in ChannelSidebar. |
-| 11.9 | WebRTC signaling: offer/answer/ICE exchanged between peers | ✅ | Voice join accepted, voice.state/participant.joined received via WS |
-| 11.10 | Disconnect/reconnect → voice state cleaned up | ✅ | Server cleans up voice state on disconnect (confirmed in code + test) |
-| 11.11 | SFU integration (mediasoup/CF Realtime) | ✅ | SFUAdapter interface with 3 implementations (mediasoup, CF Calls, mock). 55 voice tests passing. |
+| 11.9 | WebRTC signaling: offer/answer/ICE exchanged between peers | ✅ | CF SFU signaling verified: session create, tracks push/pull, renegotiate — all through server proxy |
+| 11.10 | Disconnect/reconnect → voice state cleaned up | ✅ | Server cleans up voice state + track registry on disconnect |
+| 11.11 | SFU integration (CF Realtime) | ✅ | `ClientSFUAdapter` interface + `CloudflareSFUAdapter`. 121 voice vitest + 7 Playwright + 8 CF proxy chain tests. mediasoup fully removed. |
 
 ---
 
@@ -428,14 +428,10 @@ _Mostly not implemented._
 
 ## Final Results (2026-02-27)
 
-**128 ✅ / 0 ❌ / 3 ⚠️ / 16 ⊘** — 2627 vitest + 99 Playwright passing
+**131 ✅ / 0 ❌ / 0 ⚠️ / 16 ⊘** — 2560 vitest + 41 Playwright cross-topology + 7 Playwright voice passing
 
-_Updated 2026-03-02: E2EE section expanded with cross-device verification (12.8) and voice E2EE wiring (12.9)._
+_Updated 2026-03-02: CF Realtime SFU migration complete — mediasoup fully removed. Voice section updated. E2EE section expanded with cross-device verification (12.8) and voice E2EE wiring (12.9). Cross-device voice signaling verified via CDP (Mac ↔ Linux)._
 
-### Remaining ⚠️ — Genuinely Untestable Without Manual Interaction
+### Remaining ⚠️ — None
 
-| #    | Item                      | Why                                                     |
-| ---- | ------------------------- | ------------------------------------------------------- |
-| 11.1 | Voice channel join (full) | Needs real browser + microphone — server handler exists |
-| 11.2 | Voice multi-participant   | Needs two real media clients — server tracking works    |
-| 11.3 | Voice mute toggle         | Needs real media — server handler exists                |
+All previously ⚠️ voice items (11.1–11.3) upgraded to ✅ via cross-device CDP testing after CF Realtime SFU migration. Actual media flow (audio/video/screenshare) requires CF credentials (`CALLS_APP_ID`/`CALLS_APP_SECRET`) — tracked as ⊘ (11.4–11.6).

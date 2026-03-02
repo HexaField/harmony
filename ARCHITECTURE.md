@@ -25,9 +25,8 @@ graph TB
     subgraph Cloudflare
         CloudWorker["Cloud Worker<br/>(Durable Objects)"]
         CommunityDO["CommunityDurableObject<br/>(DO SQLite + Hibernatable WS)"]
-        VoiceRoomDO["VoiceRoomDO"]
+        CFSFU["CF Realtime SFU<br/>(Managed WebRTC)"]
         CloudWorker --- CommunityDO
-        CloudWorker --- VoiceRoomDO
 
         PortalWorker["Portal Worker"]
         D1[(D1 Identity Store)]
@@ -45,7 +44,9 @@ graph TB
     Mobile -->|WebSocket| CloudWorker
     ServerRuntime -->|federation| ServerRuntime
     ServerRuntime -.->|identity lookup| PortalWorker
+    ServerRuntime -.->|voice proxy| CFSFU
     CloudWorker -.->|identity lookup| PortalWorker
+    CloudWorker -.->|voice proxy| CFSFU
 ```
 
 > Note: The Electron app embeds `ServerRuntime` in the main process — it functions as both client and server simultaneously. Web and Mobile clients connect to remote servers.
@@ -498,9 +499,11 @@ flowchart LR
 
 ---
 
-## 10. Voice & Video (WebRTC + mediasoup SFU)
+## 10. Voice & Video (WebRTC + Cloudflare Realtime SFU)
 
 ### SFU Topology
+
+All voice/video uses **Cloudflare Realtime SFU** — a managed, globally-distributed forwarding-only SFU. No mediasoup. Self-hosted and cloud deployments both proxy CF API calls through the Harmony server.
 
 ```mermaid
 graph LR
@@ -509,11 +512,14 @@ graph LR
         ConsumerA["Remote Consumers"]
     end
 
-    subgraph "mediasoup Router"
-        SendTransportA["Send Transport A"]
-        RecvTransportA["Recv Transport A"]
-        SendTransportB["Send Transport B"]
-        RecvTransportB["Recv Transport B"]
+    subgraph "Harmony Server"
+        Proxy["callCFApi() Proxy"]
+        TrackReg["voiceTrackRegistry"]
+    end
+
+    subgraph "CF Realtime SFU"
+        SessionA["Session A"]
+        SessionB["Session B"]
     end
 
     subgraph "Client B"
@@ -521,8 +527,12 @@ graph LR
         ConsumerB["Remote Consumers"]
     end
 
-    ProducerA --> SendTransportA --> RecvTransportB --> ConsumerB
-    ProducerB --> SendTransportB --> RecvTransportA --> ConsumerA
+    ProducerA -->|voice.tracks.push| Proxy -->|tracks/new| SessionA
+    SessionA -->|forwarded tracks| SessionB
+    SessionB -->|voice.tracks.pull| Proxy -->|ontrack| ConsumerB
+    ProducerB -->|voice.tracks.push| Proxy -->|tracks/new| SessionB
+    SessionB -->|forwarded tracks| SessionA
+    SessionA -->|voice.tracks.pull| Proxy -->|ontrack| ConsumerA
 ```
 
 ### Voice Join Flow
@@ -531,18 +541,51 @@ graph LR
 sequenceDiagram
     participant Client
     participant Server
-    participant SFU["mediasoup Router"]
+    participant CFSFU["CF Realtime SFU"]
 
     Client->>Server: voice.token (channel ID)
-    Server->>Client: Router RTP capabilities
-    Client->>Server: Create Send Transport
-    Client->>Server: Create Recv Transport
-    Client->>SFU: Produce audio track
-    SFU->>Server: New producer available
-    Server->>Client: Consume remote producers
+    Server->>Client: token + mode ('cf' | 'signaling')
+    Client->>Server: voice.session.create
+    Server->>CFSFU: POST /sessions/new
+    CFSFU->>Server: sessionId
+    Server->>Client: voice.session.created (sessionId)
+    Client->>Server: voice.tracks.push (SDP offer)
+    Server->>CFSFU: POST /sessions/:id/tracks/new
+    CFSFU->>Server: SDP answer
+    Server->>Client: voice.tracks.pushed (SDP answer)
+    Server-->>Others: voice.track.published (trackName, sessionId)
+    Note over Client: ICE negotiation via RTCPeerConnection
     Client->>Client: AnalyserNode → speaking detection
     Client->>Server: voice.speaking { speaking: true }
 ```
+
+### CF SFU Proxy Architecture
+
+```mermaid
+graph TB
+    subgraph "Server / Cloud Worker"
+        callCFApi["callCFApi(method, path, body)"]
+        TrackReg["voiceTrackRegistry<br/>Map&lt;channelId, Map&lt;connId, TrackInfo[]&gt;&gt;"]
+    end
+
+    subgraph "CF Realtime API"
+        Base["https://rtc.live.cloudflare.com/v1/apps/{appId}/..."]
+        SessionNew["POST /sessions/new"]
+        TracksNew["POST /sessions/:id/tracks/new"]
+        TracksClose["PUT /sessions/:id/tracks/close"]
+        Renegotiate["PUT /sessions/:id/renegotiate"]
+    end
+
+    callCFApi -->|Authorization: Bearer secret| SessionNew
+    callCFApi --> TracksNew
+    callCFApi --> TracksClose
+    callCFApi --> Renegotiate
+```
+
+- **`callsApiBase`** is configurable in `ServerConfig` (defaults to `https://rtc.live.cloudflare.com`)
+- **`CALLS_APP_ID`** and **`CALLS_APP_SECRET`** must be set (env vars or wrangler secrets)
+- Without CF credentials, voice operates in **signaling-only mode** (no actual media)
+- Server stores per-participant track info in `voiceTrackRegistry` for late-joiner support
 
 ### Mute / Deafen Lifecycle
 
@@ -569,7 +612,7 @@ stateDiagram-v2
     }
 ```
 
-> Note: `SFUAdapter` is a pluggable interface — mediasoup for self-hosted, Cloudflare Realtime for cloud. E2EE via Insertable Streams is designed but not fully wired.
+> **Cloudflare Realtime SFU** is the sole SFU backend. The `ClientSFUAdapter` interface enables test mocking. E2EE via Insertable Streams encrypts/decrypts media frames at the sender/receiver — the SFU forwards encrypted frames transparently.
 
 ---
 
@@ -1062,7 +1105,7 @@ The `@harmony/migration` package provides:
 
 ## 21. Server vs Cloud Worker Protocol Conformance
 
-Both `@harmony/server` (used by `server-runtime` and Electron) and `cloud-worker` (`CommunityDurableObject` on Cloudflare) implement the Harmony WebSocket protocol. However, **cloud-worker is a minimal reimplementation** covering roughly 25% of the server's protocol surface — it does not import `@harmony/server`.
+Both `@harmony/server` (used by `server-runtime` and Electron) and `cloud-worker` (`CommunityDurableObject` on Cloudflare) implement the Harmony WebSocket protocol. **Cloud-worker now covers ~71 of ~75 message types** (~95%), up from the original ~13.
 
 ### Shared vs Separate Code
 
@@ -1074,11 +1117,11 @@ graph LR
     end
 
     subgraph "Server Package"
-        Server["@harmony/server<br/>HarmonyServer class<br/>QuadStore (async)<br/>Full VP + VC + ZCAP auth<br/>~55 message handlers"]
+        Server["@harmony/server<br/>HarmonyServer class<br/>QuadStore (async)<br/>Full VP + VC + ZCAP auth<br/>~75 message handlers"]
     end
 
     subgraph "Cloud Worker"
-        CW["cloud-worker<br/>CommunityDurableObject<br/>DOQuadStore (sync) + SQL tables<br/>Simplified VP auth (WebCrypto)<br/>~13 message handlers"]
+        CW["cloud-worker<br/>CommunityDurableObject<br/>DOQuadStore (sync) + SQL tables<br/>Simplified VP auth (WebCrypto)<br/>~71 message handlers"]
     end
 
     Protocol --> Server
@@ -1124,10 +1167,11 @@ graph LR
 | **Sync**          | `sync.request`                            |   ✅   |      ✅      |
 | **MLS/E2EE**      | `mls.keypackage.upload/fetch`             |   ✅   |      ❌      |
 |                   | `mls.welcome/commit/group.setup`          |   ✅   |      ❌      |
-| **Voice**         | `voice.join/leave/mute`                   |   ✅   |  ✅ (basic)  |
-|                   | `voice.offer/answer/ice` (WebRTC)         |   ✅   |      ❌      |
-|                   | `voice.transport.*/produce/consume` (SFU) |   ✅   |      ❌      |
-|                   | `voice.video/screen/speaking`             |   ✅   |      ❌      |
+| **Voice**         | `voice.join/leave/mute`                   |   ✅   |      ✅      |
+|                   | `voice.session.create/tracks.push/pull`   |   ✅   |      ✅      |
+|                   | `voice.tracks.close/renegotiate`          |   ✅   |      ✅      |
+|                   | `voice.track.published/removed`           |   ✅   |      ✅      |
+|                   | `voice.video/screen/speaking`             |   ✅   |      ✅      |
 | **Threads**       | `thread.create/send`                      |   ✅   |      ❌      |
 | **Roles**         | `role.create/update/delete/assign/remove` |   ✅   |      ❌      |
 | **Media**         | `media.upload.request/delete`             |   ✅   |      ❌      |
@@ -1136,7 +1180,7 @@ graph LR
 | **Moderation**    | `moderation.config.update/get`            |   ✅   |      ❌      |
 | **Member**        | `member.update`                           |   ✅   |      ❌      |
 
-**Score:** Server supports ~55 message types. Cloud worker supports ~13 (~25%). Cloud worker covers the core messaging happy path but lacks DMs, E2EE, threads, roles, pins, reactions, search, notifications, moderation, media, and most voice features.
+**Score:** Server supports ~75 message types. Cloud worker supports ~71 (~95%). Missing 4 are internal moderation triggers (`accountAge`, `raidDetection`, `rateLimit`, `vcRequirement`) that are server-internal and not externally signalled.
 
 ### Storage Divergence
 
@@ -1160,7 +1204,7 @@ graph LR
 
 > **Note:**
 >
-> 1. **Cloud worker is an MVP** — suitable for basic text chat communities only. DMs, E2EE, voice (beyond join/leave), threads, roles, moderation, and search all require the full server
+> 1. **Cloud worker is now near-parity** — 71/75 message handlers implemented, covering text, DMs, voice (CF SFU proxy), E2EE (MLS), threads, roles, pins, reactions, search, notifications, media, and moderation
 > 2. **A conformance test suite is strongly recommended** — extract protocol tests into a backend-agnostic harness that runs against both implementations
 > 3. **Auth simplification is a security concern** — cloud worker skips VC verification, revocation checks, and ZCAP authorization. This should be documented as a known limitation
 > 4. **Consider a shared handler layer** — the current reimplementation approach guarantees divergence as features are added to server

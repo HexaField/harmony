@@ -1,27 +1,28 @@
 # Harmony — Roadmap & Feature Status
 
-_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-02 09:00 AEDT._
+_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-02 12:45 AEDT._
 
 ---
 
 ## Codebase Snapshot
 
-| Metric             | Value                                                             |
-| ------------------ | ----------------------------------------------------------------- |
-| Packages           | 36                                                                |
-| Estimated LOC      | ~32,000+                                                          |
-| Vitest passing     | 2,627                                                             |
-| Vitest skipped     | 18                                                                |
-| Vitest todo        | 113                                                               |
-| Playwright passing | 99 (38 cross-topology + 13 discord-integration + 48 discord-mock) |
-| Playwright skipped | 7 (voice — needs test voice server)                               |
-| Test matrix        | 130 ✅ / 0 ❌ / 3 ⚠️ / 16 ⊘                                       |
-| TypeScript errors  | 0                                                                 |
-| Oxlint warnings    | 7 (SolidJS `let ref` false positives)                             |
-| Vulnerabilities    | 0                                                                 |
-| UI bundle size     | 349 KB                                                            |
-| Docker image       | 739 MB                                                            |
-| Android APK        | 3.7 MB (unsigned)                                                 |
+| Metric             | Value                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------ |
+| Packages           | 36                                                                                   |
+| Estimated LOC      | ~32,000+                                                                             |
+| Vitest passing     | 2,560                                                                                |
+| Vitest skipped     | 84                                                                                   |
+| Vitest todo        | 114                                                                                  |
+| Vitest failing     | 78 (39 pre-existing better-sqlite3 + 31 portal SQLite migration + 8 cli/integration) |
+| Playwright passing | 41 (cross-topology) + 7 voice (Topology 5)                                           |
+| Playwright skipped | 0                                                                                    |
+| Test matrix        | 131 ✅ / 0 ❌ / 0 ⚠️ / 16 ⊘                                                          |
+| TypeScript errors  | 0                                                                                    |
+| Oxlint warnings    | 7 (SolidJS `let ref` false positives)                                                |
+| Vulnerabilities    | 0                                                                                    |
+| UI bundle size     | 349 KB                                                                               |
+| Docker image       | 739 MB                                                                               |
+| Android APK        | 3.7 MB (unsigned)                                                                    |
 
 ---
 
@@ -180,33 +181,32 @@ _Single source of truth for all features, voice/video detail, and release planni
 
 ### Voice & Video
 
-| Feature                                 | Lib | Server | UI  | Notes                          |
-| --------------------------------------- | --- | ------ | --- | ------------------------------ |
-| Voice join/leave + WebRTC signalling    | ✅  | ✅     | ✅  |                                |
-| Mute/unmute + speaking indicators       | ✅  | ✅     | ✅  |                                |
-| Video enable/disable                    | ✅  | ✅     | ✅  |                                |
-| Screen sharing                          | ✅  | ✅     | ✅  | Not on mobile                  |
-| Video grid (adaptive layout)            | ➖  | ➖     | ✅  |                                |
-| Screen share view                       | ➖  | ➖     | ✅  |                                |
-| Voice control bar                       | ➖  | ➖     | ✅  |                                |
-| Voice channel panel                     | ➖  | ➖     | ✅  |                                |
-| Voice PiP                               | ➖  | ➖     | ✅  |                                |
-| SFUAdapter interface (pluggable)        | ✅  | ✅     | ➖  |                                |
-| Mediasoup adapter (self-hosted SFU)     | ✅  | ✅     | ➖  | In-process, no separate binary |
-| Cloudflare Realtime adapter (cloud)     | ✅  | ➖     | ➖  | Cloud-only                     |
-| VoiceRoomDO (cloud coordination)        | ➖  | ➖     | ➖  | Cloud Worker DO                |
-| E2EE bridge (Insertable Streams + HKDF) | ✅  | ➖     | ✅  |                                |
-| Voice token exchange                    | ✅  | ✅     | ✅  |                                |
+| Feature                                 | Lib | Server | UI  | Notes                                              |
+| --------------------------------------- | --- | ------ | --- | -------------------------------------------------- |
+| Voice join/leave + WebRTC signalling    | ✅  | ✅     | ✅  |                                                    |
+| Mute/unmute + speaking indicators       | ✅  | ✅     | ✅  |                                                    |
+| Video enable/disable                    | ✅  | ✅     | ✅  |                                                    |
+| Screen sharing                          | ✅  | ✅     | ✅  | Not on mobile                                      |
+| Video grid (adaptive layout)            | ➖  | ➖     | ✅  |                                                    |
+| Screen share view                       | ➖  | ➖     | ✅  |                                                    |
+| Voice control bar                       | ➖  | ➖     | ✅  |                                                    |
+| Voice channel panel                     | ➖  | ➖     | ✅  |                                                    |
+| Voice PiP                               | ➖  | ➖     | ✅  |                                                    |
+| ClientSFUAdapter interface (pluggable)  | ✅  | ✅     | ➖  | Single interface, one implementation               |
+| Cloudflare Realtime SFU adapter         | ✅  | ✅     | ➖  | All deployments use CF SFU (server proxies CF API) |
+| Voice track registry (server-side)      | ➖  | ✅     | ➖  | Per-participant CF session IDs + track names       |
+| E2EE bridge (Insertable Streams + HKDF) | ✅  | ➖     | ✅  |                                                    |
+| Voice token exchange                    | ✅  | ✅     | ✅  | Returns `mode: 'cf'` or `'signaling'`              |
 
 #### Voice Production Detail
 
 | # | Feature | Status | Notes |
 | --- | --- | --- | --- |
-| V1 | mediasoup-client Device integration | ✅ | Device loaded with router RTP capabilities |
-| V2 | Send transport (client→SFU) | ✅ | DTLS connect, `transport.on('produce')` wired |
-| V3 | Recv transport (SFU→client) | ✅ | Separate recv transport, consumer creation |
-| V4 | Audio Producer (mic → SFU) | ✅ | `getUserMedia({audio})` → `transport.produce()` |
-| V5 | Audio Consumer (SFU → speaker) | ✅ | Remote audio consumers attached to `<audio>` elements |
+| V1 | CF SFU session creation | ✅ | `voice.session.create` → server proxies to CF Realtime API |
+| V2 | Push tracks (client→SFU) | ✅ | `voice.tracks.push` → server proxies `tracks/new` to CF API |
+| V3 | Pull tracks (SFU→client) | ✅ | `voice.tracks.pull` → server proxies `tracks/new` to CF API |
+| V4 | Audio Producer (mic → SFU) | ✅ | `getUserMedia({audio})` → `adapter.pushTracks()` via `RTCPeerConnection` |
+| V5 | Audio Consumer (SFU → speaker) | ✅ | Remote audio via `adapter.pullTracks()` + `ontrack` event |
 | V6 | Mute/unmute (full stop/restart) | ✅ | `closeProducer()` stops tracks + notifies server; unmute re-acquires mic + new producer |
 | V7 | Deafen (pause all consumers locally) | ✅ | `setDeafened()` pauses/resumes all consumers; deafen auto-mutes |
 | V8 | Speaking indicators (audio level) | ✅ | AnalyserNode 100ms poll → `voice.speaking` signal → cross-device sync via store |
@@ -246,21 +246,23 @@ _Single source of truth for all features, voice/video detail, and release planni
 | E5  | `systemPreferences.askForMediaAccess` | ⬜     | Electron API to trigger macOS permission dialog             |
 | E6  | Permission status UI indicator        | ⬜     | Show when camera/mic blocked                                |
 
-#### Voice Signaling (WebSocket)
+#### Voice Signaling (WebSocket — CF Realtime SFU)
 
 | # | Feature | Status | Notes |
 | --- | --- | --- | --- |
-| W1 | voice.token request/response | ✅ | Client sends, server generates JWT |
-| W2 | voice.transport.connect | ✅ | Server handler + client dispatch |
-| W3 | voice.produce signaling | ✅ | Server handler + client dispatch |
-| W4 | voice.consume signaling | ✅ | Server handler + client dispatch |
-| W5 | voice.consumer.resume | ✅ | Server handler + client dispatch |
-| W6 | Client-side signaling dispatch | ✅ | `sendVoiceSignal` (req/res) + `fireVoiceSignal` (fire-and-forget) |
-| W7 | voice.join / voice.leave broadcast | ✅ | Server broadcasts to channel participants |
-| W8 | Participant state sync on join | ✅ | `voice.new-producer` broadcast to existing participants |
-| W9 | `voice.producer-closed` signaling | ✅ | Server broadcasts when client closes producer; remote consumers cleaned up |
-| W10 | `voice.speaking` relay | ✅ | Server relays speaking state changes to all other channel participants |
-| W11 | Self-consumption prevention | ✅ | `getProducers` excludes requester's own; skip closed producers |
+| W1 | voice.token request/response | ✅ | Returns `mode: 'cf'` when `CALLS_APP_ID` set, `'signaling'` otherwise |
+| W2 | voice.session.create/created | ✅ | Client requests → server proxies CF `sessions/new` → returns sessionId |
+| W3 | voice.tracks.push/pushed | ✅ | Client pushes local tracks → server proxies CF `sessions/:id/tracks/new` |
+| W4 | voice.tracks.pull/pulled | ✅ | Client pulls remote tracks → server proxies CF `sessions/:id/tracks/new` |
+| W5 | voice.tracks.close | ✅ | Dedicated message type for closing tracks (no force-hack) |
+| W6 | voice.renegotiate/renegotiated | ✅ | SDP renegotiation via server proxy |
+| W7 | voice.track.published broadcast | ✅ | Server broadcasts to all room participants when new track available |
+| W8 | voice.track.removed broadcast | ✅ | Server broadcasts when participant's track goes away |
+| W9 | voice.join / voice.leave broadcast | ✅ | Server broadcasts to channel participants |
+| W10 | Late-joiner track info | ✅ | `voice.get-producers` returns real track data from `voiceTrackRegistry` |
+| W11 | `voice.speaking` relay | ✅ | Server relays speaking state changes to all other channel participants |
+| W12 | Self-consumption prevention | ✅ | `getProducers` excludes requester's own; skip closed producers |
+| W13 | CF API proxy (`callCFApi()`) | ✅ | Server + cloud worker proxy all CF API calls; configurable `callsApiBase` |
 
 #### Voice UI Components
 
@@ -289,13 +291,16 @@ _Single source of truth for all features, voice/video detail, and release planni
 
 #### Cross-Device E2E Testing
 
-| #   | Feature                             | Status | Notes                              |
-| --- | ----------------------------------- | ------ | ---------------------------------- |
-| T1  | Cross-device voice E2E (real audio) | ✅     | Mac ↔ Linux, 22/23 passing         |
-| T2  | Cross-device video E2E              | ✅     | Camera → remote consumer verified  |
-| T3  | Screen share E2E                    | 🔧     | desktopCapturer works, no E2E test |
-| T4  | Voice reconnection test             | ✅     | Leave/rejoin cycle verified        |
-| T5  | Mute/unmute E2E                     | ✅     | Producer pause/resume verified     |
+| #   | Feature                           | Status | Notes                                                        |
+| --- | --------------------------------- | ------ | ------------------------------------------------------------ |
+| T1  | Cross-device voice signaling      | ✅     | Mac ↔ Linux Chrome, 13/14 passing (CDP voice-matrix-test)    |
+| T2  | Cross-device video E2E            | ✅     | Camera → remote consumer verified                            |
+| T3  | Screen share E2E                  | 🔧     | desktopCapturer works, no E2E test                           |
+| T4  | Voice reconnection test           | ✅     | Leave/rejoin cycle verified                                  |
+| T5  | Mute/unmute E2E                   | ✅     | State relay verified cross-device                            |
+| T6  | Deafen/undeafen E2E               | ✅     | State relay verified cross-device                            |
+| T7  | Participant tracking E2E          | ✅     | Both participants visible in voice lobby                     |
+| T8  | Voice on miniflare (cloud worker) | 🔧     | Connection works, community creation timeout in test harness |
 
 ### E2EE (End-to-End Encryption)
 
@@ -690,6 +695,12 @@ Everything below is done and committed.
 - 7 new voice E2EE wiring tests, 3 MLS new channel tests, persistence + session token tests
 - Vitest: **2,627 passing** (was 2,545), 39 pre-existing failures, 0 regressions
 - Key commits: `0406735` (voice E2EE wiring), `b1086c3`→`f6d4f50` (persistence layers), `ae1dead` (deterministic encryption key fix), `6e61072`+`74667be` (cross-device verification)
+- **CF Realtime SFU migration — 12 commits** (`1171fa8`→`07d8de8`): mediasoup fully removed, `CloudflareSFUAdapter` + `ClientSFUAdapter` interface, server + cloud worker proxy CF API calls (`callCFApi`, configurable `callsApiBase`), voice track registry, `voice.tracks.close` dedicated message, UI `voiceRemoteTracks` reactive map, wrangler.toml CF vars
+- **Voice tests post-migration**: 121 vitest (10 files), 7 Playwright (Topology 5), CF proxy chain integration test (8 tests with mock CF server), all passing
+- **Cross-device voice signaling verified**: Mac ↔ Linux Chrome via CDP — voice join, participant tracking (both visible), mute/unmute, deafen/undeafen, leave — 13/14 self-hosted tests pass (1 cleanup timing issue); miniflare topology connects but community creation times out in test harness
+- **Cloud worker parity**: 13→71 message handlers (server has 75), 10 new DO SQLite tables, rate limiting, input validation
+- **Portal SQLite migration**: in-memory Maps → better-sqlite3 (WAL mode), auth middleware, CORS, input validation — 31 test regressions (better-sqlite3 Node version mismatch)
+- Key commits: `27b120d` (voice matrix test), `07d8de8` (CF proxy chain), `cf59ec6` (voice track broadcasts), `890b6bb` (voice track tests), `e8c2a8a` (CW handlers), `2d6ca24` (portal fixes)
 
 ---
 
@@ -806,7 +817,7 @@ Everything below is done and committed.
 - **DO location hints** — `locationHint` set to majority-participant region
 - **Voice analytics** — Workers Analytics Engine for "Time to First Frame"
 - **Simulcast** — VP8 simulcast layers (high/medium/low), SFU selects per subscriber
-- **Mesh fallback** — If CF SFU unavailable, degrade to P2P mesh (post-launch)
+- **Bandwidth adaptation** — SFU layer selection per subscriber based on available bandwidth
 
 ### Priority 2 — Important but not urgent
 
@@ -858,18 +869,21 @@ Everything below is done and committed.
 | did | 3 | DID method expansion |
 | integration/import | 1 | Server import edge case |
 
-**Failed (39, pre-existing)** — all `better-sqlite3` native module mismatch (Node 22 → 24):
+**Failed (78)** — `better-sqlite3` native module mismatch (Node 22 → 24) + portal SQLite migration:
 
-| File                                               | Tests | Root Cause                            |
-| -------------------------------------------------- | ----- | ------------------------------------- |
-| `server-runtime/test/server-runtime.spec.ts`       | 12    | `better-sqlite3` dlopen               |
-| `server-runtime/test/sqlite-quad-store.spec.ts`    | 9     | `better-sqlite3` dlopen               |
-| `app/test/app.spec.ts`                             | 6     | `better-sqlite3` (via server-runtime) |
-| `app/test/config-persistence.spec.ts`              | 2     | `better-sqlite3` (via server-runtime) |
-| `integration-tests/test/full-e2e.spec.ts`          | 6     | `better-sqlite3` (via server-runtime) |
-| `integration-tests/test/flow-verification.spec.ts` | 1     | `better-sqlite3` (via server-runtime) |
-| `integration-tests/test/live-server-join.spec.ts`  | 1     | Requires running Mac server           |
-| `integration-tests/test/voice.spec.ts`             | 2     | No real audio device                  |
+| File                                               | Tests | Root Cause                                 |
+| -------------------------------------------------- | ----- | ------------------------------------------ |
+| `server-runtime/test/server-runtime.spec.ts`       | 12    | `better-sqlite3` dlopen                    |
+| `server-runtime/test/sqlite-quad-store.spec.ts`    | 9     | `better-sqlite3` dlopen                    |
+| `app/test/app.spec.ts`                             | 6     | `better-sqlite3` (via server-runtime)      |
+| `app/test/config-persistence.spec.ts`              | 2     | `better-sqlite3` (via server-runtime)      |
+| `integration-tests/test/full-e2e.spec.ts`          | 6     | `better-sqlite3` (via server-runtime)      |
+| `integration-tests/test/flow-verification.spec.ts` | 1     | `better-sqlite3` (via server-runtime)      |
+| `integration-tests/test/portal-e2e.spec.ts`        | ~6    | `better-sqlite3` (portal SQLite migration) |
+| `integration-tests/test/live-server-join.spec.ts`  | 1     | Requires running Mac server                |
+| `integration-tests/test/voice.spec.ts`             | 2     | No real audio device                       |
+| `portal/test/portal.spec.ts`                       | 31    | `better-sqlite3` (portal SQLite migration) |
+| `cli-app/test/cli-app.spec.ts`                     | ~2    | `better-sqlite3` (via server-runtime)      |
 
 **Todo (113) by category:**
 
@@ -971,7 +985,7 @@ B6 wired the client-side setup and initiation flows, but three operations requir
         └───────────┘ └───────────┘ └───────────┘
 ```
 
-Cloud: Portal Worker + Cloud Worker on Cloudflare. Clients connect via WSS. Self-hosted: Docker image with embedded server + mediasoup SFU. Clients connect directly. Always free.
+Cloud: Portal Worker + Cloud Worker on Cloudflare. Clients connect via WSS. Self-hosted: Docker image with embedded server. All voice/video uses CF Realtime SFU (server proxies CF API calls). Clients connect directly. Always free (audio within 1TB/mo).
 
 ---
 
@@ -999,6 +1013,7 @@ Cloud: Portal Worker + Cloud Worker on Cloudflare. Clients connect via WSS. Self
 | MLS browser test      | `~/Desktop/harmony/tests/scripts/mls-browser-test.cjs`                      |
 | MLS cross-device      | `~/Desktop/harmony/tests/scripts/verify-mls.cjs`                            |
 | E2EE cross-device     | `~/Desktop/harmony/tests/scripts/verify-e2ee-cross-device.cjs`              |
+| Voice matrix test     | `~/Desktop/harmony/tests/scripts/voice-matrix-test.cjs`                     |
 | Cross-topology tests  | `~/Desktop/harmony/tests/cross-topology.spec.ts`                            |
 | Discord mock tests    | `~/Desktop/harmony/tests/discord-mock-e2e.spec.ts`                          |
 | DM architecture       | `~/Desktop/harmony/docs/dm-architecture.md`                                 |
@@ -1016,7 +1031,7 @@ Items identified in audit rounds 1–3 that are documented but not yet fixed:
 | Identity `createFromOAuthRecovery` | Derives DID from ephemeral token — new DID each time | Medium | Post-beta: needs stable OAuth-to-DID binding |
 | Bot-api webhook HMAC | XOR hash instead of SHA-256 HMAC | Low | Package is 📋 (post-launch) |
 | Bot-api lifecycle | `startBot`/`stopBot` are status flags only, no sandbox | Low | Package is 📋 (post-launch) |
-| Cloud-worker `VoiceRoomDO` | Dead code — never imported | Low | Cleanup before cloud deployment |
+| Cloud-worker voice | Full CF SFU proxy implemented (`callCFApi()`) but needs `CALLS_APP_ID`/`CALLS_APP_SECRET` secrets | Low | Set via `wrangler secret put` at deployment |
 | Portal OAuth URL | Hardcoded `oauth.example.com` placeholder | Low | Will be configured at deployment |
 | Rate limit `clearRateLimits` | Empty function body | Low | Cloud middleware cleanup |
 | App stubs | `checkForUpdates`, `reconnect`, `handleFileDrop`, `joinVoice` return hardcoded values | Low | Electron app convenience stubs; real logic in client/voice packages |

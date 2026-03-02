@@ -1,6 +1,6 @@
 # Harmony — Roadmap & Feature Status
 
-_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-02 12:45 AEDT._
+_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-02 17:05 AEDT._
 
 ---
 
@@ -28,16 +28,18 @@ _Single source of truth for all features, voice/video detail, and release planni
 
 ## Deployment Targets
 
-| Target           | Description                                                                                 |
-| ---------------- | ------------------------------------------------------------------------------------------- |
-| **Electron**     | Desktop app — embedded `server-runtime` in main process, `ui-app` in BrowserWindow renderer |
-| **Local Server** | Self-hosted `server-runtime` daemon (SQLite-backed), Docker distribution                    |
-| **Web UI**       | Browser SPA — same `ui-app` build, connects to cloud or self-hosted server                  |
-| **Portal**       | `portal-worker` on Cloudflare (D1, R2, KV) — identity, directory, invite, OAuth             |
-| **Cloud Server** | `cloud-worker` — Durable Objects (one per community), DO SQLite, Hibernatable WS            |
-| **Mobile**       | Capacitor (Android) + PWA — same `ui-app` build                                             |
+| Target | Description | Beta |
+| --- | --- | --- |
+| **Electron** | Desktop app — embedded `server-runtime` in main process, `ui-app` in BrowserWindow renderer | ✅ |
+| **Local Server** | Self-hosted `server-runtime` daemon (SQLite-backed), Docker distribution | ✅ |
+| **Web UI** | Browser SPA — same `ui-app` build, connects to self-hosted server | ✅ |
+| **Portal** | Express server (SQLite-backed) — identity, directory, invite, OAuth | ✅ |
+| **Cloud Server** | `cloud-worker` — Durable Objects (one per community), DO SQLite, Hibernatable WS | 🔮 |
+| **Mobile** | Capacitor (Android) + PWA — same `ui-app` build | 🔮 |
 
-> **Important:** Electron, Web UI, and Mobile all share the same SolidJS `ui-app` renderer. All UI features (message views, DMs, threads, search, voice controls, migration wizard, etc.) are available across all three. The columns below mark features as ➖ only where the feature genuinely does not apply to that target (e.g. PWA service worker doesn't apply to Electron, file-based config doesn't apply to browser).
+> **Beta scope (2026-03-02):** Self-hosted server + Electron desktop + Portal + Web UI. Cloud Worker and Mobile are deferred to post-beta — cloud infrastructure adds complexity without enough early users to justify it. The self-hosted server already handles all features including voice (CF Realtime SFU, proxied by server). Cloud deployment guide available at `docs/DEPLOY-CLOUDFLARE.md` for when we're ready.
+
+> **Important:** Electron, Web UI, and Mobile all share the same SolidJS `ui-app` renderer. All UI features (message views, DMs, threads, search, voice controls, migration wizard, etc.) are available across all three. The columns below mark features as ➖ only where the feature genuinely does not apply to that target (e.g. PWA service worker doesn't apply to Electron, file-based config doesn't apply to browser). Cloud column retained for completeness but Cloud is **post-beta**.
 
 ---
 
@@ -397,23 +399,25 @@ _Single source of truth for all features, voice/video detail, and release planni
 
 ### Discord Migration
 
-| Feature                                  | Lib | Server | UI  |
-| ---------------------------------------- | --- | ------ | --- |
-| Discord export parser + transform to RDF | ✅  | ✅     | ➖  |
-| Encrypted export bundles                 | ✅  | ✅     | ➖  |
-| User data transform                      | ✅  | ✅     | ➖  |
-| Embed transform (url/title/desc/thumb)   | ✅  | ✅     | ➖  |
-| Sticker transform                        | ✅  | ✅     | ➖  |
-| Thread fetching (active + archived)      | ✅  | ✅     | ➖  |
-| Reaction user resolution (per-emoji)     | ✅  | ✅     | ➖  |
-| Attachment download (Discord CDN)        | ✅  | ✅     | ➖  |
-| Migration bot                            | ✅  | ✅     | ➖  |
-| Migration endpoint (REST API)            | ➖  | ✅     | ➖  |
-| Migration wizard UI                      | ➖  | ➖     | ✅  |
-| Migration dedup                          | ➖  | ➖     | ✅  |
-| GDPR member opt-out                      | ❌  | ❌     | ❌  |
-| Privacy notice template                  | ❌  | ❌     | ❌  |
-| Personal data export (GDPR portability)  | ❌  | ❌     | ❌  |
+> **Architecture change (2026-03-02):** Migrating to hash-verified user-driven import model. Bot exports structure only + SHA256 hash index. Users migrate their own messages via Discord personal data export. See `docs/plans/migration-refactor.md`.
+
+| Feature | Lib | Server | UI | Notes |
+| --- | --- | --- | --- | --- |
+| Discord export parser + transform to RDF | ✅ | ✅ | ➖ | Parses Discord personal data export ZIP |
+| User data transform | ✅ | ✅ | ➖ |  |
+| Embed transform (url/title/desc/thumb) | ✅ | ✅ | ➖ |  |
+| Sticker transform | ✅ | ✅ | ➖ |  |
+| Thread fetching (active + archived) | ✅ | ✅ | ➖ |  |
+| Reaction user resolution (per-emoji) | ✅ | ✅ | ➖ |  |
+| Migration bot (structure only) | 🔧 | 🔧 | ➖ | Refactor: bot exports channels/roles/categories, NOT messages |
+| Hash-based message verification | ❌ | ❌ | ❌ | Bot builds SHA256 hash index; server verifies user uploads |
+| User-driven message import | ❌ | ❌ | ❌ | User uploads Discord data export ZIP; client verifies against hash index |
+| Migration endpoint (REST API) | ➖ | ✅ | ➖ | Needs new hash upload/verify/import endpoints |
+| Migration wizard UI | ➖ | ➖ | ✅ | Needs update for user-driven flow |
+| Migration dedup | ➖ | ➖ | ✅ |  |
+| GDPR member opt-out | ✅ | ✅ | ✅ | Solved by design — users opt IN by uploading their own data |
+| Privacy notice template | ❌ | ❌ | ❌ |  |
+| Personal data export (GDPR portability) | ❌ | ❌ | ❌ |  |
 
 ### Notifications
 
@@ -450,19 +454,22 @@ _Single source of truth for all features, voice/video detail, and release planni
 
 ### Cloud & Portal Infrastructure
 
-| Feature                                      | Status | Target |
-| -------------------------------------------- | ------ | ------ |
-| Community Durable Object (one per community) | ✅     | Cloud  |
-| DO SQLite storage                            | ✅     | Cloud  |
-| Hibernatable WebSockets                      | ✅     | Cloud  |
-| Community provisioning                       | ✅     | Cloud  |
-| Portal identity store (D1)                   | ✅     | Portal |
-| Portal community directory                   | ✅     | Portal |
-| Portal invite resolver                       | ✅     | Portal |
-| Portal OAuth handler                         | ✅     | Portal |
-| Portal rate limiter (KV)                     | ✅     | Portal |
-| Portal relay (WebSocket proxy)               | ✅     | Portal |
-| Portal export store (R2)                     | ✅     | Portal |
+> **Cloud deferred to post-beta (2026-03-02).** Cloud Worker code exists and is tested (71/75 message handlers, 18/18 E2E tests) but deployment postponed. Portal runs as standalone Express server for beta.
+
+| Feature                                      | Status | Target | Beta |
+| -------------------------------------------- | ------ | ------ | ---- |
+| Community Durable Object (one per community) | ✅     | Cloud  | 🔮   |
+| DO SQLite storage                            | ✅     | Cloud  | 🔮   |
+| Hibernatable WebSockets                      | ✅     | Cloud  | 🔮   |
+| Community provisioning                       | ✅     | Cloud  | 🔮   |
+| Portal identity store (SQLite)               | ✅     | Portal | ✅   |
+| Portal community directory                   | ✅     | Portal | ✅   |
+| Portal invite resolver                       | ✅     | Portal | ✅   |
+| Portal OAuth handler                         | ✅     | Portal | ✅   |
+| Portal rate limiter                          | ✅     | Portal | ✅   |
+| Portal relay (WebSocket proxy)               | ✅     | Portal | ✅   |
+| Portal export store                          | ✅     | Portal | ✅   |
+| Portal reconciliation                        | ✅     | Portal | ✅   |
 | Portal reconciliation                        | ✅     | Portal |
 
 ### Infrastructure & Deployment
@@ -503,7 +510,7 @@ _Single source of truth for all features, voice/video detail, and release planni
 | CRDT log (ordered message log)  | ✅     |
 | CRDT operations (insert/delete) | ✅     |
 
-### Revenue / Cloud Tiers
+### Revenue / Cloud Tiers (Post-Beta)
 
 | Feature                      | Status |
 | ---------------------------- | ------ |
@@ -520,7 +527,7 @@ _Single source of truth for all features, voice/video detail, and release planni
 | Script / Workflow               | Checks            | Status                               |
 | ------------------------------- | ----------------- | ------------------------------------ |
 | `scripts/dry-run-server.mjs`    | 11                | ✅ All passing                       |
-| `scripts/dry-run-cloud.mjs`     | 18                | ✅ All passing                       |
+| `scripts/dry-run-cloud.mjs`     | 18                | ✅ All passing (post-beta)           |
 | `scripts/dry-run-migration.mjs` | 23                | ✅ All passing                       |
 | `scripts/smoke-test.mjs`        | —                 | Post-deploy health/WS/auth/migration |
 | `.github/workflows/ci.yml`      | PR tests          | `if: false` — enable when deploying  |
@@ -734,34 +741,33 @@ Everything below is done and committed.
 
 ## Road to Beta
 
+> **Scope narrowed (2026-03-02):** Beta launches with self-hosted server + Electron + Portal + Web UI only. Cloud Worker deployment deferred to post-beta. Migration refactored to hash-verified user-driven import.
+
 ### Pre-Dev Requirements (must complete before first deployment)
 
 | # | Task | Status | Owner | Notes |
 | --- | --- | --- | --- | --- |
 | 1 | Penetration test | ✅ | Agent | 48 tests, 11 findings, all high items fixed |
 | 2 | Pen test remediation | ✅ | Agent | Ed25519 signed auth on all REST endpoints |
-| 3 | Provision CF resources | ⬜ | Josh | `wrangler d1 create`, `wrangler r2 bucket create`, KV/DO namespaces |
-| 4 | Fill wrangler placeholder IDs | ⬜ | Josh | Replace `REPLACE_WITH_*` in wrangler.toml files |
-| 5 | Register domain | ⬜ | Josh | `harmony.chat` or similar → Cloudflare |
-| 6 | Stripe API keys | ⬜ | Josh | Test + live keys |
-| 7 | Billing integration | ⬜ | Agent | Wire Stripe into cloud worker per billing plan — needs Stripe keys first |
-| 8 | Voice E2E test | ✅ | Agent | Mac ↔ Linux, 22/23 E2E tests passing (mediasoup SFU) |
-| 9 | Cross-topology E2E | ✅ | Agent | 38 Playwright tests across 7 topology suites |
-| 10 | Discord mock E2E | 🔧 | Agent | Test file written (~48 tests) but API mismatches unresolved — `MigrationBot` constructor, `exportServer` signature, metadata keys differ from implementation |
-| 11 | Electron build pipeline | ⬜ | Josh + Agent | macOS notarization, Windows signing, auto-update |
-| 12 | Capacitor build pipeline | ⬜ | Josh + Agent | APK signing, iOS provisioning |
-| 13 | Secrets management | ⬜ | Josh | `wrangler secret put` for OAuth, Stripe, etc. |
+| 3 | Fix portal test regressions | ⬜ | Agent | 31 failures from in-memory Maps → SQLite migration |
+| 4 | Fix credential test regressions | ⬜ | Agent | ~18 failures from `issueCredential()` signature change |
+| 5 | Register domain | ⬜ | Josh | Landing page + download links |
+| 6 | OAuth app registrations | ⬜ | Josh | Discord, GitHub, Google developer consoles |
+| 7 | Discord mock E2E | 🔧 | Agent | Test file written (~48 tests) but API mismatches unresolved |
+| 8 | Voice E2E test | ✅ | Agent | Mac ↔ Linux, 22/23 E2E tests passing |
+| 9 | Cross-topology E2E | ✅ | Agent | 41/42 Playwright tests across 7 topology suites |
+| 10 | Electron build pipeline | ⬜ | Josh + Agent | macOS notarization, auto-update |
+| 11 | Migration refactor | ⬜ | Agent | Hash-verified user-driven import (see `docs/plans/migration-refactor.md`) |
 
 ### Phase 1: Dev Environment
 
 | #   | Task                              | Status |
 | --- | --------------------------------- | ------ |
 | 1   | Re-enable CI workflow             | ⬜     |
-| 2   | Deploy Portal Worker to dev       | ⬜     |
-| 3   | Deploy Cloud Worker to dev        | ⬜     |
-| 4   | Build dev Electron app (unsigned) | ⬜     |
-| 5   | Push Docker server image to GHCR  | ⬜     |
-| 6   | Post-deploy smoke test            | ⬜     |
+| 2   | Deploy Portal to VPS / Fly.io     | ⬜     |
+| 3   | Build dev Electron app (unsigned) | ⬜     |
+| 4   | Push Docker server image to GHCR  | ⬜     |
+| 5   | Post-deploy smoke test            | ⬜     |
 
 ### Phase 2: Manual Verification on Dev
 
@@ -769,43 +775,41 @@ Everything below is done and committed.
 | --- | --- | --- | --- |
 | 1 | Full onboarding flow | ⬜ | Real browser |
 | 2 | Voice with real media | ✅ | Two Electron clients (Mac+Linux), mute/unmute/leave verified |
-| 3 | Multi-user real-time | ✅ | 51 CDP E2E tests + 38 Playwright cross-topology tests |
-| 4 | Mobile | ⬜ | Capacitor APK on real Android device |
-| 5 | Self-hosted Docker | ⬜ | `docker compose up` → Electron → create community → restart → verify persistence |
-| 6 | Migration flow | ⬜ | Real Discord server → import → verify |
-| 7 | E2EE wire verification | ✅ | Cross-device CDP test: Mac + Linux Chrome, MLS groups established, bidirectional encrypted messages verified |
-| 8 | Cloud billing | ⬜ | Create community, hit free tier limits, verify enforcement |
+| 3 | Multi-user real-time | ✅ | 51 CDP E2E tests + 41/42 Playwright cross-topology tests |
+| 4 | Self-hosted Docker | ⬜ | `docker compose up` → Electron → create community → restart → verify persistence |
+| 5 | Migration flow | ⬜ | Real Discord server structure export + user data import |
+| 6 | E2EE wire verification | ✅ | Cross-device CDP test: Mac + Linux Chrome, MLS groups established, bidirectional encrypted messages verified |
 
 ### Phase 3: Staging
 
 | #   | Task                                         | Status |
 | --- | -------------------------------------------- | ------ |
 | 1   | CD pipeline (merge to main → staging deploy) | ⬜     |
-| 2   | Separate staging CF resources                | ⬜     |
+| 2   | Separate staging server                      | ⬜     |
 | 3   | Automated staging smoke tests                | ⬜     |
 | 4   | Monitoring + alerting                        | ⬜     |
-| 5   | Load testing                                 | ⬜     |
 
 ### Phase 4: Production
 
-| #   | Task                                           | Status |
-| --- | ---------------------------------------------- | ------ |
-| 1   | Production CF resources                        | ⬜     |
-| 2   | Production domain live                         | ⬜     |
-| 3   | Electron code signing (macOS + Windows)        | ⬜     |
-| 4   | App store submissions (Play Store + App Store) | ⬜     |
-| 5   | Docker tagged release on GHCR                  | ⬜     |
-| 6   | Self-hosted documentation                      | ⬜     |
-| 7   | Security re-audit                              | ⬜     |
+| #   | Task                          | Status |
+| --- | ----------------------------- | ------ |
+| 1   | Production domain live        | ⬜     |
+| 2   | Electron code signing (macOS) | ⬜     |
+| 3   | Docker tagged release on GHCR | ⬜     |
+| 4   | Self-hosted documentation     | ⬜     |
+| 5   | Security re-audit             | ⬜     |
 
 ---
 
 ## Post-Launch
 
-### Priority 1 — Should ship soon after launch
+### Priority 1 — Ship Soon After Beta
 
+- **Cloud Worker deployment** — Code exists and is tested (71/75 handlers). Deploy when user base justifies it. Guide: `docs/DEPLOY-CLOUDFLARE.md`
+- **Billing integration (Stripe)** — Cloud tiers, feature gating
+- **Mobile (Capacitor)** — Android APK already builds (3.7MB unsigned). Needs signing + store submission.
 - **Multi-level ZCAP delegation** — Admin → Mod → Temp-Mod chains, attenuation at each level
-- **VC-based admission** — Gate `community.join` on required credentials
+- **Migration refactor** — Hash-verified user-driven import (see `docs/plans/migration-refactor.md`)
 - **Code block syntax highlighting** — Add `highlight.js` or `shiki` to message renderer
 - **Rich embeds** — Render link previews inline in messages
 - **Contact list persistence** — Friends list storage
@@ -952,40 +956,67 @@ B6 wired the client-side setup and initiation flows, but three operations requir
 
 ### Infrastructure (Release Gates)
 
-- Cloudflare Workers + Durable Objects deployment
+- Portal deployment (VPS, Fly.io, or self-hosted alongside server)
 - Domain registration + DNS
-- Stripe API keys for billing
-- macOS/Windows code signing certificates for Electron distribution
+- macOS code signing certificate for Electron distribution
 - Auto-update (electron-updater) configuration
+- OAuth app registrations (Discord, GitHub, Google)
+
+#### Post-Beta Infrastructure
+
+- Cloudflare Workers + Durable Objects deployment (code ready, see `docs/DEPLOY-CLOUDFLARE.md`)
+- Stripe API keys for billing
+- Capacitor build pipeline (APK/iOS)
+- Windows code signing
 
 ---
 
 ## Deployment Architecture
 
+### Beta (Self-Hosted First)
+
 ```
-                    ┌─────────────────┐
-                    │  harmony.chat   │
-                    └────────┬────────┘
-                             │
-              ┌──────────────┼──────────────┐
-              │              │              │
-        ┌─────┴─────┐ ┌─────┴─────┐ ┌─────┴─────┐
-        │  Portal   │ │  Cloud    │ │ Self-Host │
-        │  Worker   │ │  Worker   │ │ (Docker)  │
-        │  D1/R2/KV │ │  DO/R2   │ │  SQLite   │
-        └───────────┘ └───────────┘ └───────────┘
-              │              │              │
-              └──────────────┼──────────────┘
-                             │
-              ┌──────────────┼──────────────┐
-              │              │              │
-        ┌─────┴─────┐ ┌─────┴─────┐ ┌─────┴─────┐
-        │ Electron  │ │ Capacitor │ │  Browser  │
-        │ (desktop) │ │ (mobile)  │ │  (PWA)    │
-        └───────────┘ └───────────┘ └───────────┘
+              ┌─────────────────┐
+              │  harmony.chat   │  (landing page + downloads)
+              └────────┬────────┘
+                       │
+        ┌──────────────┼──────────────┐
+        │              │              │
+  ┌─────┴─────┐ ┌─────┴─────┐ ┌─────┴─────┐
+  │  Portal   │ │ Self-Host │ │ Self-Host │
+  │  (Express)│ │ (Docker)  │ │ (Docker)  │
+  │  SQLite   │ │  SQLite   │ │  SQLite   │
+  └───────────┘ └───────────┘ └───────────┘
+        │              │              │
+        └──────────────┼──────────────┘
+                       │
+        ┌──────────────┼──────────────┐
+        │              │              │
+  ┌─────┴─────┐ ┌─────┴─────┐ ┌─────┴─────┐
+  │ Electron  │ │ Electron  │ │  Browser  │
+  │ (desktop) │ │ (desktop) │ │  (Web UI) │
+  └───────────┘ └───────────┘ └───────────┘
 ```
 
-Cloud: Portal Worker + Cloud Worker on Cloudflare. Clients connect via WSS. Self-hosted: Docker image with embedded server. All voice/video uses CF Realtime SFU (server proxies CF API calls). Clients connect directly. Always free (audio within 1TB/mo).
+Beta: Portal (Express + SQLite) for identity/OAuth/discovery. Users run self-hosted servers (Docker or standalone). All voice/video uses CF Realtime SFU (server proxies CF API calls — free up to 1TB/mo audio). Electron desktop app for macOS arm64 + Linux x64.
+
+### Post-Beta (Cloud)
+
+```
+              ┌─────────────────┐
+              │  harmony.chat   │
+              └────────┬────────┘
+                       │
+        ┌──────────────┼──────────────┐
+        │              │              │
+  ┌─────┴─────┐ ┌─────┴─────┐ ┌─────┴─────┐
+  │  Portal   │ │  Cloud    │ │ Self-Host │
+  │  Worker   │ │  Worker   │ │ (Docker)  │
+  │  D1/R2/KV │ │  DO/R2   │ │  SQLite   │
+  └───────────┘ └───────────┘ └───────────┘
+```
+
+Cloud Worker code exists and is tested (71/75 handlers, 18/18 E2E). Deployment guide: `docs/DEPLOY-CLOUDFLARE.md`.
 
 ---
 
@@ -1000,6 +1031,9 @@ Cloud: Portal Worker + Cloud Worker on Cloudflare. Clients connect via WSS. Self
 | Backup strategy       | `~/Desktop/harmony/docs/BACKUP-STRATEGY.md`                                 |
 | Environment reference | `~/Desktop/harmony/docs/ENVIRONMENT.md`                                     |
 | Billing plan          | `~/.openclaw/workspace/membranes/harmony/plans/billing-plan.md`             |
+| Migration refactor    | `~/Desktop/harmony/docs/plans/migration-refactor.md`                        |
+| CF deployment guide   | `~/Desktop/harmony/docs/DEPLOY-CLOUDFLARE.md`                               |
+| Legal analysis        | `~/.openclaw/workspace/membranes/harmony/research/legal-analysis.md`        |
 | ADAM convergence      | `~/.openclaw/workspace/membranes/harmony/plans/harmony-adam-convergence.md` |
 | ADAM spec proposal    | `~/.openclaw/workspace/membranes/adam/proposals/adam-zcap-vc-spec.md`       |
 | Dry-run: server       | `~/Desktop/harmony/scripts/dry-run-server.mjs`                              |

@@ -53,13 +53,15 @@ graph TB
 
 ### Deployment Target Summary
 
+> **Beta scope:** Electron + Self-hosted Server + Portal + Web UI. Cloud Worker and Mobile deferred to post-beta.
+
 ```mermaid
 graph LR
     UIApp["@harmony/ui-app<br/>(SolidJS SPA)"]
 
     UIApp -->|BrowserWindow| Electron["Electron<br/>+ embedded server<br/>+ SQLite"]
     UIApp -->|served as SPA| Web["Web Browser"]
-    UIApp -->|Capacitor shell| Mobile["Android / iOS<br/>+ native push<br/>+ biometric"]
+    UIApp -->|Capacitor shell| Mobile["Android / iOS<br/>+ native push<br/>+ biometric<br/>(post-beta)"]
 ```
 
 ---

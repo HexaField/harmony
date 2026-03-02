@@ -389,30 +389,30 @@ _Mostly not implemented._
 
 ---
 
-## 23. Cloud Worker (Miniflare)
+## 23. Cloud Worker (Miniflare) — DEFERRED TO POST-BETA
 
-_Local miniflare execution of CommunityDurableObject._
+_Cloud Worker deployment deferred (2026-03-02). Code exists and all 18 tests passed. Will re-verify when cloud deployment begins._
 
 | # | Feature | Result | Comments |
 | --- | --- | --- | --- |
-| 23.1 | Miniflare starts and binds to port | ✅ | port 8790, /health returns ok |
-| 23.2 | WebSocket upgrade succeeds to DO | ✅ | `/ws/<name>` routes to DO instance |
-| 23.3 | VP auth handshake on cloud worker | ✅ | Ed25519 VP verified, sync.response with authenticated=true |
-| 23.4 | Create community via cloud worker | ✅ | community.updated returned, channels in sync.response |
-| 23.5 | Send/receive messages through DO | ✅ | channel.message broadcast to sender |
-| 23.6 | Channel CRUD via cloud worker | ✅ | channel.created, test-chan visible |
-| 23.7 | DMs via cloud worker | ✅ | Bob received DM from Alice |
-| 23.8 | Roles/permissions via cloud worker | ✅ | role.created — fixed communityId mismatch bug (commit a37c568) |
-| 23.9 | Moderation (ban/kick) via cloud worker | ✅ | ban sent (admin verified) |
-| 23.10 | MLS key exchange via cloud worker | ✅ | Verified via Playwright topology tests (11/11) |
-| 23.11 | Threads via cloud worker | ✅ | thread.created with parentMessageId |
-| 23.12 | Pins via cloud worker | ✅ | channel.message.pinned |
-| 23.13 | Reactions via cloud worker | ✅ | channel.reaction.added |
-| 23.14 | Typing indicators via cloud worker | ✅ | Fire-and-forget, no error |
-| 23.15 | Presence via cloud worker | ✅ | presence.update accepted |
-| 23.16 | Voice signaling via cloud worker | ✅ | voice.token.response mode=signaling (no CF creds) |
-| 23.17 | Rate limiting enforced | ✅ | RATE_LIMITED after 50 messages in <10s |
-| 23.18 | Input validation (DID format, message length) | ✅ | DID validation in auth + handler checks |
+| 23.1 | Miniflare starts and binds to port | ✅ 🔮 | port 8790, /health returns ok |
+| 23.2 | WebSocket upgrade succeeds to DO | ✅ 🔮 | `/ws/<name>` routes to DO instance |
+| 23.3 | VP auth handshake on cloud worker | ✅ 🔮 | Ed25519 VP verified, sync.response with authenticated=true |
+| 23.4 | Create community via cloud worker | ✅ 🔮 | community.updated returned, channels in sync.response |
+| 23.5 | Send/receive messages through DO | ✅ 🔮 | channel.message broadcast to sender |
+| 23.6 | Channel CRUD via cloud worker | ✅ 🔮 | channel.created, test-chan visible |
+| 23.7 | DMs via cloud worker | ✅ 🔮 | Bob received DM from Alice |
+| 23.8 | Roles/permissions via cloud worker | ✅ 🔮 | role.created — fixed communityId mismatch bug (commit a37c568) |
+| 23.9 | Moderation (ban/kick) via cloud worker | ✅ 🔮 | ban sent (admin verified) |
+| 23.10 | MLS key exchange via cloud worker | ✅ 🔮 | Verified via Playwright topology tests (11/11) |
+| 23.11 | Threads via cloud worker | ✅ 🔮 | thread.created with parentMessageId |
+| 23.12 | Pins via cloud worker | ✅ 🔮 | channel.message.pinned |
+| 23.13 | Reactions via cloud worker | ✅ 🔮 | channel.reaction.added |
+| 23.14 | Typing indicators via cloud worker | ✅ 🔮 | Fire-and-forget, no error |
+| 23.15 | Presence via cloud worker | ✅ 🔮 | presence.update accepted |
+| 23.16 | Voice signaling via cloud worker | ✅ 🔮 | voice.token.response mode=signaling (no CF creds) |
+| 23.17 | Rate limiting enforced | ✅ 🔮 | RATE_LIMITED after 50 messages in <10s |
+| 23.18 | Input validation (DID format, message length) | ✅ 🔮 | DID validation in auth + handler checks |
 
 ---
 

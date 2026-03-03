@@ -1,9 +1,9 @@
 // Server runtime — wraps HarmonyServer with config, SQLite, logging, health, lifecycle
 import { createServer, type Server as HttpServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { createServer as createTlsServer } from 'node:https'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync, unlinkSync } from 'node:fs'
 import { mkdirSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 import { WebSocket } from 'ws'
 
 import { HarmonyServer, type ServerConfig } from '@harmony/server'
@@ -52,11 +52,16 @@ export class ServerRuntime {
   private relayWs: WebSocket | null = null
   private identityDID: string | undefined
   private signalHandlers: Array<{ signal: string; handler: () => void }> = []
+  private backupTimer: ReturnType<typeof setInterval> | null = null
 
   constructor(config?: RuntimeConfig, configPath?: string) {
     this.config = config ?? {
       server: { host: '0.0.0.0', port: 4000 },
-      storage: { database: './harmony.db', media: './media' },
+      storage: {
+        database: './harmony.db',
+        media: './media',
+        backup: { enabled: true, directory: './backups', intervalHours: 168, maxRetained: 4 }
+      },
       identity: {},
       federation: { enabled: false },
       relay: { enabled: false },
@@ -222,6 +227,11 @@ export class ServerRuntime {
       this.connectToRelay()
     }
 
+    // Start periodic backups
+    if (this.config.storage.backup?.enabled) {
+      this.startBackupSchedule()
+    }
+
     this.logger.info(t('SERVER_STARTED'))
   }
 
@@ -246,6 +256,12 @@ export class ServerRuntime {
     if (this.httpServer) {
       await new Promise<void>((resolve) => this.httpServer!.close(() => resolve()))
       this.httpServer = null
+    }
+
+    // Stop backup timer
+    if (this.backupTimer) {
+      clearInterval(this.backupTimer)
+      this.backupTimer = null
     }
 
     // Close SQLite (flush WAL)
@@ -377,6 +393,61 @@ export class ServerRuntime {
       })
     } catch (err) {
       this.logger.error(t('RELAY_FAILED', { error: String(err) }))
+    }
+  }
+
+  private startBackupSchedule(): void {
+    const backup = this.config.storage.backup!
+    const { directory, intervalHours, maxRetained } = backup
+    mkdirSync(directory, { recursive: true })
+    const intervalMs = intervalHours * 60 * 60 * 1000
+
+    this.logger.info(`Backup schedule: every ${intervalHours}h, retaining ${maxRetained}, to ${directory}`)
+
+    // Run first backup shortly after startup (30s delay to avoid slowing init)
+    setTimeout(() => {
+      void this.performBackup()
+    }, 30_000)
+
+    this.backupTimer = setInterval(() => {
+      void this.performBackup()
+    }, intervalMs)
+    // Don't keep the process alive just for backups
+    if (this.backupTimer.unref) this.backupTimer.unref()
+  }
+
+  private async performBackup(): Promise<void> {
+    if (!this.store) return
+    const { directory, maxRetained } = this.config.storage.backup ?? { directory: './backups', maxRetained: 4 }
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const filename = `harmony-backup-${timestamp}.db`
+    const backupPath = join(directory, filename)
+
+    try {
+      await this.store.backup(backupPath)
+      this.logger.info(`Backup completed: ${filename}`)
+
+      // Prune old backups beyond maxRetained
+      this.pruneBackups(directory, maxRetained)
+    } catch (err) {
+      this.logger.error(`Backup failed: ${String(err)}`)
+    }
+  }
+
+  private pruneBackups(directory: string, maxRetained: number): void {
+    try {
+      const files = readdirSync(directory)
+        .filter((f) => f.startsWith('harmony-backup-') && f.endsWith('.db'))
+        .sort() // ISO timestamps sort lexicographically
+      if (files.length > maxRetained) {
+        const toDelete = files.slice(0, files.length - maxRetained)
+        for (const file of toDelete) {
+          unlinkSync(join(directory, file))
+          this.logger.info(`Pruned old backup: ${file}`)
+        }
+      }
+    } catch (err) {
+      this.logger.error(`Backup pruning failed: ${String(err)}`)
     }
   }
 }

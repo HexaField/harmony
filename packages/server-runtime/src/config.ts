@@ -14,9 +14,20 @@ export interface ServerSection {
   tls?: TLSSection
 }
 
+export interface BackupSection {
+  enabled: boolean
+  /** Directory to write backups into (default: ./backups) */
+  directory: string
+  /** Backup interval in hours (default: 168 = weekly) */
+  intervalHours: number
+  /** Maximum number of backups to retain (default: 4) */
+  maxRetained: number
+}
+
 export interface StorageSection {
   database: string
   media: string
+  backup?: BackupSection
 }
 
 export interface IdentitySection {
@@ -90,7 +101,11 @@ export interface RuntimeConfig {
 
 const defaults: RuntimeConfig = {
   server: { host: '0.0.0.0', port: 4000 },
-  storage: { database: './harmony.db', media: './media' },
+  storage: {
+    database: './harmony.db',
+    media: './media',
+    backup: { enabled: true, directory: './backups', intervalHours: 168, maxRetained: 4 }
+  },
   identity: {},
   federation: { enabled: false },
   relay: { enabled: false },
@@ -135,6 +150,16 @@ function mergeWithDefaults(raw: Record<string, unknown>): RuntimeConfig {
     const s = raw.storage as Record<string, unknown>
     if (typeof s.database === 'string') config.storage.database = s.database
     if (typeof s.media === 'string') config.storage.media = s.media
+    if (s.backup && typeof s.backup === 'object') {
+      if (!config.storage.backup) {
+        config.storage.backup = { enabled: true, directory: './backups', intervalHours: 168, maxRetained: 4 }
+      }
+      const b = s.backup as Record<string, unknown>
+      if (typeof b.enabled === 'boolean') config.storage.backup.enabled = b.enabled
+      if (typeof b.directory === 'string') config.storage.backup.directory = b.directory
+      if (typeof b.intervalHours === 'number') config.storage.backup.intervalHours = b.intervalHours
+      if (typeof b.maxRetained === 'number') config.storage.backup.maxRetained = b.maxRetained
+    }
   }
 
   if (raw.identity && typeof raw.identity === 'object') {

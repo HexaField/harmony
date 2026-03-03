@@ -47,11 +47,13 @@ export async function createApp(
   // Health check (no auth)
   app.get('/health', (_req: Request, res: Response) => res.json({ status: 'ok' }))
 
-  // Auth middleware on all /api routes
+  // OAuth routes (browser redirects — no auth headers possible)
+  app.use('/api', oauthRoutes(portal))
+
+  // Auth middleware on all other /api routes
   app.use('/api', requireAuth())
 
   app.use('/api', identityRoutes(portal))
-  app.use('/api', oauthRoutes(portal))
   app.use('/api', storageRoutes(portal))
   app.use('/api', friendsRoutes(portal))
   app.use('/api', bugsRoutes(db))

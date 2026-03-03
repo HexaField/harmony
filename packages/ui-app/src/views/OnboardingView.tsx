@@ -67,7 +67,7 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
   const [setupName, setSetupName] = createSignal('')
   const [discordLinked, setDiscordLinked] = createSignal(false)
   const [discordUsername, setDiscordUsername] = createSignal('')
-  const [portalUrl, setPortalUrl] = createSignal((import.meta as any).env?.VITE_PORTAL_URL || 'http://localhost:3000')
+  const [portalUrl] = createSignal((import.meta as any).env?.VITE_PORTAL_URL || 'http://localhost:3000')
   const [portalWaiting, setPortalWaiting] = createSignal(false)
 
   // Confirmation quiz state
@@ -845,18 +845,6 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
             <p class="text-[var(--text-secondary)] text-sm mb-6 text-center">{t('ONBOARDING_SIGN_IN_PORTAL_DESC')}</p>
 
             <div class="space-y-4">
-              {/* Portal URL input */}
-              <div>
-                <label class="text-sm text-[var(--text-muted)] block mb-1">Portal URL</label>
-                <input
-                  type="url"
-                  value={portalUrl()}
-                  onInput={(e) => setPortalUrl(e.currentTarget.value)}
-                  class="w-full p-3 rounded-lg bg-[var(--bg-input)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm"
-                  placeholder="https://portal.harmony.chat"
-                />
-              </div>
-
               {/* Sign in with Discord through portal */}
               <button
                 onClick={async () => {
@@ -873,36 +861,20 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
                     pendingKeyPair = result.keyPair
                     pendingMnemonic = result.mnemonic
 
-                    // Initiate Discord OAuth via portal
+                    // Open Discord OAuth directly via portal
                     const url = portalUrl().replace(/\/$/, '')
-                    const res = await fetch(`${url}/api/identity/link`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        provider: 'discord',
-                        userDID: result.identity.did,
-                        source: (window as any).__HARMONY_DESKTOP__ ? 'desktop' : 'browser'
-                      })
-                    })
+                    const oauthUrl = `${url}/api/oauth/discord/authorize?userDID=${encodeURIComponent(result.identity.did)}`
+                    openExternal(oauthUrl)
 
-                    if (!res.ok) {
-                      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-                      throw new Error(err.error || `Portal error: ${res.status}`)
-                    }
+                    // Start polling for completion
+                    startOAuthPolling(url, result.identity.did)
+                    setPortalWaiting(true)
 
-                    const data = await res.json()
-                    if (data.redirectUrl) {
-                      openExternal(data.redirectUrl)
-                      // Start polling for completion
-                      startOAuthPolling(url, result.identity.did)
-                      setPortalWaiting(true)
-
-                      // Commit identity to store so OAuth completion handler works
-                      store.setDid(result.identity.did)
-                      store.setMnemonic(result.mnemonic)
-                      store.setIdentity(result.identity)
-                      store.setKeyPair(result.keyPair)
-                    }
+                    // Commit identity to store so OAuth completion handler works
+                    store.setDid(result.identity.did)
+                    store.setMnemonic(result.mnemonic)
+                    store.setIdentity(result.identity)
+                    store.setKeyPair(result.keyPair)
                   } catch (err) {
                     setError(err instanceof Error ? err.message : String(err))
                   } finally {

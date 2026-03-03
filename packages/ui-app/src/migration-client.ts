@@ -1,5 +1,7 @@
 // Thin API client for the server-runtime migration endpoints
 
+import { signAsync } from '@noble/ed25519'
+
 let _authDID: string | null = null
 let _authSecretKey: Uint8Array | null = null
 
@@ -19,8 +21,7 @@ async function authHeaders(method: string, path: string): Promise<Record<string,
 
   let sigBytes: Uint8Array
   try {
-    const { ed25519 } = await import('@noble/ed25519')
-    sigBytes = await ed25519.sign(msgBytes, _authSecretKey.slice(0, 32))
+    sigBytes = await signAsync(msgBytes, _authSecretKey.slice(0, 32))
   } catch {
     return {}
   }

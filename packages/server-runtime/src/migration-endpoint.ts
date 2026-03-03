@@ -125,7 +125,8 @@ export class MigrationEndpoint {
       return null
     }
     const now = Date.now()
-    if (Math.abs(now - timestamp) > AUTH_TIMESTAMP_WINDOW_MS) {
+    const timestampMs = timestamp < 1e12 ? timestamp * 1000 : timestamp // Accept both seconds and milliseconds
+    if (Math.abs(now - timestampMs) > AUTH_TIMESTAMP_WINDOW_MS) {
       this.json(res, 401, { error: 'Timestamp outside acceptable window (±5 minutes)' })
       return null
     }

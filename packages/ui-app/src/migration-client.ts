@@ -4,20 +4,14 @@ import { createCryptoProvider } from '@harmony/crypto'
 
 const cryptoProvider = createCryptoProvider()
 
-let _authDID: string | null = null
-let _authSecretKey: Uint8Array | null = null
-
-/** Configure Ed25519 credentials for migration API auth */
-export function setMigrationAuth(did: string, secretKey: Uint8Array): void {
-  _authDID = did
-  _authSecretKey = secretKey
-  console.log('[MigrationAuth] set:', did, 'sk len:', secretKey.length)
+export interface MigrationAuth {
+  did: string
+  secretKey: Uint8Array
 }
 
 /** Generate Harmony-Ed25519 authorization header */
-async function authHeaders(method: string, path: string): Promise<Record<string, string>> {
-  console.log('[MigrationAuth] authHeaders called, did:', _authDID, 'hasSk:', !!_authSecretKey)
-  if (!_authDID || !_authSecretKey) return {}
+async function authHeaders(method: string, path: string, auth?: MigrationAuth): Promise<Record<string, string>> {
+  if (!auth?.did || !auth?.secretKey) return {}
 
   const timestamp = Math.floor(Date.now() / 1000).toString()
   const message = `${timestamp}:${method}:${path}`
@@ -25,14 +19,14 @@ async function authHeaders(method: string, path: string): Promise<Record<string,
 
   let sigBytes: Uint8Array
   try {
-    sigBytes = await cryptoProvider.sign(msgBytes, _authSecretKey)
+    sigBytes = await cryptoProvider.sign(msgBytes, auth.secretKey)
   } catch (e) {
     console.error('[MigrationAuth] sign failed:', e)
     return {}
   }
 
   const sig = btoa(String.fromCharCode(...sigBytes))
-  return { Authorization: `Harmony-Ed25519 ${_authDID} ${timestamp} ${sig}` }
+  return { Authorization: `Harmony-Ed25519 ${auth.did} ${timestamp} ${sig}` }
 }
 
 export interface ExportOptions {
@@ -94,7 +88,6 @@ export interface VerifiedImportResult {
 export function toApiBase(serverUrl: string): string {
   if (!serverUrl || !serverUrl.trim()) throw new Error('No server URL configured')
   let normalized = serverUrl.trim()
-  // Add protocol if missing
   if (!normalized.match(/^(ws|wss|http|https):\/\//)) {
     normalized = 'ws://' + normalized
   }
@@ -108,11 +101,12 @@ export async function startExport(params: {
   botToken: string
   guildId: string
   adminDID: string
+  auth?: MigrationAuth
   options?: ExportOptions
 }): Promise<string> {
   const base = toApiBase(params.serverUrl)
   const path = '/api/migration/export'
-  const auth = await authHeaders('POST', path)
+  const auth = await authHeaders('POST', path, params.auth)
   const res = await fetch(`${base}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...auth },
@@ -131,11 +125,11 @@ export async function startExport(params: {
   return data.exportId
 }
 
-export async function pollExport(serverUrl: string, exportId: string): Promise<ExportStatus> {
+export async function pollExport(serverUrl: string, exportId: string, auth?: MigrationAuth): Promise<ExportStatus> {
   const base = toApiBase(serverUrl)
   const path = `/api/migration/export/${exportId}`
-  const auth = await authHeaders('GET', path)
-  const res = await fetch(`${base}${path}`, { headers: auth })
+  const hdrs = await authHeaders('GET', path, auth)
+  const res = await fetch(`${base}${path}`, { headers: hdrs })
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`Export poll failed (${res.status}): ${text}`)
@@ -148,14 +142,15 @@ export async function importBundle(params: {
   bundle: any
   adminDID: string
   communityName: string
+  auth?: MigrationAuth
   adminKeyPair?: { publicKey: string; secretKey: string }
 }): Promise<ImportResult> {
   const base = toApiBase(params.serverUrl)
   const path = '/api/migration/import'
-  const auth = await authHeaders('POST', path)
+  const hdrs = await authHeaders('POST', path, params.auth)
   const res = await fetch(`${base}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...auth },
+    headers: { 'Content-Type': 'application/json', ...hdrs },
     body: JSON.stringify({
       bundle: params.bundle,
       adminDID: params.adminDID,
@@ -172,24 +167,19 @@ export async function importBundle(params: {
 
 // ── Hash-based migration client functions ──
 
-/**
- * Create a new hash-based migration on the server.
- */
 export async function createMigration(params: {
   serverUrl: string
   serverId: string
   serverName: string
   channelMap: Record<string, string>
+  auth?: MigrationAuth
 }): Promise<MigrationCreateResult> {
   const base = toApiBase(params.serverUrl)
   const path = '/api/migration/create'
-  const auth = await authHeaders('POST', path)
+  const hdrs = await authHeaders('POST', path, params.auth)
   const res = await fetch(`${base}${path}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...auth
-    },
+    headers: { 'Content-Type': 'application/json', ...hdrs },
     body: JSON.stringify({
       serverId: params.serverId,
       serverName: params.serverName,
@@ -203,14 +193,15 @@ export async function createMigration(params: {
   return res.json()
 }
 
-/**
- * Get migration status.
- */
-export async function getMigrationStatus(serverUrl: string, migrationId: string): Promise<MigrationStatusResult> {
+export async function getMigrationStatus(
+  serverUrl: string,
+  migrationId: string,
+  auth?: MigrationAuth
+): Promise<MigrationStatusResult> {
   const base = toApiBase(serverUrl)
   const path = `/api/migration/${migrationId}/status`
-  const auth = await authHeaders('GET', path)
-  const res = await fetch(`${base}${path}`, { headers: auth })
+  const hdrs = await authHeaders('GET', path, auth)
+  const res = await fetch(`${base}${path}`, { headers: hdrs })
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`Migration status failed (${res.status}): ${text}`)
@@ -218,23 +209,18 @@ export async function getMigrationStatus(serverUrl: string, migrationId: string)
   return res.json()
 }
 
-/**
- * Verify user message hashes against the stored index.
- */
 export async function verifyHashes(params: {
   serverUrl: string
   migrationId: string
   hashes: string[]
+  auth?: MigrationAuth
 }): Promise<VerifyResult> {
   const base = toApiBase(params.serverUrl)
   const path = `/api/migration/${params.migrationId}/verify`
-  const auth = await authHeaders('POST', path)
+  const hdrs = await authHeaders('POST', path, params.auth)
   const res = await fetch(`${base}${path}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...auth
-    },
+    headers: { 'Content-Type': 'application/json', ...hdrs },
     body: JSON.stringify({ hashes: params.hashes })
   })
   if (!res.ok) {
@@ -244,24 +230,19 @@ export async function verifyHashes(params: {
   return res.json()
 }
 
-/**
- * Import verified messages to Harmony.
- */
 export async function importVerifiedMessages(params: {
   serverUrl: string
   migrationId: string
   verifiedHashes: string[]
   messages: Array<{ hash: string; channelId: string; content: string; timestamp: string }>
+  auth?: MigrationAuth
 }): Promise<VerifiedImportResult> {
   const base = toApiBase(params.serverUrl)
   const path = `/api/migration/${params.migrationId}/import`
-  const auth = await authHeaders('POST', path)
+  const hdrs = await authHeaders('POST', path, params.auth)
   const res = await fetch(`${base}${path}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...auth
-    },
+    headers: { 'Content-Type': 'application/json', ...hdrs },
     body: JSON.stringify({
       verifiedHashes: params.verifiedHashes,
       messages: params.messages
@@ -274,16 +255,17 @@ export async function importVerifiedMessages(params: {
   return res.json()
 }
 
-/**
- * Delete a migration.
- */
-export async function deleteMigration(params: { serverUrl: string; migrationId: string }): Promise<void> {
+export async function deleteMigration(params: {
+  serverUrl: string
+  migrationId: string
+  auth?: MigrationAuth
+}): Promise<void> {
   const base = toApiBase(params.serverUrl)
   const path = `/api/migration/${params.migrationId}`
-  const auth = await authHeaders('DELETE', path)
+  const hdrs = await authHeaders('DELETE', path, params.auth)
   const res = await fetch(`${base}${path}`, {
     method: 'DELETE',
-    headers: auth
+    headers: hdrs
   })
   if (!res.ok) {
     const text = await res.text()

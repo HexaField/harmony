@@ -1,10 +1,10 @@
-import { createSignal, Show, Switch, Match, onCleanup, createEffect, type Component } from 'solid-js'
+import { createSignal, Show, Switch, Match, onCleanup, type Component } from 'solid-js'
 import { useAppStore } from '../../store.tsx'
 import {
   startExport,
   pollExport,
   importBundle,
-  setMigrationAuth,
+  type MigrationAuth,
   type ExportStatus,
   type ExportProgress
 } from '../../migration-client.js'
@@ -123,15 +123,14 @@ const styles = {
 export const MigrationWizard: Component<MigrationWizardProps> = (props) => {
   const store = useAppStore()
 
-  // Set up migration auth reactively — store signals may not be populated at mount time
-  createEffect(() => {
+  // Get auth credentials from store for migration API calls
+  const getAuth = (): MigrationAuth | undefined => {
     const kp = store.keyPair()
     const did = store.did()
-    if (kp?.secretKey && did) {
-      const sk = kp.secretKey instanceof Uint8Array ? kp.secretKey : new Uint8Array(Object.values(kp.secretKey))
-      setMigrationAuth(did, sk)
-    }
-  })
+    if (!kp?.secretKey || !did) return undefined
+    const sk = kp.secretKey instanceof Uint8Array ? kp.secretKey : new Uint8Array(Object.values(kp.secretKey))
+    return { did, secretKey: sk }
+  }
 
   const [step, setStep] = createSignal<Step>('token')
   const [botToken, setBotToken] = createSignal('')
@@ -167,13 +166,14 @@ export const MigrationWizard: Component<MigrationWizardProps> = (props) => {
         serverUrl: serverUrl(),
         botToken: botToken(),
         guildId: guildId(),
-        adminDID: store.did()
+        adminDID: store.did(),
+        auth: getAuth()
       })
       setExportId(id)
 
       pollTimer = setInterval(async () => {
         try {
-          const status = await pollExport(serverUrl(), id)
+          const status = await pollExport(serverUrl(), id, getAuth())
           setProgress(status.progress)
           if (status.status === 'complete') {
             clearInterval(pollTimer!)
@@ -212,7 +212,8 @@ export const MigrationWizard: Component<MigrationWizardProps> = (props) => {
         bundle: result.bundle,
         adminDID: store.did(),
         communityName: result.bundle.guild?.name || 'Imported Server',
-        adminKeyPair: result.adminKeyPair
+        adminKeyPair: result.adminKeyPair,
+        auth: getAuth()
       })
 
       setSummary({

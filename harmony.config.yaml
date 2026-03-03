@@ -1,17 +1,18 @@
 server:
   host: 0.0.0.0
-  port: 9999
+  port: 3100
 
 storage:
   database: ./harmony.db
   media: ./media
+  backup:
+    enabled: true
+    directory: ./backups
+    intervalHours: 168
+    maxRetained: 4
 
 voice:
   enabled: true
-  mediasoup:
-    listenIp: 127.0.0.1
-    announcedIp: 127.0.0.1
-    numWorkers: 1
 
 logging:
   level: info

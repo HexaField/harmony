@@ -51,6 +51,7 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
   const [step, _setStep] = createSignal<OnboardingStep>(props.startAtSetup ? 'setup' : 'welcome')
   const [generatedMnemonic, setGeneratedMnemonic] = createSignal('')
   const [recoverInput, setRecoverInput] = createSignal('')
+  const [dedupDID, setDedupDID] = createSignal<string | null>(null)
   const [recoverMode, setRecoverMode] = createSignal<'mnemonic' | 'social'>('mnemonic')
   const [socialRecoveryDid, setSocialRecoveryDid] = createSignal('')
   const [socialRecoveryRequestId, setSocialRecoveryRequestId] = createSignal('')
@@ -263,8 +264,9 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
       }
     }
 
-    // Different device or mnemonic not available — tell the user
-    setError(t('SETUP_DEDUP_EXISTING', { did: existingDID }))
+    // Different device or mnemonic not available — route to recovery
+    setDedupDID(existingDID)
+    setStep('recover')
   }
 
   async function initClientFromStore() {
@@ -531,6 +533,28 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
         <Show when={step() === 'recover'}>
           <div>
             <h2 class="text-2xl font-bold mb-2 text-center">{t('ONBOARDING_RECOVER_IDENTITY')}</h2>
+
+            {/* Dedup context banner */}
+            <Show when={dedupDID()}>
+              <div class="mb-4 p-3 rounded-lg bg-[var(--bg-hover)] border border-[var(--accent)] text-sm text-[var(--text-secondary)]">
+                <p class="font-semibold text-[var(--text-primary)] mb-1">
+                  Your Discord account is already linked to a Harmony identity.
+                </p>
+                <p>
+                  Enter the mnemonic backup phrase from when you first created your account to recover it. If you don't
+                  have it, you can create a fresh identity instead.
+                </p>
+                <button
+                  onClick={() => {
+                    setDedupDID(null)
+                    setStep('welcome')
+                  }}
+                  class="mt-2 text-xs text-[var(--accent)] hover:underline"
+                >
+                  Create a new identity instead
+                </button>
+              </div>
+            </Show>
 
             {/* Recovery mode tabs */}
             <div class="flex gap-2 mb-4">

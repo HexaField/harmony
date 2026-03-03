@@ -23,7 +23,7 @@ extraMetadata:
   main: dist/main.mjs
 
 nodeGypRebuild: false
-npmRebuild: true
+npmRebuild: false
 
 asarUnpack:
   - "node_modules/better-sqlite3/**/*"

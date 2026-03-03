@@ -2,9 +2,9 @@
 import { join } from 'node:path'
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { homedir, platform } from 'node:os'
-import { ServerRuntime, type RuntimeConfig } from '@harmony/server-runtime'
 import { createCryptoProvider } from '@harmony/crypto'
 import { IdentityManager } from '@harmony/identity'
+import type { ServerRuntime as ServerRuntimeType, RuntimeConfig } from '@harmony/server-runtime'
 import { t } from './strings.js'
 
 /** Deep merge source into target, preserving existing nested keys */
@@ -86,7 +86,7 @@ export interface AutoUpdater {
 }
 
 export class HarmonyApp {
-  private runtime: ServerRuntime | null = null
+  private runtime: ServerRuntimeType | null = null
   private dataDir: string
   private _config: HarmonyConfig
   private state: AppState
@@ -150,6 +150,10 @@ export class HarmonyApp {
       }
     }
 
+    // Dynamic import to avoid top-level better-sqlite3 native module load
+    // (which crashes ESM evaluation if ABI mismatches)
+    const runtimeModule = '@harmony/server-runtime'
+    const { ServerRuntime } = await import(/* @vite-ignore */ runtimeModule)
     this.runtime = new ServerRuntime(config)
     await this.runtime.start()
     this.state.running = true

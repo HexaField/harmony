@@ -1,8 +1,18 @@
-#!/usr/bin/env node
 // @harmony/app — Electron desktop application entrypoint
 // Starts ServerRuntime in main process, opens BrowserWindow with ui-app
 
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell } from 'electron'
+import { appendFileSync } from 'fs'
+
+const debugLog = (msg) => {
+  try {
+    appendFileSync('/tmp/harmony-startup.log', `${new Date().toISOString()} ${msg}\n`)
+  } catch {
+    // ignore
+  }
+}
+
+debugLog('main module loaded')
 import { join } from 'node:path'
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, readdirSync } from 'node:fs'
 import { HarmonyApp } from '../src/app.ts'
@@ -209,21 +219,23 @@ function registerIPC() {
 }
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
+debugLog('commandLine switches set')
+
+// Enable remote debugging if CLI arg passed or HARMONY_DEBUG_PORT env set
+const debugPort =
+  process.argv.find((a) => a.startsWith('--remote-debugging-port='))?.split('=')[1] || process.env.HARMONY_DEBUG_PORT
+if (debugPort) {
+  app.commandLine.appendSwitch('remote-debugging-port', debugPort)
+  app.commandLine.appendSwitch('remote-allow-origins', '*')
+}
 
 app.whenReady().then(async () => {
+  debugLog('whenReady fired')
   // Grant media permissions (camera, microphone, screen capture)
-  const { session, systemPreferences } = await import('electron')
+  const { session } = await import('electron')
 
-  // macOS: proactively request TCC permissions
-  if (process.platform === 'darwin') {
-    try {
-      const micStatus = await systemPreferences.askForMediaAccess('microphone')
-      const camStatus = await systemPreferences.askForMediaAccess('camera')
-      console.log(`Media permissions — mic: ${micStatus}, camera: ${camStatus}`)
-    } catch (err) {
-      console.warn('Could not request media permissions:', err)
-    }
-  }
+  // macOS: TCC permission prompts deferred to when media is actually needed
+  // askForMediaAccess() can block the Electron event loop with a system dialog
 
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
     const allowed = ['media', 'mediaKeySystem', 'display-capture', 'notifications']
@@ -234,25 +246,38 @@ app.whenReady().then(async () => {
     return allowed.includes(permission)
   })
 
-  // Start the server runtime
-  try {
-    await harmonyApp.launch()
-    console.log('Harmony server started on port', harmonyApp.getState().serverPort)
-  } catch (err) {
-    console.error('Failed to start server:', err)
-  }
-
+  debugLog('registerDeepLinks')
   registerDeepLinks()
+  debugLog('registerIPC')
   registerIPC()
+  debugLog('createWindow start')
   await createWindow()
+  debugLog('createWindow done')
   createTray()
 
-  // Notify renderer when server is already running
+  // Launch embedded server AFTER the window has loaded its first page.
+  // better-sqlite3 blocks the event loop synchronously during DB open,
+  // which prevents BrowserWindow from rendering if launched too early.
   mainWindow.webContents.on('did-finish-load', () => {
     if (harmonyApp.getState().running) {
       mainWindow.webContents.send('harmony:server-started', {
         serverUrl: `ws://127.0.0.1:${harmonyApp.getState().serverPort}`
       })
+    } else {
+      // Start the server now that the UI is visible
+      harmonyApp
+        .launch()
+        .then(() => {
+          debugLog(`server started on ${harmonyApp.getState().serverPort}`)
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('harmony:server-started', {
+              serverUrl: `ws://127.0.0.1:${harmonyApp.getState().serverPort}`
+            })
+          }
+        })
+        .catch((err) => {
+          debugLog(`server start failed: ${err?.message || err}`)
+        })
     }
   })
 })

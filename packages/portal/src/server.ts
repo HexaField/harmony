@@ -18,12 +18,17 @@ export async function createApp(
   existingDb?: import('better-sqlite3').Database
 ): Promise<Application> {
   const app = express()
+  app.use((req, _res, next) => {
+    process.stderr.write(`[Portal] ${req.method} ${req.url}\n`)
+    next()
+  })
   app.use(express.json({ limit: '100mb' }))
 
   // CORS — configurable allowed origins
   const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS ?? 'http://localhost:3000,http://localhost:5173').split(',')
 
   app.use((_req, res, next) => {
+    console.error(`[Portal] ${_req.method} ${_req.url} origin=${_req.headers.origin || 'none'}`)
     const origin = _req.headers.origin
     if (origin && ALLOWED_ORIGINS.includes(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin)

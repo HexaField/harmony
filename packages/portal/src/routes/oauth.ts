@@ -138,6 +138,7 @@ export function oauthRoutes(portal: PortalService, reconciliationService?: Recon
   router.get('/oauth/discord/callback', async (req: Request, res: Response) => {
     try {
       const { code, state, error: oauthError } = req.query
+      console.log('[OAuth Callback] code:', !!code, 'state:', !!state, 'error:', oauthError)
 
       if (oauthError) {
         res.status(400).json({ error: `Discord OAuth error: ${oauthError}` })
@@ -199,6 +200,7 @@ export function oauthRoutes(portal: PortalService, reconciliationService?: Recon
       }
 
       const discordUser = (await userRes.json()) as { id: string; username: string; discriminator?: string }
+      console.log('[OAuth Callback] Discord user:', discordUser.username, 'for DID:', pending.userDID)
 
       // Complete the OAuth link — issue VC
       // Generate a temporary key pair for the VC (the portal signs as issuer)
@@ -235,8 +237,15 @@ export function oauthRoutes(portal: PortalService, reconciliationService?: Recon
         if (isDedup) redirectUrl.searchParams.set('existingDID', existingDID)
         res.redirect(redirectUrl.toString())
       } else {
-        // Store result for polling
-        const resultDID = isDedup ? existingDID : pending.userDID
+        // Store result for polling — always use pending.userDID since that's what the client polls
+        const resultDID = pending.userDID
+        console.log(
+          '[OAuth Callback] Storing result for DID:',
+          resultDID,
+          'username:',
+          discordUser.username,
+          isDedup ? `(dedup from ${existingDID})` : ''
+        )
         completedResults.set(resultDID, {
           discordUsername: discordUser.username,
           reconciledCommunities,
@@ -271,6 +280,7 @@ setTimeout(() => { try { window.close(); } catch(e) {} }, 2000);
         res.status(200).type('html').send(html)
       }
     } catch (err: any) {
+      console.error('[OAuth Callback] ERROR:', err)
       res.status(500).json({ error: err.message })
     }
   })

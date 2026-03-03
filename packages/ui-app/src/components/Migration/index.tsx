@@ -4,6 +4,7 @@ import {
   startExport,
   pollExport,
   importBundle,
+  setMigrationAuth,
   type ExportStatus,
   type ExportProgress
 } from '../../migration-client.js'
@@ -121,6 +122,16 @@ const styles = {
 
 export const MigrationWizard: Component<MigrationWizardProps> = (props) => {
   const store = useAppStore()
+
+  // Set up migration auth from store identity
+  {
+    const kp = store.keyPair()
+    const did = store.did()
+    if (kp?.secretKey && did) {
+      const sk = kp.secretKey instanceof Uint8Array ? kp.secretKey : new Uint8Array(Object.values(kp.secretKey))
+      setMigrationAuth(did, sk)
+    }
+  }
 
   const [step, setStep] = createSignal<Step>('token')
   const [botToken, setBotToken] = createSignal('')

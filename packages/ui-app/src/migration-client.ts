@@ -1,5 +1,34 @@
 // Thin API client for the server-runtime migration endpoints
 
+let _authDID: string | null = null
+let _authSecretKey: Uint8Array | null = null
+
+/** Configure Ed25519 credentials for migration API auth */
+export function setMigrationAuth(did: string, secretKey: Uint8Array): void {
+  _authDID = did
+  _authSecretKey = secretKey
+}
+
+/** Generate Harmony-Ed25519 authorization header */
+async function authHeaders(method: string, path: string): Promise<Record<string, string>> {
+  if (!_authDID || !_authSecretKey) return {}
+
+  const timestamp = Math.floor(Date.now() / 1000).toString()
+  const message = `${timestamp}:${method}:${path}`
+  const msgBytes = new TextEncoder().encode(message)
+
+  let sigBytes: Uint8Array
+  try {
+    const { ed25519 } = await import('@noble/ed25519')
+    sigBytes = await ed25519.sign(msgBytes, _authSecretKey.slice(0, 32))
+  } catch {
+    return {}
+  }
+
+  const sig = btoa(String.fromCharCode(...sigBytes))
+  return { Authorization: `Harmony-Ed25519 ${_authDID} ${timestamp} ${sig}` }
+}
+
 export interface ExportOptions {
   maxMessagesPerChannel?: number
   skipChannels?: string[]
@@ -76,9 +105,11 @@ export async function startExport(params: {
   options?: ExportOptions
 }): Promise<string> {
   const base = toApiBase(params.serverUrl)
-  const res = await fetch(`${base}/api/migration/export`, {
+  const path = '/api/migration/export'
+  const auth = await authHeaders('POST', path)
+  const res = await fetch(`${base}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...auth },
     body: JSON.stringify({
       botToken: params.botToken,
       guildId: params.guildId,
@@ -96,7 +127,9 @@ export async function startExport(params: {
 
 export async function pollExport(serverUrl: string, exportId: string): Promise<ExportStatus> {
   const base = toApiBase(serverUrl)
-  const res = await fetch(`${base}/api/migration/export/${exportId}`)
+  const path = `/api/migration/export/${exportId}`
+  const auth = await authHeaders('GET', path)
+  const res = await fetch(`${base}${path}`, { headers: auth })
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`Export poll failed (${res.status}): ${text}`)
@@ -112,9 +145,11 @@ export async function importBundle(params: {
   adminKeyPair?: { publicKey: string; secretKey: string }
 }): Promise<ImportResult> {
   const base = toApiBase(params.serverUrl)
-  const res = await fetch(`${base}/api/migration/import`, {
+  const path = '/api/migration/import'
+  const auth = await authHeaders('POST', path)
+  const res = await fetch(`${base}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...auth },
     body: JSON.stringify({
       bundle: params.bundle,
       adminDID: params.adminDID,
@@ -139,14 +174,15 @@ export async function createMigration(params: {
   serverId: string
   serverName: string
   channelMap: Record<string, string>
-  authHeader: string
 }): Promise<MigrationCreateResult> {
   const base = toApiBase(params.serverUrl)
-  const res = await fetch(`${base}/api/migration/create`, {
+  const path = '/api/migration/create'
+  const auth = await authHeaders('POST', path)
+  const res = await fetch(`${base}${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: params.authHeader
+      ...auth
     },
     body: JSON.stringify({
       serverId: params.serverId,
@@ -166,7 +202,9 @@ export async function createMigration(params: {
  */
 export async function getMigrationStatus(serverUrl: string, migrationId: string): Promise<MigrationStatusResult> {
   const base = toApiBase(serverUrl)
-  const res = await fetch(`${base}/api/migration/${migrationId}/status`)
+  const path = `/api/migration/${migrationId}/status`
+  const auth = await authHeaders('GET', path)
+  const res = await fetch(`${base}${path}`, { headers: auth })
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`Migration status failed (${res.status}): ${text}`)
@@ -181,14 +219,15 @@ export async function verifyHashes(params: {
   serverUrl: string
   migrationId: string
   hashes: string[]
-  authHeader: string
 }): Promise<VerifyResult> {
   const base = toApiBase(params.serverUrl)
-  const res = await fetch(`${base}/api/migration/${params.migrationId}/verify`, {
+  const path = `/api/migration/${params.migrationId}/verify`
+  const auth = await authHeaders('POST', path)
+  const res = await fetch(`${base}${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: params.authHeader
+      ...auth
     },
     body: JSON.stringify({ hashes: params.hashes })
   })
@@ -207,14 +246,15 @@ export async function importVerifiedMessages(params: {
   migrationId: string
   verifiedHashes: string[]
   messages: Array<{ hash: string; channelId: string; content: string; timestamp: string }>
-  authHeader: string
 }): Promise<VerifiedImportResult> {
   const base = toApiBase(params.serverUrl)
-  const res = await fetch(`${base}/api/migration/${params.migrationId}/import`, {
+  const path = `/api/migration/${params.migrationId}/import`
+  const auth = await authHeaders('POST', path)
+  const res = await fetch(`${base}${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: params.authHeader
+      ...auth
     },
     body: JSON.stringify({
       verifiedHashes: params.verifiedHashes,
@@ -231,15 +271,13 @@ export async function importVerifiedMessages(params: {
 /**
  * Delete a migration.
  */
-export async function deleteMigration(params: {
-  serverUrl: string
-  migrationId: string
-  authHeader: string
-}): Promise<void> {
+export async function deleteMigration(params: { serverUrl: string; migrationId: string }): Promise<void> {
   const base = toApiBase(params.serverUrl)
-  const res = await fetch(`${base}/api/migration/${params.migrationId}`, {
+  const path = `/api/migration/${params.migrationId}`
+  const auth = await authHeaders('DELETE', path)
+  const res = await fetch(`${base}${path}`, {
     method: 'DELETE',
-    headers: { Authorization: params.authHeader }
+    headers: auth
   })
   if (!res.ok) {
     const text = await res.text()

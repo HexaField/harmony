@@ -1,4 +1,4 @@
-import { createSignal, Show, Switch, Match, onCleanup, type Component } from 'solid-js'
+import { createSignal, Show, Switch, Match, onCleanup, createEffect, type Component } from 'solid-js'
 import { useAppStore } from '../../store.tsx'
 import {
   startExport,
@@ -123,15 +123,15 @@ const styles = {
 export const MigrationWizard: Component<MigrationWizardProps> = (props) => {
   const store = useAppStore()
 
-  // Set up migration auth from store identity
-  {
+  // Set up migration auth reactively — store signals may not be populated at mount time
+  createEffect(() => {
     const kp = store.keyPair()
     const did = store.did()
     if (kp?.secretKey && did) {
       const sk = kp.secretKey instanceof Uint8Array ? kp.secretKey : new Uint8Array(Object.values(kp.secretKey))
       setMigrationAuth(did, sk)
     }
-  }
+  })
 
   const [step, setStep] = createSignal<Step>('token')
   const [botToken, setBotToken] = createSignal('')

@@ -1,6 +1,8 @@
 // Thin API client for the server-runtime migration endpoints
 
-import { signAsync } from '@noble/ed25519'
+import { createCryptoProvider } from '@harmony/crypto'
+
+const cryptoProvider = createCryptoProvider()
 
 let _authDID: string | null = null
 let _authSecretKey: Uint8Array | null = null
@@ -9,10 +11,12 @@ let _authSecretKey: Uint8Array | null = null
 export function setMigrationAuth(did: string, secretKey: Uint8Array): void {
   _authDID = did
   _authSecretKey = secretKey
+  console.log('[MigrationAuth] set:', did, 'sk len:', secretKey.length)
 }
 
 /** Generate Harmony-Ed25519 authorization header */
 async function authHeaders(method: string, path: string): Promise<Record<string, string>> {
+  console.log('[MigrationAuth] authHeaders called, did:', _authDID, 'hasSk:', !!_authSecretKey)
   if (!_authDID || !_authSecretKey) return {}
 
   const timestamp = Math.floor(Date.now() / 1000).toString()
@@ -21,8 +25,9 @@ async function authHeaders(method: string, path: string): Promise<Record<string,
 
   let sigBytes: Uint8Array
   try {
-    sigBytes = await signAsync(msgBytes, _authSecretKey.slice(0, 32))
-  } catch {
+    sigBytes = await cryptoProvider.sign(msgBytes, _authSecretKey)
+  } catch (e) {
+    console.error('[MigrationAuth] sign failed:', e)
     return {}
   }
 

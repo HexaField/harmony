@@ -2,6 +2,8 @@ import type { VoiceConnection, VoiceParticipant, JoinOptions } from './room-mana
 import type { E2EEBridge } from './e2ee-bridge.js'
 import type { ClientSFUAdapter } from './sfu-adapter.js'
 import { createEncryptTransform, createDecryptTransform } from './insertable-streams.js'
+import { P2PMeshManager } from './p2p-mesh.js'
+import type { P2PMeshConfig } from './p2p-mesh.js'
 
 type ParticipantJoinedCb = (p: VoiceParticipant) => void
 type ParticipantLeftCb = (did: string) => void
@@ -60,6 +62,13 @@ export interface VoiceClientOptions {
   mode?: 'cf' | 'test'
 }
 
+export interface JoinRoomOptions extends JoinOptions {
+  /** Voice mode from server. 'signaling' = P2P mesh, 'cf' = CF SFU */
+  mode?: 'signaling' | 'cf'
+  /** ICE servers from server config */
+  iceServers?: RTCIceServer[]
+}
+
 /**
  * Client-side voice connection. Supports CF Realtime SFU (via ClientSFUAdapter)
  * and a test/signaling-only mode for environments without WebRTC.
@@ -107,7 +116,7 @@ export class VoiceClient {
     this.sfuAdapter = adapter
   }
 
-  async joinRoom(token: string, opts?: JoinOptions): Promise<VoiceConnection> {
+  async joinRoom(token: string, opts?: JoinRoomOptions): Promise<VoiceConnection> {
     let roomId: string
     let participantId: string
 
@@ -137,6 +146,8 @@ export class VoiceClient {
       }
     }
 
+    const voiceMode = opts?.mode ?? 'signaling'
+
     const conn = new VoiceConnectionImpl(
       roomId,
       participantId,
@@ -144,21 +155,25 @@ export class VoiceClient {
       opts?.videoEnabled ?? false,
       this.mediaProvider,
       this.e2eeBridge,
-      this.sfuAdapter,
+      voiceMode === 'cf' ? this.sfuAdapter : undefined,
       this.signaling,
+      voiceMode,
+      opts?.iceServers,
       () => {
         this.connection = null
       }
     )
 
-    // If we have an SFU adapter, initialize the WebRTC session
-    if (this.sfuAdapter && this.signaling) {
+    if (voiceMode === 'cf' && this.sfuAdapter && this.signaling) {
+      // CF SFU mode
       try {
         await conn.initSFUSession()
       } catch (err) {
-        // SFU init failed (e.g. RTCPeerConnection not available) — proceed in signaling-only mode
         console.debug('[Voice] SFU init failed, proceeding in signaling-only mode:', err)
       }
+    } else if (voiceMode === 'signaling' && this.signaling) {
+      // P2P mesh mode
+      conn.initP2PMesh()
     }
 
     this.connection = conn
@@ -199,6 +214,12 @@ class VoiceConnectionImpl implements VoiceConnection {
   // SFU session state
   private sessionId: string | null = null
 
+  // P2P mesh state
+  private meshManager: P2PMeshManager | null = null
+  private voiceMode: 'signaling' | 'cf'
+  private iceServers?: RTCIceServer[]
+  private signalingHandlers: Array<{ type: string; handler: (payload: Record<string, unknown>) => void }> = []
+
   // Track management
   private localTrackMids = new Map<string, string>() // trackName → mid
   private remoteTrackOwners = new Map<string, { participantId: string; kind: 'audio' | 'video' | 'screen' }>()
@@ -223,6 +244,8 @@ class VoiceConnectionImpl implements VoiceConnection {
     e2eeBridge: E2EEBridge | undefined,
     sfuAdapter: ClientSFUAdapter | undefined,
     signaling: VoiceSignaling | undefined,
+    voiceMode: 'signaling' | 'cf',
+    iceServers: RTCIceServer[] | undefined,
     disconnectCb: () => void
   ) {
     this.roomId = roomId
@@ -233,6 +256,8 @@ class VoiceConnectionImpl implements VoiceConnection {
     this.e2eeBridge = e2eeBridge
     this.sfuAdapter = sfuAdapter
     this.signaling = signaling
+    this.voiceMode = voiceMode
+    this.iceServers = iceServers
     this.disconnectCb = disconnectCb
   }
 
@@ -301,6 +326,160 @@ class VoiceConnectionImpl implements VoiceConnection {
     } catch (err) {
       console.error('[Voice] SFU init failed:', err)
       throw err
+    }
+  }
+
+  /**
+   * Initialize P2P mesh mode — wire signaling listeners for participant events and WebRTC signaling.
+   */
+  initP2PMesh(): void {
+    if (!this.signaling) return
+
+    const config: P2PMeshConfig = {
+      e2eeBridge: this.e2eeBridge
+    }
+    if (this.iceServers) {
+      config.rtcConfig = { iceServers: this.iceServers }
+    }
+
+    this.meshManager = new P2PMeshManager(this.signaling, this.localDID, config)
+
+    // Wire callbacks
+    this.meshManager.onRemoteTrack = (did, track, kind) => {
+      for (const cb of this.trackCbs) cb(did, track, kind)
+    }
+    this.meshManager.onRemoteTrackRemoved = (did, kind) => {
+      for (const cb of this.trackRemovedCbs) cb(did, kind)
+    }
+    this.meshManager.onPeerConnectionStateChanged = (did, state) => {
+      console.debug(`[Voice P2P] Peer ${did} connection state: ${state}`)
+    }
+
+    // Listen for participant joined/left from voice.state events
+    const stateHandler = (payload: Record<string, unknown>) => {
+      // voice.state carries the full participant list — used on initial join
+      const participants = payload.participants as string[] | undefined
+      const participantDetails = payload.participantDetails as Array<{ did: string }> | undefined
+      if (participants) {
+        for (const did of participants) {
+          if (did !== this.localDID && !this.meshManager?.getPeers().has(did)) {
+            // We're the joiner — existing participants are already there, we initiate
+            const isInitiator = this.localDID > did
+            this.meshManager?.addPeer(did, isInitiator)
+          }
+        }
+      }
+      if (participantDetails) {
+        // Update participants array
+        this.participants = participantDetails.map((p) => ({
+          did: (p as Record<string, unknown>).did as string,
+          joinedAt: ((p as Record<string, unknown>).joinedAt as string) ?? new Date().toISOString(),
+          audioEnabled: ((p as Record<string, unknown>).audioEnabled as boolean) ?? false,
+          videoEnabled: ((p as Record<string, unknown>).videoEnabled as boolean) ?? false,
+          screenSharing: ((p as Record<string, unknown>).screenSharing as boolean) ?? false,
+          speaking: ((p as Record<string, unknown>).speaking as boolean) ?? false
+        }))
+      }
+    }
+    this.signaling.onVoiceSignal('voice.state', stateHandler)
+    this.signalingHandlers.push({ type: 'voice.state', handler: stateHandler })
+
+    // Participant joined
+    const joinedHandler = (payload: Record<string, unknown>) => {
+      const did = (payload.did as string) ?? (payload.sender as string)
+      if (!did || did === this.localDID) return
+      // New participant joined — they will be the "newer" peer, we initiate if our DID > theirs
+      const isInitiator = this.localDID > did
+      this.meshManager?.addPeer(did, isInitiator)
+
+      const p: VoiceParticipant = {
+        did,
+        joinedAt: new Date().toISOString(),
+        audioEnabled: false,
+        videoEnabled: false,
+        screenSharing: false,
+        speaking: false
+      }
+      this.participants.push(p)
+      for (const cb of this.joinedCbs) cb(p)
+    }
+    this.signaling.onVoiceSignal('voice.participant.joined', joinedHandler)
+    this.signalingHandlers.push({ type: 'voice.participant.joined', handler: joinedHandler })
+
+    // Participant left
+    const leftHandler = (payload: Record<string, unknown>) => {
+      const did = (payload.did as string) ?? (payload.sender as string)
+      if (!did || did === this.localDID) return
+      this.meshManager?.removePeer(did)
+      this.participants = this.participants.filter((p) => p.did !== did)
+      for (const cb of this.leftCbs) cb(did)
+    }
+    this.signaling.onVoiceSignal('voice.participant.left', leftHandler)
+    this.signalingHandlers.push({ type: 'voice.participant.left', handler: leftHandler })
+
+    // WebRTC signaling: offer/answer/ice
+    const offerHandler = (payload: Record<string, unknown>) => {
+      const msg = payload as Record<string, unknown>
+      const fromDID = (msg.sender as string) ?? (msg.fromDID as string)
+      const sdp = (msg.payload as Record<string, unknown>)?.sdp ?? msg.sdp
+      if (fromDID && sdp) {
+        this.meshManager?.handleOffer(fromDID, sdp as RTCSessionDescriptionInit)
+      }
+    }
+    this.signaling.onVoiceSignal('voice.offer', offerHandler)
+    this.signalingHandlers.push({ type: 'voice.offer', handler: offerHandler })
+
+    const answerHandler = (payload: Record<string, unknown>) => {
+      const msg = payload as Record<string, unknown>
+      const fromDID = (msg.sender as string) ?? (msg.fromDID as string)
+      const sdp = (msg.payload as Record<string, unknown>)?.sdp ?? msg.sdp
+      if (fromDID && sdp) {
+        this.meshManager?.handleAnswer(fromDID, sdp as RTCSessionDescriptionInit)
+      }
+    }
+    this.signaling.onVoiceSignal('voice.answer', answerHandler)
+    this.signalingHandlers.push({ type: 'voice.answer', handler: answerHandler })
+
+    const iceHandler = (payload: Record<string, unknown>) => {
+      const msg = payload as Record<string, unknown>
+      const fromDID = (msg.sender as string) ?? (msg.fromDID as string)
+      const candidate = (msg.payload as Record<string, unknown>)?.candidate ?? msg.candidate
+      if (fromDID && candidate) {
+        this.meshManager?.handleIceCandidate(fromDID, candidate as RTCIceCandidateInit)
+      }
+    }
+    this.signaling.onVoiceSignal('voice.ice', iceHandler)
+    this.signalingHandlers.push({ type: 'voice.ice', handler: iceHandler })
+
+    // If audio enabled, start it
+    if (this.localAudioEnabled) {
+      this.startAudioTrackP2P()
+    }
+
+    console.debug('[Voice] P2P mesh mode initialized')
+  }
+
+  /**
+   * Start audio track in P2P mode — acquire media and add to mesh.
+   */
+  private async startAudioTrackP2P(): Promise<void> {
+    try {
+      this.audioStream = await this.mediaProvider.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      })
+
+      const audioTrack = this.audioStream.getAudioTracks()[0]
+      if (!audioTrack) return
+
+      this.meshManager?.addLocalTrack(audioTrack, 'audio')
+      this.setupSpeakingDetection(this.audioStream)
+      this.localAudioEnabled = true
+    } catch (err) {
+      console.error('[Voice] P2P audio start failed:', err)
     }
   }
 
@@ -551,13 +730,24 @@ class VoiceConnectionImpl implements VoiceConnection {
   async toggleAudio(): Promise<void> {
     if (this.localAudioEnabled) {
       this.cleanupSpeakingDetection()
-      await this.closeLocalTrack('audio', this.audioStream)
+      if (this.meshManager) {
+        this.meshManager.removeLocalTrack('audio')
+        if (this.audioStream) {
+          for (const t of this.audioStream.getTracks()) t.stop()
+        }
+      } else {
+        await this.closeLocalTrack('audio', this.audioStream)
+      }
       this.audioStream = null
       this.localAudioEnabled = false
       this.signaling?.fireVoiceSignal?.('voice.mute', {})
     } else {
       try {
-        await this.startAudioTrack()
+        if (this.meshManager) {
+          await this.startAudioTrackP2P()
+        } else {
+          await this.startAudioTrack()
+        }
         this.signaling?.fireVoiceSignal?.('voice.unmute', {})
       } catch (err) {
         console.error('[Voice] Failed to re-enable audio:', err)
@@ -585,8 +775,12 @@ class VoiceConnectionImpl implements VoiceConnection {
 
       const videoTrack = this.videoStream.getVideoTracks()[0]
       if (videoTrack) {
-        await this.pushLocalTrack(videoTrack, 'video')
-        this.attachSenderTransformForTrack(videoTrack, 'video')
+        if (this.meshManager) {
+          this.meshManager.addLocalTrack(videoTrack, 'video')
+        } else {
+          await this.pushLocalTrack(videoTrack, 'video')
+          this.attachSenderTransformForTrack(videoTrack, 'video')
+        }
       }
 
       this.localVideoEnabled = true
@@ -601,7 +795,14 @@ class VoiceConnectionImpl implements VoiceConnection {
   }
 
   async disableVideo(): Promise<void> {
-    await this.closeLocalTrack('video', this.videoStream)
+    if (this.meshManager) {
+      this.meshManager.removeLocalTrack('video')
+      if (this.videoStream) {
+        for (const t of this.videoStream.getTracks()) t.stop()
+      }
+    } else {
+      await this.closeLocalTrack('video', this.videoStream)
+    }
     this.videoStream = null
     this.localVideoEnabled = false
     this.signaling?.fireVoiceSignal?.('voice.video', { enabled: false })
@@ -633,8 +834,12 @@ class VoiceConnectionImpl implements VoiceConnection {
 
       const videoTrack = this.screenStream.getVideoTracks()[0]
       if (videoTrack) {
-        await this.pushLocalTrack(videoTrack, 'screen')
-        this.attachSenderTransformForTrack(videoTrack, 'video')
+        if (this.meshManager) {
+          this.meshManager.addLocalTrack(videoTrack, 'screen')
+        } else {
+          await this.pushLocalTrack(videoTrack, 'screen')
+          this.attachSenderTransformForTrack(videoTrack, 'video')
+        }
 
         videoTrack.onended = () => {
           this.stopScreenShare()
@@ -654,7 +859,14 @@ class VoiceConnectionImpl implements VoiceConnection {
   }
 
   async stopScreenShare(): Promise<void> {
-    await this.closeLocalTrack('screen', this.screenStream)
+    if (this.meshManager) {
+      this.meshManager.removeLocalTrack('screen')
+      if (this.screenStream) {
+        for (const t of this.screenStream.getTracks()) t.stop()
+      }
+    } else {
+      await this.closeLocalTrack('screen', this.screenStream)
+    }
     this.screenStream = null
     this.localScreenSharing = false
     this.signaling?.fireVoiceSignal?.('voice.screen', { sharing: false })
@@ -662,6 +874,10 @@ class VoiceConnectionImpl implements VoiceConnection {
   }
 
   setDeafened(deafened: boolean): void {
+    if (this.meshManager) {
+      this.meshManager.setDeafened(deafened)
+      return
+    }
     const pc = this.sfuAdapter?.getPeerConnection()
     if (!pc) return
     for (const receiver of pc.getReceivers()) {
@@ -681,7 +897,20 @@ class VoiceConnectionImpl implements VoiceConnection {
 
   debugState(): Record<string, unknown> {
     const pc = this.sfuAdapter?.getPeerConnection()
+    const meshPeers: Record<string, unknown> = {}
+    if (this.meshManager) {
+      for (const [did, peerPc] of this.meshManager.getPeers()) {
+        meshPeers[did] = {
+          connectionState: peerPc.connectionState,
+          iceConnectionState: peerPc.iceConnectionState,
+          signalingState: peerPc.signalingState,
+          senders: peerPc.getSenders().length,
+          receivers: peerPc.getReceivers().length
+        }
+      }
+    }
     return {
+      voiceMode: this.voiceMode,
       localAudioEnabled: this.localAudioEnabled,
       localVideoEnabled: this.localVideoEnabled,
       localScreenSharing: this.localScreenSharing,
@@ -699,6 +928,7 @@ class VoiceConnectionImpl implements VoiceConnection {
             receivers: pc.getReceivers().length
           }
         : null,
+      meshPeers: Object.keys(meshPeers).length > 0 ? meshPeers : undefined,
       participantCount: this.participants.length
     }
   }
@@ -726,15 +956,34 @@ class VoiceConnectionImpl implements VoiceConnection {
 
     this.cleanupSpeakingDetection()
 
-    // Close local tracks
-    await this.closeLocalTrack('audio', this.audioStream)
-    await this.closeLocalTrack('video', this.videoStream)
-    await this.closeLocalTrack('screen', this.screenStream)
+    // Clean up P2P mesh
+    if (this.meshManager) {
+      this.meshManager.destroy()
+      this.meshManager = null
+      // Stop local media tracks
+      for (const stream of [this.audioStream, this.videoStream, this.screenStream]) {
+        if (stream) {
+          for (const t of stream.getTracks()) t.stop()
+        }
+      }
+    } else {
+      // SFU mode cleanup
+      await this.closeLocalTrack('audio', this.audioStream)
+      await this.closeLocalTrack('video', this.videoStream)
+      await this.closeLocalTrack('screen', this.screenStream)
 
-    // Close the SFU session
-    if (this.sfuAdapter && this.sessionId) {
-      await this.sfuAdapter.closeSession(this.sessionId)
+      if (this.sfuAdapter && this.sessionId) {
+        await this.sfuAdapter.closeSession(this.sessionId)
+      }
     }
+
+    // Remove signaling handlers
+    if (this.signaling) {
+      for (const { type, handler } of this.signalingHandlers) {
+        this.signaling.offVoiceSignal(type, handler)
+      }
+    }
+    this.signalingHandlers = []
 
     this.audioStream = null
     this.videoStream = null

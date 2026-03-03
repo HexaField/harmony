@@ -172,7 +172,7 @@ describe('VoiceClient multi-user flow', () => {
     })
 
     const token = makeToken('room-1', 'client-a')
-    await client.joinRoom(token, { audioEnabled: true })
+    await client.joinRoom(token, { audioEnabled: true, mode: 'cf' })
 
     // createSession should have been called
     expect(sfuAdapter.calls.some((c) => c.method === 'createSession')).toBe(true)
@@ -201,7 +201,7 @@ describe('VoiceClient multi-user flow', () => {
 
     const token = makeToken('room-1', 'client-b')
     // Join without audio so we only test pull behavior
-    await client.joinRoom(token, { audioEnabled: false })
+    await client.joinRoom(token, { audioEnabled: false, mode: 'cf' })
 
     // Simulate receiving a voice.track.published event from Client A
     const handlers = signaling.handlers.get('voice.track.published')
@@ -237,7 +237,7 @@ describe('VoiceClient multi-user flow', () => {
     })
 
     const token = makeToken('room-1', 'client-a')
-    await client.joinRoom(token, { audioEnabled: true })
+    await client.joinRoom(token, { audioEnabled: true, mode: 'cf' })
 
     sfuAdapter.calls.length = 0
 

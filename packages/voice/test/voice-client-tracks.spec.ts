@@ -152,7 +152,7 @@ describe('VoiceClient track callbacks', () => {
 
   it('fires onTrack when pullRemoteTrack finds a live receiver track', async () => {
     const token = btoa(JSON.stringify({ room: 'room1', participant: 'local-did' }))
-    const conn = await client.joinRoom(token, { audioEnabled: false, videoEnabled: false })
+    const conn = await client.joinRoom(token, { audioEnabled: false, videoEnabled: false, mode: 'cf' })
 
     const trackEvents: Array<{ did: string; kind: string }> = []
     conn.onTrack((did: string, _track: MediaStreamTrack, kind: 'audio' | 'video' | 'screen') => {
@@ -183,7 +183,7 @@ describe('VoiceClient track callbacks', () => {
 
   it('fires onTrack with kind "screen" for screen share tracks', async () => {
     const token = btoa(JSON.stringify({ room: 'room1', participant: 'local-did' }))
-    const conn = await client.joinRoom(token, { audioEnabled: false, videoEnabled: false })
+    const conn = await client.joinRoom(token, { audioEnabled: false, videoEnabled: false, mode: 'cf' })
 
     const trackEvents: Array<{ did: string; kind: string }> = []
     conn.onTrack((did: string, _track: MediaStreamTrack, kind: 'audio' | 'video' | 'screen') => {
@@ -212,7 +212,7 @@ describe('VoiceClient track callbacks', () => {
 
   it('fires onTrackRemoved when voice.track.removed signal arrives', async () => {
     const token = btoa(JSON.stringify({ room: 'room1', participant: 'local-did' }))
-    const conn = await client.joinRoom(token, { audioEnabled: false, videoEnabled: false })
+    const conn = await client.joinRoom(token, { audioEnabled: false, videoEnabled: false, mode: 'cf' })
 
     const removedEvents: Array<{ did: string; kind: string }> = []
     conn.onTrackRemoved((did: string, kind: 'audio' | 'video' | 'screen') => {
@@ -245,7 +245,7 @@ describe('VoiceClient track callbacks', () => {
 
   it('does not fire onTrackRemoved for unknown track names', async () => {
     const token = btoa(JSON.stringify({ room: 'room1', participant: 'local-did' }))
-    const conn = await client.joinRoom(token, { audioEnabled: false, videoEnabled: false })
+    const conn = await client.joinRoom(token, { audioEnabled: false, videoEnabled: false, mode: 'cf' })
 
     const removedEvents: Array<{ did: string; kind: string }> = []
     conn.onTrackRemoved((did: string, kind: 'audio' | 'video' | 'screen') => {

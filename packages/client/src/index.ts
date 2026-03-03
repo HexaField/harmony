@@ -1320,50 +1320,56 @@ export class HarmonyClient {
     const voiceSignaling = this.createVoiceSignaling(communityId)
     this.voiceClient.setSignaling(voiceSignaling)
 
-    // Create CF SFU adapter — signaling goes through the server as a proxy
-    const sfuSignaling: SignalingFn = async (method, payload) => {
-      // Map CF adapter method names to voice signaling message types
-      const typeMap: Record<string, string> = {
-        'cf.session.new': 'voice.session.create',
-        'cf.tracks.new': 'voice.tracks.push',
-        'cf.renegotiate': 'voice.renegotiate',
-        'cf.tracks.close': 'voice.tracks.close',
-        'cf.session.close': 'voice.leave'
-      }
-      const msgType = typeMap[method] ?? method
-      return voiceSignaling.sendVoiceSignal(msgType, payload)
-    }
-    this.voiceClient.setSFUAdapter(new CloudflareSFUAdapter(sfuSignaling))
-
     // Request token from server
     this.send(this.createMessage('voice.token', { channelId, communityId }))
 
     // Wait for voice.token.response
-    const tokenResponse = await new Promise<{ token: string; mode: string }>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        cleanup()
-        reject(new Error('Voice token request timed out'))
-      }, 10000)
-
-      const handler = (payload: any) => {
-        if (payload.channelId === channelId && payload.token) {
+    const tokenResponse = await new Promise<{ token: string; mode: string; iceServers?: RTCIceServer[] }>(
+      (resolve, reject) => {
+        const timeout = setTimeout(() => {
           cleanup()
-          resolve({ token: payload.token, mode: payload.mode ?? 'signaling' })
+          reject(new Error('Voice token request timed out'))
+        }, 10000)
+
+        const handler = (payload: any) => {
+          if (payload.channelId === channelId && payload.token) {
+            cleanup()
+            resolve({ token: payload.token, mode: payload.mode ?? 'signaling', iceServers: payload.iceServers })
+          }
         }
-      }
 
-      const cleanup = () => {
-        clearTimeout(timeout)
-        this.emitter.off('voice.token.response', handler)
-      }
+        const cleanup = () => {
+          clearTimeout(timeout)
+          this.emitter.off('voice.token.response', handler)
+        }
 
-      this.emitter.on('voice.token.response', handler)
-    })
+        this.emitter.on('voice.token.response', handler)
+      }
+    )
+
+    // Only create CF SFU adapter when server says mode is 'cf'
+    if (tokenResponse.mode === 'cf') {
+      const sfuSignaling: SignalingFn = async (method, payload) => {
+        const typeMap: Record<string, string> = {
+          'cf.session.new': 'voice.session.create',
+          'cf.tracks.new': 'voice.tracks.push',
+          'cf.renegotiate': 'voice.renegotiate',
+          'cf.tracks.close': 'voice.tracks.close',
+          'cf.session.close': 'voice.leave'
+        }
+        const msgType = typeMap[method] ?? method
+        return voiceSignaling.sendVoiceSignal(msgType, payload)
+      }
+      this.voiceClient.setSFUAdapter(new CloudflareSFUAdapter(sfuSignaling))
+    }
 
     // Send voice.join for participant tracking
     this.send(this.createMessage('voice.join', { channelId, communityId }))
 
-    const connection = await this.voiceClient.joinRoom(tokenResponse.token)
+    const connection = await this.voiceClient.joinRoom(tokenResponse.token, {
+      mode: tokenResponse.mode as 'signaling' | 'cf',
+      iceServers: tokenResponse.iceServers
+    })
     this._activeVoiceChannelId = channelId
 
     // Inject MLS-derived E2EE key into voice if group exists

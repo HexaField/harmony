@@ -485,6 +485,15 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
             >
               {t('ONBOARDING_MNEMONIC_SAVED')}
             </button>
+            <button
+              onClick={() => {
+                setStep('recover')
+                setError('')
+              }}
+              class="w-full mt-2 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              ← I already have a recovery phrase
+            </button>
           </div>
         </Show>
 

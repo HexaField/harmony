@@ -119,20 +119,18 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
       }
     } else if (savedStep) {
       _setStep(savedStep)
-      // Resume portal OAuth polling if we were in the middle of it
-      if (savedStep === 'portal-login') {
+      // If we were in portal-login, restore pending identity but DON'T auto-resume polling.
+      // The portal may have restarted, losing the OAuth state. User needs to click again.
+      if (savedStep === 'portal-login' && savedMnemonic) {
         const pendingDID = restoreOnboarding('portalDID')
-        if (pendingDID && savedMnemonic) {
-          const crypto = createCryptoProvider()
-          const idMgr = new IdentityManager(crypto)
+        if (pendingDID) {
           try {
+            const crypto = createCryptoProvider()
+            const idMgr = new IdentityManager(crypto)
             const result = await idMgr.createFromMnemonic(savedMnemonic)
             pendingIdentity = result.identity
             pendingKeyPair = result.keyPair
             pendingMnemonic = savedMnemonic
-            const url = portalUrl().replace(/\/$/, '')
-            startOAuthPolling(url, pendingDID)
-            setPortalWaiting(true)
           } catch {
             clearOnboardingState()
           }

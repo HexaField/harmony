@@ -11,8 +11,12 @@ import { identityRoutes } from './routes/identity.js'
 import { oauthRoutes } from './routes/oauth.js'
 import { storageRoutes } from './routes/storage.js'
 import { friendsRoutes } from './routes/friends.js'
+import { bugsRoutes } from './routes/bugs.js'
 
-export async function createApp(portal?: PortalService): Promise<Application> {
+export async function createApp(
+  portal?: PortalService,
+  existingDb?: import('better-sqlite3').Database
+): Promise<Application> {
   const app = express()
   app.use(express.json({ limit: '100mb' }))
 
@@ -33,9 +37,9 @@ export async function createApp(portal?: PortalService): Promise<Application> {
     next()
   })
 
+  const db = existingDb ?? createPortalDB()
   if (!portal) {
     const crypto = createCryptoProvider()
-    const db = createPortalDB()
     portal = new PortalService(crypto, db)
   }
   await portal.initialize()
@@ -50,6 +54,7 @@ export async function createApp(portal?: PortalService): Promise<Application> {
   app.use('/api', oauthRoutes(portal))
   app.use('/api', storageRoutes(portal))
   app.use('/api', friendsRoutes(portal))
+  app.use('/api', bugsRoutes(db))
 
   return app
 }

@@ -18,6 +18,8 @@ import { NewDMModal } from './NewDMModal.tsx'
 import { ThreadView } from './ThreadView.tsx'
 import { MigrationWizard } from '../components/Migration/index.tsx'
 import { NotificationBell } from '../components/NotificationCentre.tsx'
+import { BugReportModal } from '../components/BugReportModal.tsx'
+import { installErrorBuffer } from '../utils/error-buffer.js'
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = createSignal(typeof window !== 'undefined' && window.innerWidth < 768)
@@ -35,6 +37,17 @@ export const MainLayout: Component = () => {
   const isMobile = useIsMobile()
   const [showMobileSidebar, setShowMobileSidebar] = createSignal(false)
   const [showMobileMembers, setShowMobileMembers] = createSignal(false)
+  const [showBugReport, setShowBugReport] = createSignal(false)
+
+  // Install error buffer for bug reports
+  installErrorBuffer()
+
+  // Listen for bug report toggle from TitleBarView
+  if (typeof window !== 'undefined') {
+    const toggleBugReport = () => setShowBugReport(true)
+    window.addEventListener('harmony:toggle-bug-report', toggleBugReport)
+    onCleanup(() => window.removeEventListener('harmony:toggle-bug-report', toggleBugReport))
+  }
 
   // Keyboard shortcuts
   if (typeof window !== 'undefined') {
@@ -45,6 +58,12 @@ export const MainLayout: Component = () => {
         store.setShowSearch(!store.showSearch())
         return
       }
+      // Ctrl/Cmd+Shift+B → toggle bug report modal
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'B') {
+        e.preventDefault()
+        setShowBugReport(!showBugReport())
+        return
+      }
       // Ctrl/Cmd+E → toggle emoji picker (dispatch custom event for MessageArea to pick up)
       if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
         e.preventDefault()
@@ -53,6 +72,10 @@ export const MainLayout: Component = () => {
       }
       // Escape → close any open overlay/modal (priority order)
       if (e.key === 'Escape') {
+        if (showBugReport()) {
+          setShowBugReport(false)
+          return
+        }
         if (store.showSearch()) {
           store.setShowSearch(false)
           return
@@ -229,6 +252,18 @@ export const MainLayout: Component = () => {
       <Show when={store.showMigrationWizard()}>
         <MigrationWizard onComplete={() => store.setShowMigrationWizard(false)} />
       </Show>
+
+      {/* Bug report modal */}
+      <Show when={showBugReport()}>
+        <BugReportModal
+          onClose={() => setShowBugReport(false)}
+          portalUrl={
+            (import.meta as Record<string, Record<string, string>>).env?.VITE_PORTAL_URL || 'http://localhost:3000'
+          }
+          did={store.did()}
+          connectionState={store.connectionState()}
+        />
+      </Show>
     </>
   )
 }
@@ -253,6 +288,13 @@ const TitleBarView: Component<{ onHamburger?: () => void; onMembers?: () => void
       </Show>
       <div class="flex-1" />
       <NotificationBell />
+      <button
+        onClick={() => window.dispatchEvent(new CustomEvent('harmony:toggle-bug-report'))}
+        class="p-2 rounded hover:bg-[var(--bg-input)] text-[var(--text-muted)] text-sm"
+        title="Report a Bug (Ctrl+Shift+B)"
+      >
+        🐛
+      </button>
       <button
         onClick={() => store.setShowSearch(true)}
         class="p-2 rounded hover:bg-[var(--bg-input)] text-[var(--text-muted)] text-sm"

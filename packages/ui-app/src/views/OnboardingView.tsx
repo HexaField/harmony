@@ -128,7 +128,6 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
       setDiscordLinked(true)
       if (data.discordUsername) {
         setDiscordUsername(data.discordUsername)
-        // Auto-fill display name if empty
         if (!setupName().trim()) setSetupName(data.discordUsername)
       }
       // Deduplication: if the Discord account was already linked to a different DID,
@@ -136,6 +135,10 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
       if (data.existingDID && data.existingDID !== store.did()) {
         handleDedup(data.existingDID)
       }
+      // Auto-complete onboarding — use Discord username as display name
+      const name = data.discordUsername || setupName().trim() || 'Anonymous'
+      store.setDisplayName(name)
+      // needsSetup() will now be false → App.tsx renders MainLayout
     }
   }
   function handleOAuthMessage(event: MessageEvent) {

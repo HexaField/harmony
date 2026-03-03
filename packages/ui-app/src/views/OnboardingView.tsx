@@ -38,7 +38,7 @@ function restoreOnboarding(key: string): string | null {
 
 function clearOnboardingState() {
   try {
-    for (const key of ['step', 'mnemonic']) {
+    for (const key of ['step', 'mnemonic', 'portalDID']) {
       localStorage.removeItem(STORAGE_PREFIX + 'onboarding:' + key)
     }
   } catch {
@@ -119,6 +119,25 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
       }
     } else if (savedStep) {
       _setStep(savedStep)
+      // Resume portal OAuth polling if we were in the middle of it
+      if (savedStep === 'portal-login') {
+        const pendingDID = restoreOnboarding('portalDID')
+        if (pendingDID && savedMnemonic) {
+          const crypto = createCryptoProvider()
+          const idMgr = new IdentityManager(crypto)
+          try {
+            const result = await idMgr.createFromMnemonic(savedMnemonic)
+            pendingIdentity = result.identity
+            pendingKeyPair = result.keyPair
+            pendingMnemonic = savedMnemonic
+            const url = portalUrl().replace(/\/$/, '')
+            startOAuthPolling(url, pendingDID)
+            setPortalWaiting(true)
+          } catch {
+            clearOnboardingState()
+          }
+        }
+      }
     }
   })
 
@@ -132,9 +151,17 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
       }
       // Deduplication: if the Discord account was already linked to a different DID,
       // the portal returns existingDID — auto-recover that identity
-      if (data.existingDID && data.existingDID !== store.did()) {
+      if (data.existingDID && data.existingDID !== (pendingIdentity?.did || store.did())) {
         handleDedup(data.existingDID)
+        return
       }
+      // Commit identity to store (was deferred from portal-login click)
+      if (pendingIdentity) {
+        store.setDid(pendingIdentity.did)
+        store.setIdentity(pendingIdentity)
+      }
+      if (pendingKeyPair) store.setKeyPair(pendingKeyPair)
+      if (pendingMnemonic) store.setMnemonic(pendingMnemonic)
       // Auto-complete onboarding — use Discord username as display name
       const name = data.discordUsername || setupName().trim() || 'Anonymous'
       store.setDisplayName(name)
@@ -832,15 +859,17 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
                     const oauthUrl = `${url}/api/oauth/discord/authorize?userDID=${encodeURIComponent(result.identity.did)}`
                     openExternal(oauthUrl)
 
+                    // Persist pending state for polling resumption after restart
+                    persistOnboarding('mnemonic', result.mnemonic)
+                    persistOnboarding('portalDID', result.identity.did)
+
                     // Start polling for completion
                     startOAuthPolling(url, result.identity.did)
                     setPortalWaiting(true)
 
-                    // Commit identity to store so OAuth completion handler works
-                    store.setDid(result.identity.did)
-                    store.setMnemonic(result.mnemonic)
-                    store.setIdentity(result.identity)
-                    store.setKeyPair(result.keyPair)
+                    // DON'T commit identity to store yet — that triggers needsSetup()
+                    // which remounts the component and kills our polling timer.
+                    // Identity is committed in handleOAuthResult when OAuth completes.
                   } catch (err) {
                     setError(err instanceof Error ? err.message : String(err))
                   } finally {

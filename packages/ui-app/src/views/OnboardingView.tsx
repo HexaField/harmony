@@ -722,49 +722,12 @@ export const OnboardingView: Component<{ startAtSetup?: boolean }> = (props) => 
               />
             </div>
 
-            {/* Discord linking (optional) */}
-            <div class="mb-6">
-              <Show
-                when={discordLinked()}
-                fallback={
-                  <div class="flex items-center justify-between">
-                    <span class="text-sm text-[var(--text-muted)]">{t('SETUP_DISCORD_NOT_LINKED')}</span>
-                    <button
-                      onClick={async () => {
-                        const portalUrl = (import.meta as any).env?.VITE_PORTAL_URL || 'http://localhost:3000'
-                        const did = store.did()
-                        if (!portalUrl || !did) return
-                        try {
-                          const res = await fetch(`${portalUrl}/api/identity/link`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              provider: 'discord',
-                              userDID: did,
-                              source: (window as any).__HARMONY_DESKTOP__ ? 'desktop' : 'browser'
-                            })
-                          })
-                          const data = await res.json()
-                          if (data.redirectUrl) {
-                            openExternal(data.redirectUrl)
-                            // Poll portal for OAuth completion
-                            startOAuthPolling(portalUrl, did)
-                          }
-                        } catch (err) {
-                          console.error('Discord link failed:', err)
-                          setError(String(err))
-                        }
-                      }}
-                      class="py-2 px-4 rounded-lg bg-[#5865F2]/20 hover:bg-[#5865F2]/30 border border-[#5865F2]/30 text-[var(--text-primary)] text-sm font-semibold transition-colors"
-                    >
-                      {t('SETUP_LINK_DISCORD')}
-                    </button>
-                  </div>
-                }
-              >
+            {/* Show Discord linked status if already done (e.g. via portal sign-in) */}
+            <Show when={discordLinked()}>
+              <div class="mb-6">
                 <p class="text-sm text-green-400">✓ {t('SETUP_DISCORD_LINKED', { username: discordUsername() })}</p>
-              </Show>
-            </div>
+              </div>
+            </Show>
 
             <Show when={error()}>
               <p class="mb-4 text-[var(--error)] text-sm">{error()}</p>

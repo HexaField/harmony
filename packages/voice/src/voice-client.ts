@@ -173,7 +173,7 @@ export class VoiceClient {
       }
     } else if (voiceMode === 'signaling' && this.signaling) {
       // P2P mesh mode
-      conn.initP2PMesh()
+      await conn.initP2PMesh()
     }
 
     this.connection = conn
@@ -332,7 +332,7 @@ class VoiceConnectionImpl implements VoiceConnection {
   /**
    * Initialize P2P mesh mode — wire signaling listeners for participant events and WebRTC signaling.
    */
-  initP2PMesh(): void {
+  async initP2PMesh(): Promise<void> {
     if (!this.signaling) return
 
     const config: P2PMeshConfig = {
@@ -353,6 +353,12 @@ class VoiceConnectionImpl implements VoiceConnection {
     }
     this.meshManager.onPeerConnectionStateChanged = (did, state) => {
       console.debug(`[Voice P2P] Peer ${did} connection state: ${state}`)
+    }
+
+    // Acquire audio BEFORE registering signaling handlers so localTracks
+    // is populated when addPeer() runs in response to voice.state
+    if (this.localAudioEnabled) {
+      await this.startAudioTrackP2P()
     }
 
     // Listen for participant joined/left from voice.state events
@@ -450,11 +456,6 @@ class VoiceConnectionImpl implements VoiceConnection {
     }
     this.signaling.onVoiceSignal('voice.ice', iceHandler)
     this.signalingHandlers.push({ type: 'voice.ice', handler: iceHandler })
-
-    // If audio enabled, start it
-    if (this.localAudioEnabled) {
-      this.startAudioTrackP2P()
-    }
 
     console.debug('[Voice] P2P mesh mode initialized')
   }

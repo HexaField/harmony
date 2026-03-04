@@ -13,6 +13,14 @@ export const ChannelSidebarView: Component = () => {
   const textChannels = () =>
     store.channels().filter((c) => c.type === 'text' && c.communityId === store.activeCommunityId())
 
+  const threadChannels = () =>
+    store.channels().filter((c) => c.type === 'thread' && c.communityId === store.activeCommunityId())
+
+  const threadsForChannel = (channelId: string) => threadChannels().filter((t) => t.parentChannelId === channelId)
+
+  const orphanThreads = () =>
+    threadChannels().filter((t) => !t.parentChannelId || !textChannels().some((c) => c.id === t.parentChannelId))
+
   const voiceChannels = () =>
     store.channels().filter((c) => c.type === 'voice' && c.communityId === store.activeCommunityId())
 
@@ -97,47 +105,101 @@ export const ChannelSidebarView: Component = () => {
             {(channel) => {
               const isActive = () => store.activeChannelId() === channel.id
               return (
-                <button
-                  onClick={() => store.setActiveChannelId(channel.id)}
-                  class="w-full flex items-center px-3 py-1.5 mx-2 rounded text-sm transition-colors group"
-                  classList={{
-                    'bg-[var(--bg-input)] text-[var(--text-primary)]': isActive(),
-                    'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-input)]/50':
-                      !isActive()
-                  }}
-                  style={{ width: 'calc(100% - 16px)' }}
-                >
-                  <span class="mr-1.5 text-[var(--text-muted)]">#</span>
-                  <span
-                    class="truncate"
+                <>
+                  <button
+                    onClick={() => store.setActiveChannelId(channel.id)}
+                    class="w-full flex items-center px-3 py-1.5 mx-2 rounded text-sm transition-colors group"
                     classList={{
-                      'font-semibold text-[var(--text-primary)]':
-                        !isActive() && store.channelUnreadCount(channel.id) > 0
+                      'bg-[var(--bg-input)] text-[var(--text-primary)]': isActive(),
+                      'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-input)]/50':
+                        !isActive()
                     }}
+                    style={{ width: 'calc(100% - 16px)' }}
                   >
-                    {channel.name}
-                  </span>
-                  <Show when={!isActive() && store.channelUnreadCount(channel.id) > 0}>
-                    <span class="ml-auto mr-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-[var(--accent)] text-white text-[10px] font-bold px-1">
-                      {store.channelUnreadCount(channel.id)}
-                    </span>
-                  </Show>
-                  <Show when={canManageChannels()}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        store.setShowChannelSettings(channel.id)
+                    <span class="mr-1.5 text-[var(--text-muted)]">#</span>
+                    <span
+                      class="truncate"
+                      classList={{
+                        'font-semibold text-[var(--text-primary)]':
+                          !isActive() && store.channelUnreadCount(channel.id) > 0
                       }}
-                      class="ml-auto text-[var(--text-muted)] hover:text-[var(--text-primary)] opacity-0 group-hover:opacity-100 transition-opacity text-xs"
-                      title={t('CHANNEL_SETTINGS')}
                     >
-                      ⚙️
-                    </button>
-                  </Show>
-                </button>
+                      {channel.name}
+                    </span>
+                    <Show when={!isActive() && store.channelUnreadCount(channel.id) > 0}>
+                      <span class="ml-auto mr-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-[var(--accent)] text-white text-[10px] font-bold px-1">
+                        {store.channelUnreadCount(channel.id)}
+                      </span>
+                    </Show>
+                    <Show when={canManageChannels()}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          store.setShowChannelSettings(channel.id)
+                        }}
+                        class="ml-auto text-[var(--text-muted)] hover:text-[var(--text-primary)] opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+                        title={t('CHANNEL_SETTINGS')}
+                      >
+                        ⚙️
+                      </button>
+                    </Show>
+                  </button>
+                  {/* Nested threads */}
+                  <For each={threadsForChannel(channel.id)}>
+                    {(thread) => {
+                      const isThreadActive = () => store.activeChannelId() === thread.id
+                      return (
+                        <button
+                          onClick={() => store.setActiveChannelId(thread.id)}
+                          class="w-full flex items-center px-3 py-1 mx-2 ml-6 rounded text-xs transition-colors"
+                          classList={{
+                            'bg-[var(--bg-input)] text-[var(--text-primary)]': isThreadActive(),
+                            'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-input)]/50':
+                              !isThreadActive()
+                          }}
+                          style={{ width: 'calc(100% - 40px)' }}
+                        >
+                          <span class="mr-1.5 text-[var(--text-muted)]">🧵</span>
+                          <span class="truncate">{thread.name}</span>
+                          <Show when={!isThreadActive() && store.channelUnreadCount(thread.id) > 0}>
+                            <span class="ml-auto mr-1 min-w-[14px] h-[14px] flex items-center justify-center rounded-full bg-[var(--accent)] text-white text-[8px] font-bold px-0.5">
+                              {store.channelUnreadCount(thread.id)}
+                            </span>
+                          </Show>
+                        </button>
+                      )
+                    }}
+                  </For>
+                </>
               )
             }}
           </For>
+          {/* Orphan threads (no known parent) */}
+          <Show when={orphanThreads().length > 0}>
+            <div class="px-3 py-1 mt-2">
+              <h3 class="text-xs font-semibold uppercase text-[var(--text-muted)] tracking-wider mb-1">Threads</h3>
+            </div>
+            <For each={orphanThreads()}>
+              {(thread) => {
+                const isActive = () => store.activeChannelId() === thread.id
+                return (
+                  <button
+                    onClick={() => store.setActiveChannelId(thread.id)}
+                    class="w-full flex items-center px-3 py-1.5 mx-2 rounded text-sm transition-colors"
+                    classList={{
+                      'bg-[var(--bg-input)] text-[var(--text-primary)]': isActive(),
+                      'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-input)]/50':
+                        !isActive()
+                    }}
+                    style={{ width: 'calc(100% - 16px)' }}
+                  >
+                    <span class="mr-1.5 text-[var(--text-muted)]">🧵</span>
+                    <span class="truncate">{thread.name}</span>
+                  </button>
+                )
+              }}
+            </For>
+          </Show>
         </Show>
 
         {/* Voice channels */}

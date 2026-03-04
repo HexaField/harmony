@@ -1246,13 +1246,31 @@ export function createAppStore(): AppStore {
         for (const c of event.communities) {
           if (c.channels) {
             for (const ch of c.channels) {
-              allChannels.push({ id: ch.id, name: ch.name, type: ch.type as any, communityId: c.id })
+              allChannels.push({
+                id: ch.id,
+                name: ch.name,
+                type: ch.type as any,
+                communityId: c.id,
+                parentChannelId: (ch as any).parentChannelId
+              })
             }
           }
           // Request full member info for each community
           client.requestCommunityInfo(c.id)
         }
-        if (allChannels.length > 0) setChannels(allChannels)
+        if (allChannels.length > 0) {
+          // Merge with existing channels (preserve parentChannelId updates)
+          const merged = [...channels()]
+          for (const ch of allChannels) {
+            const existing = merged.find((m) => m.id === ch.id)
+            if (existing) {
+              Object.assign(existing, ch)
+            } else {
+              merged.push(ch)
+            }
+          }
+          setChannels(merged)
+        }
 
         // Auto-select first community/channel if none active
         if (!activeCommunityId() && communityInfos.length > 0) {
@@ -1274,7 +1292,7 @@ export function createAppStore(): AppStore {
     client.on('community.info', (...args: unknown[]) => {
       const event = args[0] as {
         communityId: string
-        members?: Array<{ did: string; displayName: string; status: string; linked: boolean }>
+        members?: Array<{ did: string; displayName: string; avatarUrl?: string; status: string; linked: boolean }>
         onlineMembers?: Array<{ did: string; status: string }>
       }
       if (event?.members) {
@@ -1294,6 +1312,7 @@ export function createAppStore(): AppStore {
             displayName: resolvedName,
             roles: existing?.roles ?? [],
             status: (m.status as 'online' | 'offline' | 'idle' | 'dnd') ?? 'offline',
+            avatarUrl: m.avatarUrl || existing?.avatarUrl,
             linked: m.linked
           })
         }
@@ -1662,24 +1681,27 @@ export function createAppStore(): AppStore {
     client.on('community.updated', (...args: unknown[]) => {
       const event = args[0] as {
         communityId: string
-        channels?: Array<{ id: string; name: string; type: string }>
+        channels?: Array<{ id: string; name: string; type: string; parentChannelId?: string }>
       }
       if (!event?.communityId) return
       const existing = communities().find((c) => c.id === event.communityId)
       if (existing) {
         // Update existing community's channels if provided
         if (event.channels) {
-          const newChannels = event.channels
-            .filter((ch) => !channels().some((ec) => ec.id === ch.id))
-            .map((ch) => ({
+          const updated = [...channels()]
+          for (const ch of event.channels) {
+            const next = {
               id: ch.id,
               name: ch.name,
-              type: ch.type as 'text' | 'voice' | 'announcement',
+              type: ch.type as 'text' | 'voice' | 'announcement' | 'thread',
+              parentChannelId: ch.parentChannelId,
               communityId: event.communityId
-            }))
-          if (newChannels.length > 0) {
-            setChannels([...channels(), ...newChannels])
+            }
+            const existing = updated.find((c) => c.id === ch.id)
+            if (existing) Object.assign(existing, next)
+            else updated.push(next)
           }
+          setChannels(updated)
         }
       } else {
         // New community — add to store (e.g. from createCommunity)
@@ -1694,7 +1716,8 @@ export function createAppStore(): AppStore {
           const channelInfos = event.channels.map((ch) => ({
             id: ch.id,
             name: ch.name,
-            type: ch.type as 'text' | 'voice' | 'announcement',
+            type: ch.type as 'text' | 'voice' | 'announcement' | 'thread',
+            parentChannelId: (ch as any).parentChannelId,
             communityId: event.communityId
           }))
           setChannels([...channels(), ...channelInfos])
@@ -1731,7 +1754,8 @@ export function createAppStore(): AppStore {
           const channelInfos = event.channels.map((ch) => ({
             id: ch.id,
             name: ch.name,
-            type: ch.type as 'text' | 'voice' | 'announcement',
+            type: ch.type as 'text' | 'voice' | 'announcement' | 'thread',
+            parentChannelId: (ch as any).parentChannelId,
             communityId: event.communityId
           }))
           setChannels([...channels(), ...channelInfos])
@@ -1930,7 +1954,8 @@ export function createAppStore(): AppStore {
                 ...chans.map((ch: any) => ({
                   id: ch.id,
                   name: ch.name,
-                  type: ch.type as 'text' | 'voice' | 'announcement',
+                  type: ch.type as 'text' | 'voice' | 'announcement' | 'thread',
+                  parentChannelId: (ch as any).parentChannelId,
                   communityId
                 }))
               ])

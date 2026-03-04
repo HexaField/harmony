@@ -41,6 +41,7 @@ export interface DiscordChannel {
   name: string
   type: 'text' | 'voice' | 'category' | 'thread'
   categoryId?: string
+  parentChannelId?: string
   parentMessageId?: string
 }
 
@@ -53,6 +54,7 @@ export interface DiscordRole {
 export interface DiscordMember {
   userId: string
   username: string
+  avatarUrl?: string
   roles: string[]
   joinedAt: string
 }
@@ -208,6 +210,14 @@ export class MigrationService {
             graph: g
           })
         }
+        if (channel.parentChannelId) {
+          quads.push({
+            subject: channelURI,
+            predicate: HarmonyPredicate.inChannel,
+            object: `harmony:channel:${channel.parentChannelId}`,
+            graph: g
+          })
+        }
       } else {
         quads.push({ subject: channelURI, predicate: RDFPredicate.type, object: HarmonyType.Channel, graph: g })
       }
@@ -253,6 +263,14 @@ export class MigrationService {
         graph: g
       })
       quads.push({ subject: memberURI, predicate: HarmonyPredicate.community, object: communityURI, graph: g })
+      if (member.avatarUrl) {
+        quads.push({
+          subject: memberURI,
+          predicate: HarmonyPredicate.avatarUrl,
+          object: { value: member.avatarUrl },
+          graph: g
+        })
+      }
       quads.push({
         subject: memberURI,
         predicate: HarmonyPredicate.joinedAt,

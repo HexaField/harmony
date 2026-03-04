@@ -326,9 +326,10 @@ export interface CommunityInfo {
 export interface ChannelInfo {
   id: string
   name: string
-  type: 'text' | 'voice' | 'announcement'
+  type: 'text' | 'voice' | 'announcement' | 'thread'
   topic?: string
   communityId: string
+  parentChannelId?: string
 }
 export interface MessageData {
   id: string

@@ -126,6 +126,7 @@ export const HarmonyPredicate = {
   // Discord reconciliation
   discordId: `${HARMONY}discordId`,
   discordUsername: `${HARMONY}discordUsername`,
+  avatarUrl: `${HARMONY}avatarUrl`,
   did: `${HARMONY}did`
 } as const
 

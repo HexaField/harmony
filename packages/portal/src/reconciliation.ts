@@ -18,7 +18,12 @@ export class ReconciliationService {
    * Finds all ghost member records with the matching discordId,
    * adds the real DID, and preserves roles.
    */
-  async onDiscordLinked(discordUserId: string, discordUsername: string, did: string): Promise<ReconciliationResult> {
+  async onDiscordLinked(
+    discordUserId: string,
+    discordUsername: string,
+    did: string,
+    avatarUrl?: string
+  ): Promise<ReconciliationResult> {
     const communities = await this.findCommunitiesForDiscordUser(discordUserId)
     const rolesPreserved = new Map<string, string[]>()
 
@@ -69,6 +74,22 @@ export class ReconciliationService {
         object: { value: discordUsername },
         graph: communityURI
       })
+
+      // Update avatar URL if available
+      if (avatarUrl) {
+        const oldAvatarQuads = await this.store.match({
+          subject: ghostURI,
+          predicate: HarmonyPredicate.avatarUrl,
+          graph: communityURI
+        })
+        for (const q of oldAvatarQuads) await this.store.remove(q)
+        await this.store.add({
+          subject: ghostURI,
+          predicate: HarmonyPredicate.avatarUrl,
+          object: { value: avatarUrl },
+          graph: communityURI
+        })
+      }
     }
 
     return { reconciledCommunities: communities, rolesPreserved }

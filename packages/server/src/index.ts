@@ -71,8 +71,9 @@ export interface ChannelInfo {
   id: string
   communityId: string
   name: string
-  type: 'text' | 'voice' | 'announcement'
+  type: 'text' | 'voice' | 'announcement' | 'thread'
   categoryId?: string
+  parentChannelId?: string
   topic?: string
   createdAt: string
 }
@@ -80,6 +81,7 @@ export interface ChannelInfo {
 export interface MemberInfo {
   did: string
   displayName?: string
+  avatarUrl?: string
   roles: string[]
   joinedAt: string
   presence: PresenceUpdatePayload
@@ -549,13 +551,22 @@ export class CommunityManager {
   }
 
   async getChannels(communityId: string): Promise<ChannelInfo[]> {
+    // Fetch both channels and threads
     const channelQuads = await this.store.match({
       predicate: RDFPredicate.type,
       object: HarmonyType.Channel,
       graph: communityId
     })
+    const threadQuads = await this.store.match({
+      predicate: RDFPredicate.type,
+      object: HarmonyType.Thread,
+      graph: communityId
+    })
+    const allQuads = [...channelQuads, ...threadQuads]
+
     const channels: ChannelInfo[] = []
-    for (const cq of channelQuads) {
+    for (const cq of allQuads) {
+      const isThread = cq.object === HarmonyType.Thread
       const nameQuads = await this.store.match({
         subject: cq.subject,
         predicate: HarmonyPredicate.name,
@@ -577,29 +588,32 @@ export class CommunityManager {
         graph: communityId
       })
 
+      // For threads, find the parent channel via inChannel or parentThread → inChannel
+      let parentChannelId: string | undefined
+      if (isThread) {
+        const inChannelQuads = await this.store.match({
+          subject: cq.subject,
+          predicate: HarmonyPredicate.inChannel,
+          graph: communityId
+        })
+        if (inChannelQuads.length) {
+          const obj = inChannelQuads[0].object
+          parentChannelId = typeof obj === 'string' ? obj : obj.value
+        }
+      }
+
+      const litVal = (obj: typeof cq.object) => (typeof obj === 'string' ? obj : obj.value)
+
       channels.push({
         id: cq.subject,
         communityId,
-        name: nameQuads.length
-          ? typeof nameQuads[0].object === 'string'
-            ? nameQuads[0].object
-            : nameQuads[0].object.value
-          : '',
-        type: (typeQuads.length
-          ? typeof typeQuads[0].object === 'string'
-            ? typeQuads[0].object
-            : typeQuads[0].object.value
-          : 'text') as 'text' | 'voice' | 'announcement',
-        topic: topicQuads.length
-          ? typeof topicQuads[0].object === 'string'
-            ? topicQuads[0].object
-            : topicQuads[0].object.value
-          : undefined,
-        createdAt: tsQuads.length
-          ? typeof tsQuads[0].object === 'string'
-            ? tsQuads[0].object
-            : tsQuads[0].object.value
-          : ''
+        name: nameQuads.length ? litVal(nameQuads[0].object) : '',
+        type: isThread
+          ? 'thread'
+          : ((typeQuads.length ? litVal(typeQuads[0].object) : 'text') as 'text' | 'voice' | 'announcement'),
+        parentChannelId,
+        topic: topicQuads.length ? litVal(topicQuads[0].object) : undefined,
+        createdAt: tsQuads.length ? litVal(tsQuads[0].object) : ''
       })
     }
     return channels
@@ -2393,8 +2407,9 @@ export class HarmonyServer {
 
   private async getMembersWithDisplayNames(
     communityId: string
-  ): Promise<Array<{ did: string; displayName: string; status: string; linked: boolean }>> {
-    const allMembers: Array<{ did: string; displayName: string; status: string; linked: boolean }> = []
+  ): Promise<Array<{ did: string; displayName: string; avatarUrl?: string; status: string; linked: boolean }>> {
+    const allMembers: Array<{ did: string; displayName: string; avatarUrl?: string; status: string; linked: boolean }> =
+      []
     const memberQuads = await this.config.store.match({
       predicate: RDFPredicate.type,
       object: HarmonyType.Member,
@@ -2423,7 +2438,19 @@ export class HarmonyServer {
           : nameQuads[0].object.value
         : memberDid
       const linked = !mq.subject.startsWith('harmony:member:')
-      allMembers.push({ did: memberDid, displayName, status: 'offline', linked })
+
+      const avatarQuads = await this.config.store.match({
+        subject: mq.subject,
+        predicate: HarmonyPredicate.avatarUrl,
+        graph: communityId
+      })
+      const avatarUrl = avatarQuads.length
+        ? typeof avatarQuads[0].object === 'string'
+          ? avatarQuads[0].object
+          : avatarQuads[0].object.value
+        : undefined
+
+      allMembers.push({ did: memberDid, displayName, avatarUrl, status: 'offline', linked })
     }
 
     // Update online presence from connected members

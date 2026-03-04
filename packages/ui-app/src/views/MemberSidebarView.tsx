@@ -61,7 +61,7 @@ export const MemberSidebarView: Component = () => {
   }
 
   const renderMember = (
-    member: { did: string; displayName?: string; roles: string[]; status: string },
+    member: { did: string; displayName?: string; avatarUrl?: string; roles: string[]; status: string },
     isOnline: boolean
   ) => {
     const displayName = member.displayName ?? pseudonymFromDid(member.did)
@@ -73,15 +73,28 @@ export const MemberSidebarView: Component = () => {
         onClick={(e) => openMenu(member.did, e)}
       >
         <div class="relative">
-          <div
-            class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
-            classList={{
-              'bg-[var(--accent)]': isOnline,
-              'bg-[var(--bg-input)]': !isOnline
-            }}
+          <Show
+            when={member.avatarUrl}
+            fallback={
+              <div
+                class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                classList={{
+                  'bg-[var(--accent)]': isOnline,
+                  'bg-[var(--bg-input)]': !isOnline
+                }}
+              >
+                <span classList={{ 'text-[var(--text-muted)]': !isOnline }}>{initials}</span>
+              </div>
+            }
           >
-            <span classList={{ 'text-[var(--text-muted)]': !isOnline }}>{initials}</span>
-          </div>
+            <img
+              src={member.avatarUrl!}
+              alt={displayName}
+              class="w-8 h-8 rounded-full object-cover"
+              classList={{ 'opacity-50': !isOnline }}
+              loading="lazy"
+            />
+          </Show>
           <Show when={isOnline}>
             <div
               class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[var(--bg-secondary)]"

@@ -199,7 +199,12 @@ export function oauthRoutes(portal: PortalService, reconciliationService?: Recon
         return
       }
 
-      const discordUser = (await userRes.json()) as { id: string; username: string; discriminator?: string }
+      const discordUser = (await userRes.json()) as {
+        id: string
+        username: string
+        discriminator?: string
+        avatar?: string | null
+      }
       console.log('[OAuth Callback] Discord user:', discordUser.username, 'for DID:', pending.userDID)
 
       // Complete the OAuth link — issue VC
@@ -221,10 +226,14 @@ export function oauthRoutes(portal: PortalService, reconciliationService?: Recon
       // Reconcile ghost member records
       let reconciledCommunities: string[] = []
       if (reconciliationService) {
+        const avatarUrl = discordUser.avatar
+          ? `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png?size=128`
+          : undefined
         const result = await reconciliationService.onDiscordLinked(
           discordUser.id,
           discordUser.username,
-          isDedup ? existingDID : pending.userDID
+          isDedup ? existingDID : pending.userDID,
+          avatarUrl
         )
         reconciledCommunities = result.reconciledCommunities
       }

@@ -457,9 +457,20 @@ export const MessageArea: Component = () => {
                 <div class="h-16 bg-[var(--accent)]" />
                 {/* Avatar */}
                 <div class="relative px-4 -mt-8">
-                  <div class="w-16 h-16 rounded-full bg-[var(--accent)] border-4 border-[var(--bg-surface)] flex items-center justify-center text-white font-bold text-lg">
-                    {memberInitials()}
-                  </div>
+                  <Show
+                    when={member()?.avatarUrl}
+                    fallback={
+                      <div class="w-16 h-16 rounded-full bg-[var(--accent)] border-4 border-[var(--bg-surface)] flex items-center justify-center text-white font-bold text-lg">
+                        {memberInitials()}
+                      </div>
+                    }
+                  >
+                    <img
+                      src={member()!.avatarUrl!}
+                      alt={memberName()}
+                      class="w-16 h-16 rounded-full border-4 border-[var(--bg-surface)] object-cover"
+                    />
+                  </Show>
                   <div
                     class={`absolute bottom-0 left-14 w-4 h-4 rounded-full border-2 border-[var(--bg-surface)] ${statusColor()}`}
                   />
@@ -540,6 +551,10 @@ export const MessageArea: Component = () => {
               const member = store.members().find((m) => m.did === msg.authorDid)
               return member?.displayName || msg.authorName || pseudonymFromDid(msg.authorDid)
             }
+            const memberAvatar = () => {
+              const member = store.members().find((m) => m.did === msg.authorDid)
+              return member?.avatarUrl
+            }
             const initials = () => resolvedName().substring(0, 2).toUpperCase()
             const isEditing = () => store.editingMessageId() === msg.id
 
@@ -563,9 +578,21 @@ export const MessageArea: Component = () => {
                     </div>
                   }
                 >
-                  <div class="w-10 h-10 rounded-full bg-[var(--accent)] flex items-center justify-center text-xs font-bold text-white shrink-0 mt-0.5">
-                    {initials()}
-                  </div>
+                  <Show
+                    when={memberAvatar()}
+                    fallback={
+                      <div class="w-10 h-10 rounded-full bg-[var(--accent)] flex items-center justify-center text-xs font-bold text-white shrink-0 mt-0.5">
+                        {initials()}
+                      </div>
+                    }
+                  >
+                    <img
+                      src={memberAvatar()!}
+                      alt={resolvedName()}
+                      class="w-10 h-10 rounded-full shrink-0 mt-0.5 object-cover"
+                      loading="lazy"
+                    />
+                  </Show>
                 </Show>
                 <div class="ml-3 min-w-0 flex-1">
                   <Show when={!isGrouped()}>

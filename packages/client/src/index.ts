@@ -53,8 +53,9 @@ export interface ChannelInfo {
   id: string
   communityId: string
   name: string
-  type: 'text' | 'voice' | 'announcement'
+  type: 'text' | 'voice' | 'announcement' | 'thread'
   categoryId?: string
+  parentChannelId?: string
   topic?: string
   createdAt: string
 }
@@ -2169,7 +2170,7 @@ export class HarmonyClient {
       communityId: string
       communityName: string
       description?: string
-      channels: Array<{ id: string; name: string; type: string }>
+      channels: Array<{ id: string; name: string; type: string; parentChannelId?: string; topic?: string }>
       serverUrl?: string
     }
 
@@ -2184,13 +2185,24 @@ export class HarmonyClient {
         memberCount: 0,
         channels: payload.channels
       },
-      channels: payload.channels.map((ch) => ({
-        id: ch.id,
-        communityId: payload.communityId,
-        name: ch.name,
-        type: ch.type as 'text' | 'voice' | 'announcement',
-        createdAt: new Date().toISOString()
-      })),
+      channels: payload.channels.map(
+        (ch: {
+          id: string
+          communityId?: string
+          name: string
+          type: string
+          parentChannelId?: string
+          topic?: string
+        }) => ({
+          id: ch.id,
+          communityId: payload.communityId,
+          name: ch.name,
+          type: ch.type as 'text' | 'voice' | 'announcement' | 'thread',
+          parentChannelId: ch.parentChannelId,
+          topic: ch.topic,
+          createdAt: new Date().toISOString()
+        })
+      ),
       members: [],
       myRoles: [],
       myCapabilities: []
@@ -2285,7 +2297,7 @@ export class HarmonyClient {
     const payload = msg.payload as {
       communityId: string
       info: { id: string; name: string; channels?: Array<{ id: string; name: string; type: string }> } | null
-      members?: Array<{ did: string; displayName: string; status: string; linked: boolean }>
+      members?: Array<{ did: string; displayName: string; avatarUrl?: string; status: string; linked: boolean }>
       onlineMembers: Array<{ did: string; status: string }>
     }
 

@@ -211,7 +211,7 @@ describe('DiscordRESTAPI', () => {
       expect(threads).toHaveLength(2)
       expect(threads[0].type).toBe('thread')
       expect(threads[0].name).toBe('Thread One')
-      expect(threads[1].categoryId).toBe('ch1')
+      expect(threads[1].parentChannelId).toBe('ch1')
     } finally {
       globalThis.fetch = originalFetch
     }

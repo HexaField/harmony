@@ -69,7 +69,7 @@ export class DiscordRESTAPI implements DiscordAPI {
         id: t.id,
         name: t.name,
         type: CHANNEL_TYPE_MAP[t.type],
-        categoryId: t.parent_id ?? undefined
+        parentChannelId: t.parent_id ?? undefined
       }))
   }
 
@@ -86,7 +86,7 @@ export class DiscordRESTAPI implements DiscordAPI {
           id: t.id,
           name: t.name,
           type: CHANNEL_TYPE_MAP[t.type],
-          categoryId: t.parent_id ?? undefined
+          parentChannelId: t.parent_id ?? undefined
         }))
     } catch {
       return [] // Channel may not support threads
@@ -154,7 +154,7 @@ export class DiscordRESTAPI implements DiscordAPI {
     while (true) {
       const batch = await this.request<
         Array<{
-          user: { id: string; username: string }
+          user: { id: string; username: string; avatar?: string | null }
           roles: string[]
           joined_at: string
         }>
@@ -163,9 +163,13 @@ export class DiscordRESTAPI implements DiscordAPI {
       if (batch.length === 0) break
 
       for (const m of batch) {
+        const avatarUrl = m.user.avatar
+          ? `https://cdn.discordapp.com/avatars/${m.user.id}/${m.user.avatar}.png?size=128`
+          : undefined
         members.push({
           userId: m.user.id,
           username: m.user.username,
+          avatarUrl,
           roles: m.roles,
           joinedAt: m.joined_at
         })

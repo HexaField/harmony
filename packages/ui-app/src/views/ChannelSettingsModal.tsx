@@ -34,7 +34,7 @@ export const ChannelSettingsModal: Component = () => {
     await client.updateChannel(communityId, chId, {
       communityId,
       name: name(),
-      type: channel()?.type ?? 'text',
+      type: (channel()?.type === 'thread' ? 'text' : (channel()?.type ?? 'text')) as 'text' | 'voice' | 'announcement',
       topic: topic() || undefined
     })
 

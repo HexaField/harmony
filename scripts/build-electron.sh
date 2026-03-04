@@ -74,3 +74,9 @@ ls /Applications/Harmony.app/Contents/Resources/ui/index.html >/dev/null && echo
 echo ""
 echo "Done! Launch with:"
 echo "  /Applications/Harmony.app/Contents/MacOS/Harmony --remote-debugging-port=9222"
+
+# 7. Restore better-sqlite3 for Node 22 (so standalone server still works)
+echo "→ Restoring better-sqlite3 for Node 22..."
+cd "$ROOT/node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3"
+PATH="$NODE22:$PATH" npm rebuild --silent 2>&1
+echo "  ✓ better-sqlite3 restored for Node 22"

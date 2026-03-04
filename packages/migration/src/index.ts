@@ -263,14 +263,9 @@ export class MigrationService {
         graph: g
       })
       quads.push({ subject: memberURI, predicate: HarmonyPredicate.community, object: communityURI, graph: g })
-      if (member.avatarUrl) {
-        quads.push({
-          subject: memberURI,
-          predicate: HarmonyPredicate.avatarUrl,
-          object: { value: member.avatarUrl },
-          graph: g
-        })
-      }
+      // NOTE: Do NOT store Discord avatar URLs during migration export.
+      // GDPR and Discord ToS require explicit user consent before storing their profile data.
+      // Avatars are only stored when a user voluntarily links via OAuth.
       quads.push({
         subject: memberURI,
         predicate: HarmonyPredicate.joinedAt,

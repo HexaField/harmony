@@ -154,7 +154,7 @@ export class DiscordRESTAPI implements DiscordAPI {
     while (true) {
       const batch = await this.request<
         Array<{
-          user: { id: string; username: string; avatar?: string | null }
+          user: { id: string; username: string }
           roles: string[]
           joined_at: string
         }>
@@ -163,13 +163,9 @@ export class DiscordRESTAPI implements DiscordAPI {
       if (batch.length === 0) break
 
       for (const m of batch) {
-        const avatarUrl = m.user.avatar
-          ? `https://cdn.discordapp.com/avatars/${m.user.id}/${m.user.avatar}.png?size=128`
-          : undefined
         members.push({
           userId: m.user.id,
           username: m.user.username,
-          avatarUrl,
           roles: m.roles,
           joinedAt: m.joined_at
         })

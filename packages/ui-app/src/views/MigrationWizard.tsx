@@ -2,7 +2,7 @@ import { createSignal, Show, For, onCleanup, onMount, type Component } from 'sol
 import { useAppStore } from '../store.tsx'
 import { t } from '../i18n/strings.js'
 import { createServerProvider, type HostingMode } from '../server-provider.js'
-import { startExport, pollExport, importBundle, type ExportProgress } from '../migration-client.js'
+import { startExport, pollExport, importBundle, type ExportProgress, type MigrationAuth } from '../migration-client.js'
 import { openExternal } from '../utils/open-external.js'
 import { pseudonymFromDid } from '../utils/pseudonym.js'
 
@@ -34,6 +34,17 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
   const [discordServerId, setDiscordServerId] = createSignal('')
   const [exportProgress, setExportProgress] = createSignal(0)
   const [phaseText, setPhaseText] = createSignal('')
+
+  /** Build migration auth from store identity */
+  const getAuth = (): MigrationAuth | undefined => {
+    const kp = store.keyPair()
+    const d = store.did()
+    if (!kp?.secretKey || !d) return undefined
+    return {
+      did: d,
+      secretKey: kp.secretKey instanceof Uint8Array ? kp.secretKey : new Uint8Array(Object.values(kp.secretKey))
+    }
+  }
   const [error, setError] = createSignal('')
   const [, setExportId] = createSignal('')
   const [, setServerUrl] = createSignal('')
@@ -209,7 +220,8 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
         serverUrl: url,
         botToken: botToken(),
         guildId: discordServerId(),
-        adminDID: store.did()
+        adminDID: store.did(),
+        auth: getAuth()
       })
       setExportId(id)
       setStep('bot-running')
@@ -223,7 +235,7 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
     if (pollTimer) clearInterval(pollTimer)
     pollTimer = setInterval(async () => {
       try {
-        const status = await pollExport(url, id)
+        const status = await pollExport(url, id, getAuth())
         if (status.progress) {
           setExportProgress(phaseToProgress(status.progress))
           updatePhaseText(status.progress)
@@ -274,7 +286,8 @@ export const MigrationWizard: Component<{ onClose: () => void; initialStep?: Mig
         bundle,
         adminDID: store.did(),
         communityName: bundle?.metadata?.sourceServerName || 'Imported Community',
-        adminKeyPair
+        adminKeyPair,
+        auth: getAuth()
       })
       const communityName = bundle?.metadata?.sourceServerName || 'Imported Community'
       console.debug('[Migration] Import result', {

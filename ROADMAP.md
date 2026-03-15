@@ -1,6 +1,6 @@
 # Harmony — Roadmap & Feature Status
 
-_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-02 18:32 AEDT._
+_Single source of truth for all features, voice/video detail, and release planning._ _Updated 2026-03-15 12:00 AEDT._
 
 ---
 
@@ -10,7 +10,7 @@ _Single source of truth for all features, voice/video detail, and release planni
 | ------------------ | ------------------------------------------ |
 | Packages           | 36                                         |
 | Estimated LOC      | ~32,000+                                   |
-| Vitest passing     | 2,722                                      |
+| Vitest passing     | 2,744                                      |
 | Vitest skipped     | 10                                         |
 | Vitest todo        | 114                                        |
 | Vitest failing     | 2 (pre-existing live-server integration)   |
@@ -28,18 +28,24 @@ _Single source of truth for all features, voice/video detail, and release planni
 
 ## Deployment Targets
 
-| Target | Description | Beta |
-| --- | --- | --- |
-| **Electron** | Desktop app — embedded `server-runtime` in main process, `ui-app` in BrowserWindow renderer | ✅ |
-| **Local Server** | Self-hosted `server-runtime` daemon (SQLite-backed), Docker distribution | ✅ |
-| **Web UI** | Browser SPA — same `ui-app` build, connects to self-hosted server | ✅ |
-| **Portal** | Express server (SQLite-backed) — identity, directory, invite, OAuth | ✅ |
-| **Cloud Server** | `cloud-worker` — Durable Objects (one per community), DO SQLite, Hibernatable WS | 🔮 |
-| **Mobile** | Capacitor (Android) + PWA — same `ui-app` build | 🔮 |
+| Target | Description | Alpha | Beta | Release |
+| --- | --- | --- | --- | --- |
+| **Local Server** | Self-hosted `server-runtime` daemon (SQLite-backed), Docker distribution | ✅ | ✅ | ✅ |
+| **Web UI** | Browser SPA — same `ui-app` build, connects to self-hosted server | ✅ | ✅ | ✅ |
+| **Portal** | Express server (SQLite-backed) — identity, directory, invite, OAuth | ✅ | ✅ | ✅ |
+| **Electron** | Desktop app — embedded `server-runtime` in main process, `ui-app` in BrowserWindow renderer | 🔮 | ✅ | ✅ |
+| **Mobile** | Capacitor (Android) + PWA — same `ui-app` build | 🔮 | ✅ | ✅ |
+| **Cloud Server** | `cloud-worker` — Durable Objects (one per community), DO SQLite, Hibernatable WS | 🔮 | 🔮 | ✅ |
 
-> **Beta scope (2026-03-02):** Self-hosted server + Electron desktop + Portal + Web UI. Cloud Worker and Mobile are deferred to post-beta — cloud infrastructure adds complexity without enough early users to justify it. The self-hosted server already handles all features including voice (CF Realtime SFU, proxied by server). Cloud deployment guide available at `docs/DEPLOY-CLOUDFLARE.md` for when we're ready.
+> **Release phases:**
+>
+> **Alpha (current target):** Portal + self-hosted server (Docker) + Web UI (browser SPA). Smallest viable surface — no native apps, no cloud. Focus: core messaging, voice, E2EE, migration, and onboarding through the browser. Users self-host or connect to a friend's server.
+>
+> **Beta:** Add Electron desktop app (macOS arm64 + Linux x64) and Capacitor mobile (Android). Requires fixing the embedded `better-sqlite3` ABI mismatch for Electron packaging, Apple Developer cert for code signing, and Capacitor build pipeline verification.
+>
+> **Release:** Add cloud-hosted servers (Cloudflare Workers + Durable Objects). Code exists and is tested (71/75 handlers, 18/18 E2E) but deployment adds infrastructure complexity. Cloud deployment guide: `docs/DEPLOY-CLOUDFLARE.md`.
 
-> **Important:** Electron, Web UI, and Mobile all share the same SolidJS `ui-app` renderer. All UI features (message views, DMs, threads, search, voice controls, migration wizard, etc.) are available across all three. The columns below mark features as ➖ only where the feature genuinely does not apply to that target (e.g. PWA service worker doesn't apply to Electron, file-based config doesn't apply to browser). Cloud column retained for completeness but Cloud is **post-beta**.
+> **Important:** Electron, Web UI, and Mobile all share the same SolidJS `ui-app` renderer. All UI features (message views, DMs, threads, search, voice controls, migration wizard, etc.) are available across all three. The columns below mark features as ➖ only where the feature genuinely does not apply to that target (e.g. PWA service worker doesn't apply to Electron, file-based config doesn't apply to browser). Cloud column retained for completeness but Cloud is **post-release**.
 
 ---
 
@@ -962,28 +968,37 @@ B6 wired the client-side setup and initiation flows, but three operations requir
 
 ### Infrastructure (Release Gates)
 
+#### Alpha Gates
+
 - Portal deployment (VPS, Fly.io, or self-hosted alongside server)
-- Domain registration + DNS
+- Domain registration + DNS + landing page
+- OAuth app registrations (Discord, GitHub, Google)
+- Self-host documentation (Docker getting-started guide)
+- JWT secret must be configurable (currently derived from `'***' + identityDID`)
+
+#### Beta Gates (Electron + Mobile)
+
+- Fix embedded `better-sqlite3` ABI mismatch for Electron packaging
 - macOS code signing certificate for Electron distribution
 - Auto-update (electron-updater) configuration
-- OAuth app registrations (Discord, GitHub, Google)
+- Linux AppImage verification on fresh system
+- Capacitor build pipeline (APK/iOS)
 
-#### Post-Beta Infrastructure
+#### Release Gates (Cloud)
 
 - Cloudflare Workers + Durable Objects deployment (code ready, see `docs/DEPLOY-CLOUDFLARE.md`)
 - Stripe API keys for billing
-- Capacitor build pipeline (APK/iOS)
 - Windows code signing
 
 ---
 
 ## Deployment Architecture
 
-### Beta (Self-Hosted First)
+### Alpha (Web-Only, Self-Hosted)
 
 ```
               ┌─────────────────┐
-              │  harmony.chat   │  (landing page + downloads)
+              │  harmony.chat   │  (landing page + Web UI)
               └────────┬────────┘
                        │
         ┌──────────────┼──────────────┐
@@ -996,17 +1011,19 @@ B6 wired the client-side setup and initiation flows, but three operations requir
         │              │              │
         └──────────────┼──────────────┘
                        │
-        ┌──────────────┼──────────────┐
-        │              │              │
-  ┌─────┴─────┐ ┌─────┴─────┐ ┌─────┴─────┐
-  │ Electron  │ │ Electron  │ │  Browser  │
-  │ (desktop) │ │ (desktop) │ │  (Web UI) │
-  └───────────┘ └───────────┘ └───────────┘
+              ┌────────┴────────┐
+              │    Browser      │
+              │    (Web UI)     │
+              └─────────────────┘
 ```
 
-Beta: Portal (Express + SQLite) for identity/OAuth/discovery. Users run self-hosted servers (Docker or standalone). All voice/video uses CF Realtime SFU (server proxies CF API calls — free up to 1TB/mo audio). Electron desktop app for macOS arm64 + Linux x64.
+Alpha: Portal (Express + SQLite) for identity/OAuth/discovery. Users run self-hosted servers (Docker or standalone). All voice uses P2P WebRTC mesh (no SFU dependency). Web UI served by the self-hosted server or as a static SPA.
 
-### Post-Beta (Cloud)
+### Beta (Add Desktop + Mobile)
+
+Same as Alpha, plus Electron desktop app (macOS arm64 + Linux x64) and Capacitor mobile (Android). Electron embeds `server-runtime` so users can run everything from a single app.
+
+### Release (Add Cloud)
 
 ```
               ┌─────────────────┐

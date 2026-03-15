@@ -17,6 +17,33 @@ Step-by-step guide to deploying the alpha stack: Portal (CF Workers) + Web Clien
 
 ---
 
+## What's Public vs Private
+
+This repo is open source. Here's what's safe to commit and what stays local:
+
+| ✅ Safe to commit                                       | ❌ Never commit                                    |
+| ------------------------------------------------------- | -------------------------------------------------- |
+| `wrangler.toml` with `REPLACE_WITH_*` placeholders      | Real D1 `database_id` / KV `id` values             |
+| D1/R2/KV **names** (just labels)                        | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET`      |
+| `ALLOWED_ORIGINS`, `DISCORD_REDIRECT_URI` (public URLs) | Cloudflare API tokens (stored by `wrangler login`) |
+| `SCHEMA_SQL` (table definitions)                        | `JWT_SECRET` (server auth)                         |
+| `compatibility_date`, `compatibility_flags`             | `.dev.vars` file (gitignored)                      |
+
+**How it works:**
+
+- `wrangler.toml` is committed with placeholder IDs — each deployer fills in their own locally
+- Secrets are set via `wrangler secret put` → encrypted in Cloudflare, never on disk
+- Local dev secrets go in `.dev.vars` (gitignored):
+
+```bash
+# packages/portal-worker/.dev.vars — NOT committed
+DISCORD_CLIENT_ID=your_id_here
+DISCORD_CLIENT_SECRET=your_secret_here
+DISCORD_REDIRECT_URI=http://localhost:8787/api/oauth/discord/callback
+```
+
+---
+
 ## Part 1: Cloudflare Account & Domain Setup
 
 ### 1.1 Add your domain to Cloudflare

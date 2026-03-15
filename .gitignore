@@ -20,3 +20,6 @@ test-results
 harmony.dbtest-ws.mjs
 tests/.server-*.mts
 packages/cloud-worker/.wrangler/
+
+# Wrangler local dev secrets
+.dev.vars
